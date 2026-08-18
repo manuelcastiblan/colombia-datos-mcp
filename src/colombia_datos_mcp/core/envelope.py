@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import format as fmt
 from .budget import Detalle, PRESUPUESTO_POR_DEFECTO, ajusta_filas
 
 
@@ -36,6 +37,9 @@ class Sobre:
     fuente: Fuente | None = None
     advertencias: list[str] = field(default_factory=list)
     truncado: bool = False
+    # Hay respuestas donde «N fila(s)» no significa nada —exportar a disco
+    # devuelve una ruta, no filas— y anunciarlo confunde más que informa.
+    mostrar_conteo: bool = True
 
     # ---------------------------------------------------------------- meta --
     @property
@@ -73,11 +77,21 @@ class Sobre:
             self.advertencias.append(texto)
 
     # ------------------------------------------------------------- render --
-    def render(self, cuerpo, presupuesto: int = PRESUPUESTO_POR_DEFECTO) -> dict:
+    def render(self, cuerpo, presupuesto: int = PRESUPUESTO_POR_DEFECTO,
+               formato: str = "tabla") -> dict:
         """Aplica el presupuesto de tokens y produce content + structuredContent.
 
-        `cuerpo` es una función filas -> markdown.
+        `cuerpo` es una función filas -> markdown. Con `formato` distinto de
+        "tabla" se ignora y las filas se serializan a CSV o JSON dentro de un
+        bloque cercado: así el pie del sobre no contamina lo que se copia, pero
+        la respuesta sigue trayendo su procedencia y sus advertencias.
         """
+        if formato in ("csv", "json"):
+            serializa = fmt.cuerpo_por_formato(formato)
+
+            def cuerpo(filas, _serializa=serializa, _f=formato):
+                return f"```{_f}\n{_serializa(filas)}\n```"
+
         filas, texto, recortado = ajusta_filas(self.datos, cuerpo, presupuesto)
         if recortado:
             self.datos = filas
@@ -98,12 +112,13 @@ class Sobre:
     def _pie(self) -> str:
         lineas = []
         m = self.meta()
-        resumen = [f"**{m['devueltos']} fila(s)**"]
-        if self.total_coincidencias is not None:
-            resumen.append(f"de **{self.total_coincidencias}** coincidencias")
-        if self.orden:
-            resumen.append(f"· orden: `{self.orden}`")
-        lineas.append(" ".join(resumen))
+        if self.mostrar_conteo:
+            resumen = [f"**{m['devueltos']} fila(s)**"]
+            if self.total_coincidencias is not None:
+                resumen.append(f"de **{self.total_coincidencias}** coincidencias")
+            if self.orden:
+                resumen.append(f"· orden: `{self.orden}`")
+            lineas.append(" ".join(resumen))
         if self.fuente:
             f = self.fuente
             det = [f"Fuente: `{f.id}`"]
@@ -114,7 +129,7 @@ class Sobre:
             if f.licencia:
                 det.append(f"· {f.licencia}")
             lineas.append(" ".join(det))
-        if self.siguiente_offset is not None:
+        if self.mostrar_conteo and self.siguiente_offset is not None:
             lineas.append(f"Siguiente página: `offset={self.siguiente_offset}`")
         if self.consulta:
             lineas.append(f"Consulta reproducible: {self.consulta}")

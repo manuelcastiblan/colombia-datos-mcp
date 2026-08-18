@@ -35,45 +35,51 @@ def _solo_digitos(valor: str) -> str:
 
 
 def _numero(valor, etiqueta: str) -> float:
-    """Acepta 1000000, "1.000.000" y "$1.000.000".
+    """Umbral numérico tolerante: 1000000, "1.000.000" o "$1.000.000".
 
-    Antes era un `float()` pelado: un umbral escrito como en Colombia reventaba
-    con un ValueError crudo, sin código ni sugerencia.
+    Delega en `format.a_numero` a propósito. Antes había aquí una copia de la
+    misma regla, las dos divergieron, y la de este módulo leía una suma
+    agregada mil veces mayor de lo que era.
     """
-    if isinstance(valor, (int, float)):
-        return float(valor)
-    crudo = re.sub(r"[^\d,.\-]", "", str(valor or ""))
-    if not crudo:
+    n = fmt.a_numero(valor)
+    if n is None:
         raise ErrorValidacion(
             f"{etiqueta} debe ser un número; llegó {valor!r}.",
             "Escríbelo en dígitos, con o sin separadores: 1000000 o 1.000.000.",
         )
-    # Convención colombiana: el punto separa miles y la coma es decimal.
-    # No se puede aplicar aquí la regla de `core.coords` ("el primer separador
-    # es el decimal"): allí funciona porque la parte entera de una longitud
-    # tiene dos dígitos, y aquí 1.000.000 son un millón, no uno con milésimas.
-    comas, puntos = crudo.count(","), crudo.count(".")
-    if comas and puntos:
-        # Mezcla de ambos: manda el último, el otro es separador de miles.
-        corte = max(crudo.rfind(","), crudo.rfind("."))
-    elif comas + puntos == 1:
-        corte = max(crudo.rfind(","), crudo.rfind("."))
-        # Un solo separador con tres dígitos detrás son miles: "1.000" es mil.
-        if len(crudo) - corte - 1 == 3:
-            corte = -1
-    else:
-        corte = -1  # varios separadores iguales: todos son de miles
-    if corte == -1:
-        normalizado = re.sub(r"[,.]", "", crudo)
-    else:
-        normalizado = re.sub(r"[,.]", "", crudo[:corte]) + "." + crudo[corte + 1:]
-    try:
-        return float(normalizado)
-    except ValueError:
-        raise ErrorValidacion(
-            f"{etiqueta} no se pudo leer como número: {valor!r}.",
-            "Escríbelo en dígitos, con o sin separadores: 1000000 o 1.000.000.",
-        ) from None
+    return n
+
+
+# Un contrato estatal colombiano por encima de un billón de pesos es, en la
+# práctica, un error de digitación: son ~3.450 registros cuyos valores llegan a
+# 10^20 y que dominan cualquier suma en la que caigan.
+UMBRAL_ABSURDO = 1_000_000_000_000
+UMBRAL_ABSURDO_SOQL = f"valor_del_contrato > {UMBRAL_ABSURDO}"
+
+
+def _advierte_absurdos(sobre, absurdos, global_):
+    """Dice qué parte del total viene de valores imposibles.
+
+    Sin esto la herramienta presenta como cifra de contratación una suma que
+    puede ser 99 % ruido, y nada en la respuesta permite sospecharlo.
+
+    El porcentaje se calcula contra la suma de TODO el filtro, no contra los
+    grupos mostrados: comparar el ruido global con una página daba cifras por
+    encima del 100 %.
+    """
+    fila = (absurdos.get("filas") or [{}])[0]
+    n = fmt.a_numero(fila.get("n")) or 0
+    if not n:
+        return
+    ruido = fmt.a_numero(fila.get("v")) or 0
+    total = fmt.a_numero((global_.get("filas") or [{}])[0].get("v")) or 0
+    parte = f", el {ruido / total * 100:.1f} % de la suma del filtro" if total else ""
+    sobre.advertir(
+        f"ATENCIÓN: {fmt.numero(n)} contrato(s) del filtro superan el billón de "
+        f"pesos{parte}. Son errores de digitación de la fuente y arrastran la "
+        f"suma entera. Para una cifra utilizable, excluye los atípicos o usa la "
+        f"mediana."
+    )
 
 
 # Campos de dominio cerrado: se resuelven contra los valores canónicos de la
@@ -131,7 +137,8 @@ async def _construye_where(ds: reg.Dataset, **filtros):
     return (" AND ".join(partes) if partes else None), avisos, False
 
 
-async def _buscar(clave: str, detalle="resumen", limite=20, offset=0, **filtros):
+async def _buscar(clave: str, detalle="resumen", limite=20, offset=0,
+                  formato="tabla", **filtros):
     ds = reg.SECOP[clave]
     nivel = Detalle(detalle)
     donde, avisos, imposible = await _construye_where(ds, **filtros)
@@ -167,7 +174,7 @@ async def _buscar(clave: str, detalle="resumen", limite=20, offset=0, **filtros)
     sobre.advertir(f"Unidad de análisis: {ds.unidad}. No sumes filas de datasets distintos.")
     if not donde:
         sobre.advertir("Sin filtros: estás viendo los registros de mayor valor del dataset completo.")
-    return sobre.render(lambda f: fmt.tabla_markdown(f))
+    return sobre.render(lambda f: fmt.tabla_markdown(f), formato=formato)
 
 
 def _proyecta(filas, columnas, ds):
@@ -212,16 +219,19 @@ def _valor(campo: str, valor):
 async def buscar_contratos(entidad=None, nit_entidad=None, proveedor=None,
                            documento_proveedor=None, departamento=None, modalidad=None,
                            desde=None, hasta=None, valor_min=None,
-                           detalle="resumen", limite=20, offset=0):
+                           detalle="resumen", limite=20, offset=0, formato="tabla"):
     return await _buscar("contratos", detalle=detalle, limite=limite, offset=offset,
+                         formato=formato,
                          entidad=entidad, nit_entidad=nit_entidad, proveedor=proveedor,
                          documento_proveedor=documento_proveedor, departamento=departamento,
                          modalidad=modalidad, desde=desde, hasta=hasta, valor_min=valor_min)
 
 
 async def buscar_procesos(entidad=None, nit_entidad=None, departamento=None, modalidad=None,
-                          desde=None, hasta=None, detalle="resumen", limite=20, offset=0):
+                          desde=None, hasta=None, detalle="resumen", limite=20, offset=0,
+                          formato="tabla"):
     return await _buscar("procesos", detalle=detalle, limite=limite, offset=offset,
+                         formato=formato,
                          entidad=entidad, nit_entidad=nit_entidad, departamento=departamento,
                          modalidad=modalidad, desde=desde, hasta=hasta)
 
@@ -404,7 +414,7 @@ async def resolver_entidad(nombre: str, limite=10):
 
 
 async def agregar(agrupar_por="departamento", metrica="valor", donde_entidad=None,
-                  desde=None, hasta=None, limite=20):
+                  desde=None, hasta=None, limite=20, formato="tabla", grafica=True):
     """Agregación server-side sobre contratos de SECOP II."""
     campos = {
         "departamento": "departamento",
@@ -433,18 +443,35 @@ async def agregar(agrupar_por="departamento", metrica="valor", donde_entidad=Non
     donde = " AND ".join(partes) if partes else None
 
     seleccionar = f"{campo}, count(*) as contratos, sum(valor_del_contrato) as valor"
+    # SECOP contiene valores imposibles por error de digitación —contratos de
+    # 10^20 pesos— y una suma los arrastra entera. Se cuentan aparte para poder
+    # decir cuánto del total es basura en vez de presentar la cifra a secas.
+    donde_absurdos = " AND ".join(
+        [p for p in [donde, f"{UMBRAL_ABSURDO_SOQL}"] if p])
     orden = "valor DESC" if metrica == "valor" else "contratos DESC"
-    r = await socrata.consultar(ds.id, seleccionar=seleccionar, donde=donde,
-                                agrupar=campo, ordenar=orden, limite=min(int(limite), 50))
+    r, absurdos, global_ = await asyncio.gather(
+        socrata.consultar(ds.id, seleccionar=seleccionar, donde=donde,
+                          agrupar=campo, ordenar=orden, limite=min(int(limite), 50)),
+        socrata.consultar(ds.id, seleccionar="count(*) as n, sum(valor_del_contrato) as v",
+                          donde=donde_absurdos, limite=1),
+        socrata.consultar(ds.id, seleccionar="sum(valor_del_contrato) as v",
+                          donde=donde, limite=1),
+    )
     filas = [
         {agrupar_por: fmt.recorta(f.get(campo), 55),
          "contratos": fmt.numero(f.get("contratos")),
          "valor total": fmt.moneda(f.get("valor"))}
         for f in r["filas"]
     ]
+    # Barras sobre la métrica por la que se ordenó, con los valores crudos.
+    if grafica and formato == "tabla":
+        clave = "valor" if metrica == "valor" else "contratos"
+        for fila, dibujo in zip(filas, fmt.barras([f.get(clave) for f in r["filas"]])):
+            fila["gráfica"] = dibujo
     sobre = Sobre(datos=filas, total_coincidencias=len(filas), orden=orden,
                   consulta=r["consulta"], fuente=_fuente(ds))
+    _advierte_absurdos(sobre, absurdos, global_)
     sobre.advertir("Montos nominales sin deflactar: no compares valores entre años distintos sin ajustar.")
     if not donde:
         sobre.advertir("Agregación sobre el dataset completo (~5,9 M filas): puede agotar el tiempo.")
-    return sobre.render(lambda f: fmt.tabla_markdown(f))
+    return sobre.render(lambda f: fmt.tabla_markdown(f), formato=formato)

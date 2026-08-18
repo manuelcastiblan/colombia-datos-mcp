@@ -2,6 +2,46 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.3.0] — 2026-08-18
+
+### Añadido
+
+- **Contenido estructurado en todas las respuestas.** El sobre ya calculaba
+  `datos` y `_meta` y se descartaban: las herramientas devolvían solo prosa.
+  Ahora viajan por el canal estructurado del protocolo, con las filas tipadas
+  —las coordenadas son `float`, no texto— y los metadatos accesibles sin volver
+  a parsear la tabla.
+- **`formato` en las herramientas de consulta**: `"csv"` o `"json"` en vez de
+  tabla. El cuerpo va en un bloque cercado para que se copie limpio, y el sobre
+  se mantiene debajo: extraer no puede costar la procedencia.
+- **`co_datos_exportar`**, la primera herramienta que escribe. Pagina hasta
+  agotar el filtro y guarda CSV, JSON o Parquet bajo `CO_EXPORT_DIR`.
+  `nombre_archivo` es un nombre y no una ruta: `../../etc/passwd` se neutraliza.
+  Anotada con `readOnlyHint: false` para que el cliente pueda pedir
+  confirmación. Si se alcanza `max_filas`, el fichero queda incompleto y la
+  respuesta lo dice. El CSV lleva BOM para que Excel respete los acentos.
+- **Barras en las agregaciones**, proporcionales a la métrica y a escala
+  compartida. Cero dependencias. Se apagan con `grafica=false`.
+- **Aviso de valores imposibles.** SECOP tiene 3.452 contratos por encima del
+  billón de pesos —uno de 881 billones para una institución universitaria— que
+  son errores de digitación y valen el **99,98 %** de la suma de los 5,9 M de
+  contratos. `co_secop_agregar` ahora cuenta cuántos caen en el filtro y qué
+  parte de la suma representan. Lo destapó una de las barras nuevas: un solo
+  departamento llenaba la escala.
+- 22 pruebas nuevas (83 → 105), incluidas las del saneamiento de rutas.
+
+### Corregido
+
+- **`a_numero` leía mil veces de más los números grandes con tres decimales.**
+  La regla «un separador con tres dígitos detrás es de miles» necesita también
+  que la parte entera tenga uno a tres dígitos: sin eso, una suma agregada como
+  `5093243848602202766138.364` se convertía en 5,09·10²⁴. Salió al calcular el
+  porcentaje del aviso anterior, que daba 100.000 %.
+- `secop._numero` era una copia de esa misma regla que había divergido; ahora
+  delega en `format.a_numero`.
+- El pie del sobre ya no anuncia «0 fila(s)» ni una página siguiente en
+  respuestas donde contar filas no significa nada, como la exportación.
+
 ## [0.2.1] — 2026-08-18
 
 ### Corregido

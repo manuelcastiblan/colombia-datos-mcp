@@ -2,7 +2,7 @@
 
 Servidor MCP para datos públicos de Colombia: catálogo nacional de
 `datos.gov.co`, contratación pública (SECOP) y división territorial (DIVIPOLA).
-12 herramientas de solo lectura, sin credenciales.
+13 herramientas, sin credenciales.
 
 Esta es la **fase F0 + la mitad Socrata de F1** del diseño: núcleo completo,
 adaptador de Socrata y los módulos de catálogo, SECOP y DIVIPOLA.
@@ -55,6 +55,7 @@ Todas son opcionales y tienen valores conservadores.
 | `CO_TTL_DATOS` | `900` (15 min) | TTL de la caché en memoria. |
 | `CO_TTL_METADATOS` | `86400` (24 h) | TTL de esquemas y dominios categóricos, en disco. |
 | `CO_CACHE_DIR` | `~/.cache/colombia-datos-mcp` | Dónde vive la caché L2. |
+| `CO_EXPORT_DIR` | `~/colombia-datos-export` | Único directorio donde `co_datos_exportar` puede escribir. |
 | `CO_REQ_POR_SEGUNDO` | `5` | Autolímite por host. |
 | `CO_MAX_REINTENTOS` | `4` | Intentos por petición antes de rendirse. |
 | `CO_USER_AGENT` | `colombia-datos-mcp/<versión> (+URL del repo)` | Identificación ante la fuente. |
@@ -108,6 +109,7 @@ es la resolución de nombres funcionando — ver
 | `co_secop_agregar` | Totales por departamento, entidad, modalidad, proveedor… |
 | `co_geo_divipola` | Códigos y coordenadas de departamentos, municipios y centros poblados |
 | `co_geo_cotejar_coordenadas` | Control de calidad entre las dos fuentes oficiales de coordenadas |
+| `co_datos_exportar` | Descarga un filtro entero a CSV, JSON o Parquet en disco |
 
 Más tres *resources*: `co://secop/datasets`, `co://secop/joins`,
 `co://atribuciones`.
@@ -118,7 +120,7 @@ trampas: [docs/recetas.md](docs/recetas.md).
 
 ## Antes de citar una cifra
 
-Esto es lo que el servidor **no puede decidir por ti**. Son siete reglas, y
+Esto es lo que el servidor **no puede decidir por ti**. Son ocho reglas, y
 saltárselas produce cifras que parecen correctas y no lo son.
 
 **1. Comprueba `devueltos` contra `total`.** Si el sobre dice «20 filas de 4.312
@@ -139,20 +141,80 @@ firmados —no traen `fecha_de_firma` y su `valor_pagado` es 0—, pero cuentan 
 estado. En un caso real que motivó esta nota, el borrador era $93.192.634 de un
 total de $547.285.071: un **17 %** de la cifra que se habría citado.
 
-**5. Los montos son nominales y sin deflactar.** Comparar $575.132 de 2018 con
+**5. Desconfía de cualquier suma de `valor_del_contrato`.** SECOP contiene
+**3.452 contratos por encima del billón de pesos** —hay uno de 881 billones para
+una institución universitaria—, que son errores de digitación y arrastran
+cualquier total en el que caigan. Medido sobre el dataset completo: esos 3.452
+registros son el **99,98 %** de la suma de los 5,9 M de contratos. Las
+herramientas de agregación ahora lo advierten con las cifras del filtro que
+hayas pedido, pero la decisión de excluirlos es tuya.
+
+**6. Los montos son nominales y sin deflactar.** Comparar $575.132 de 2018 con
 $93 millones de 2026 no dice nada por sí solo.
 
-**6. Confirma que un nombre es una sola persona.** Dos personas distintas con el
+**7. Confirma que un nombre es una sola persona.** Dos personas distintas con el
 mismo nombre se mezclan sin aviso. Agrupa por `documento_proveedor` antes de dar
 un total por nombre; si sale más de una cédula, son varias personas.
 
-**7. Casi todo es solo SECOP II.** Para contratación anterior a la plataforma hay
+**8. Casi todo es solo SECOP II.** Para contratación anterior a la plataforma hay
 que consultar también `rpmr-utcd` (SECOP Integrado). Un «cero contratos» puede
 significar «no está en SECOP II», no «no contrató nunca».
 
 Y una que el servidor sí garantiza: **cero filas nunca es lo mismo que fuente
 caída.** Son mensajes distintos a propósito. Un `[FUENTE_CAIDA]` no significa
 «no hay datos», y una tabla vacía no es un fallo.
+
+## Extraer los datos
+
+Tres vías, según lo que quieras hacer con ellos.
+
+**Contenido estructurado, en cada respuesta.** Además del markdown, toda
+herramienta devuelve por el canal estructurado del protocolo un objeto con
+`datos` —las filas ya tipadas: las coordenadas son `float`, no texto— y `_meta`
+con el total, el orden, las advertencias y la URL reproducible. Un cliente MCP
+puede consumirlas como datos sin volver a parsear la tabla.
+
+**`formato` para copiar y pegar.** Las herramientas de consulta aceptan
+`formato="csv"` o `"json"`; el cuerpo sale en un bloque cercado para que se
+copie limpio, y el sobre sigue debajo con su procedencia.
+
+```
+co_secop_buscar_contratos(departamento="Chocó", formato="csv")
+```
+
+**`co_datos_exportar` para volúmenes.** Pagina hasta agotar el filtro y escribe
+el fichero, así que sirve para lo que no cabe en una respuesta. Devuelve la ruta,
+el número de filas y si el conjunto quedó completo.
+
+```
+co_datos_exportar(dataset_id="jbjy-vk9h", nombre_archivo="contratos_choco",
+                  donde="departamento = 'Chocó'", formato="csv")
+```
+
+Es la **única herramienta que escribe** y está anotada como tal, para que el
+cliente pueda pedirte confirmación. `nombre_archivo` es un nombre, no una ruta:
+el fichero se escribe siempre bajo `CO_EXPORT_DIR`, y cualquier intento de salir
+de ahí se neutraliza. El CSV lleva BOM para que Excel respete los acentos; con
+pandas usa `encoding="utf-8-sig"`.
+
+## Gráficas
+
+Las agregaciones traen una columna de barras proporcionales a la métrica, para
+comparar los grupos sin salir de la terminal:
+
+```
+| departamento               | contratos | valor total  | gráfica          |
+|----------------------------|-----------|--------------|------------------|
+| Antioquia                  |   563.810 | $4.712.182…  | ████████████████ |
+| Distrito Capital de Bogotá | 2.002.976 | $216.174…    | ▊                |
+```
+
+Todas comparten escala, que es lo que las hace comparables; un valor no numérico
+deja la celda vacía en vez de dibujar una barra de cero. Se apagan con
+`grafica=false` y no aparecen si pides `formato="csv"` o `"json"`.
+
+Fue justamente una de estas barras la que delató los valores imposibles de la
+regla 5: un solo departamento llenaba la escala y dejaba a los demás en nada.
 
 ## Cómo se comparan los nombres
 
@@ -248,9 +310,6 @@ debajo, y porque cada punto costó una verificación contra la fuente viva.
 
 Explícito para que nadie lo dé por hecho:
 
-- **No expone `structuredContent`.** El sobre se calcula con `datos` y `_meta`,
-  pero las herramientas devuelven texto: los metadatos llegan en el pie en prosa,
-  no por el canal estructurado del protocolo.
 - **No degrada entre niveles de detalle.** Ante una respuesta grande recorta
   filas; no baja de `completo` a `resumen` por su cuenta.
 - **No tiene motor de privacidad**, y por tanto no incluye los módulos de
@@ -284,7 +343,7 @@ pip install -e ".[dev]"
 ```
 
 ```bash
-pytest              # 83 pruebas, sin red
+pytest              # 105 pruebas, sin red
 ```
 
 ```bash

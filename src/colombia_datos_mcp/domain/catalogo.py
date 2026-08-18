@@ -111,7 +111,7 @@ async def describir_dataset(dataset_id: str):
 
 
 async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
-                    limite=20, offset=0, detalle="resumen"):
+                    limite=20, offset=0, detalle="resumen", formato="tabla"):
     """SoQL con allow-list de columnas derivada del esquema vivo."""
     nivel = Detalle(detalle)
     esq = await socrata.esquema(dataset_id)
@@ -141,11 +141,12 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
                   consulta=r["consulta"], fuente=fuente)
     if socrata.sin_token():
         sobre.advertir(AVISO_SIN_TOKEN)
-    return sobre.render(lambda f: fmt.tabla_markdown(f))
+    return sobre.render(lambda f: fmt.tabla_markdown(f), formato=formato)
 
 
 async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
-                  donde=None, teniendo=None, limite=20):
+                  donde=None, teniendo=None, limite=20, formato="tabla",
+                  grafica=True):
     """Agregación del lado del servidor: 20 grupos en vez de 10.000 filas."""
     if not agrupar_por:
         raise ErrorValidacion(
@@ -162,6 +163,13 @@ async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
         teniendo=teniendo, ordenar=orden, limite=limite,
     )
     filas = [{k: _formatea_valor(k, v) for k, v in f.items()} for f in r["filas"]]
+    # La gráfica se calcula sobre los valores CRUDOS: los ya formateados llevan
+    # separadores de miles y símbolo de moneda.
+    alias = _alias_metrica(metricas)
+    if grafica and formato == "tabla" and alias:
+        dibujos = fmt.barras([f.get(alias) for f in r["filas"]])
+        for fila, dibujo in zip(filas, dibujos):
+            fila["gráfica"] = dibujo
     sobre = Sobre(datos=filas, total_coincidencias=len(filas), orden=orden,
                   consulta=r["consulta"], fuente=_fuente_de(esq, dataset_id))
     if not donde:
@@ -169,7 +177,7 @@ async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
             "Agregación sin filtro: hace full scan y en datasets grandes puede agotar "
             "el tiempo. Si falla, añade un filtro de fecha o territorio."
         )
-    return sobre.render(lambda f: fmt.tabla_markdown(f))
+    return sobre.render(lambda f: fmt.tabla_markdown(f), formato=formato)
 
 
 # ------------------------------------------------------------- auxiliares --
@@ -205,6 +213,13 @@ def _campos_citados(*expresiones):
     return encontrados
 
 
+def _alias_metrica(metricas: str) -> str | None:
+    """Primer alias declarado en `metricas`, que es la columna de la métrica."""
+    import re
+    alias = re.findall("(?:^|[ ,(])as +([A-Za-z_][A-Za-z0-9_]*)", str(metricas or ""), re.I)
+    return alias[0] if alias else None
+
+
 def _orden_de_metrica(metricas: str, agrupar_por: str) -> str:
     """Ordena por el alias real de la métrica, no por uno cableado.
 
@@ -212,11 +227,8 @@ def _orden_de_metrica(metricas: str, agrupar_por: str) -> str:
     `sum(valor_del_contrato) as valor` producía un 400 de Socrata
     («No such column: total») en una herramienta cuyo único fin es agregar.
     """
-    import re
-    alias = re.findall("(?:^|[ ,(])as +([A-Za-z_][A-Za-z0-9_]*)", str(metricas or ''), re.I)
-    if alias:
-        return f"{alias[0]} DESC"
-    return agrupar_por.split(",")[0].strip()
+    alias = _alias_metrica(metricas)
+    return f"{alias} DESC" if alias else agrupar_por.split(",")[0].strip()
 
 
 def _proyecta(filas, columnas):

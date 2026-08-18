@@ -15,7 +15,7 @@ _LIC = "CC BY-SA 4.0"
 
 
 async def divipola(consulta=None, codigo=None, nivel="municipio",
-                   con_coordenadas=True, limite=25, offset=0):
+                   con_coordenadas=True, limite=25, offset=0, formato="tabla"):
     """Resuelve nombre <-> código DIVIPOLA, con coordenadas.
 
     Los códigos son TEXTO con ceros a la izquierda (`05`, `08`). Tratarlos como
@@ -27,8 +27,8 @@ async def divipola(consulta=None, codigo=None, nivel="municipio",
             "Usa 'municipio' para el código DIVIPOLA de 5 dígitos.",
         )
     if nivel == "centro_poblado":
-        return await _centros(consulta, codigo, con_coordenadas, limite, offset)
-    return await _municipios(consulta, codigo, nivel, con_coordenadas, limite, offset)
+        return await _centros(consulta, codigo, con_coordenadas, limite, offset, formato)
+    return await _municipios(consulta, codigo, nivel, con_coordenadas, limite, offset, formato)
 
 
 def _sin_coincidencias(ds, consulta, campo, offset):
@@ -46,7 +46,8 @@ def _sin_coincidencias(ds, consulta, campo, offset):
     return sobre.render(lambda _f: "_Sin coincidencias._")
 
 
-async def _municipios(consulta, codigo, nivel, con_coordenadas, limite, offset):
+async def _municipios(consulta, codigo, nivel, con_coordenadas, limite, offset,
+                      formato="tabla"):
     ds = reg.DIVIPOLA_MUNICIPIOS
     partes = []
     if codigo:
@@ -100,10 +101,10 @@ async def _municipios(consulta, codigo, nivel, con_coordenadas, limite, offset):
         sobre.advertir(f"{sin_coord} registro(s) sin coordenada utilizable en la fuente.")
     if not filas:
         sobre.advertir("Sin coincidencias. La fuente responde bien; revisa el nombre o el código.")
-    return sobre.render(lambda f: fmt.tabla_markdown(f))
+    return sobre.render(lambda f: fmt.tabla_markdown(f), formato=formato)
 
 
-async def _centros(consulta, codigo, con_coordenadas, limite, offset):
+async def _centros(consulta, codigo, con_coordenadas, limite, offset, formato="tabla"):
     ds = reg.DIVIPOLA_CENTROS
     partes = []
     if codigo:
@@ -146,7 +147,7 @@ async def _centros(consulta, codigo, con_coordenadas, limite, offset):
     sobre.advertir("CM = cabecera municipal, CP = centro poblado.")
     if sin_coord:
         sobre.advertir(f"{sin_coord} registro(s) sin coordenada utilizable en la fuente.")
-    return sobre.render(lambda f: fmt.tabla_markdown(f))
+    return sobre.render(lambda f: fmt.tabla_markdown(f), formato=formato)
 
 
 async def cotejar_coordenadas(limite=15):

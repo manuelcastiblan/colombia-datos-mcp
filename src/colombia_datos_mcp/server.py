@@ -11,11 +11,12 @@ import sys
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
+from fastmcp.tools.tool import ToolResult
 
 from . import __version__
 from .adapters import socrata
 from .core.errors import CoDatosError
-from .domain import catalogo, geo, secop
+from .domain import catalogo, exportar, geo, secop
 from .registry import datasets as reg
 
 PLAYBOOK = """
@@ -62,27 +63,36 @@ No los confundas al explicarle el resultado al usuario.
 mcp = FastMCP(name="colombia-datos", instructions=PLAYBOOK, version=__version__)
 
 SOLO_LECTURA = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True}
+# Exportar es la única herramienta que escribe. No destruye —crea o sobrescribe
+# un fichero bajo CO_EXPORT_DIR— pero no puede anunciarse como de solo lectura.
+ESCRIBE = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}
 
 
-async def _ejecuta(corrutina) -> str:
-    """Ejecuta una herramienta y traduce los errores tipados a ToolError.
+async def _ejecuta(corrutina) -> ToolResult:
+    """Ejecuta una herramienta y devuelve markdown + contenido estructurado.
 
-    Así el cliente MCP recibe isError=True con el código estable y la
-    sugerencia accionable, en vez de una traza. Un fallo de la fuente nunca se
-    confunde con una respuesta de cero filas.
+    Los errores tipados se traducen a ToolError, de modo que el cliente recibe
+    isError=True con el código estable y la sugerencia accionable en vez de una
+    traza. Un fallo de la fuente nunca se confunde con cero filas.
+
+    El sobre ya calculaba `estructurado` con las filas y sus metadatos, pero se
+    descartaba: el cliente recibía solo la prosa. Ahora viaja por el canal
+    estructurado del protocolo, así que las filas se pueden consumir como datos
+    —tipadas, con `_meta` y la URL reproducible— sin volver a parsear la tabla.
     """
     try:
         resultado = await corrutina
     except CoDatosError as e:
         raise ToolError(e.como_texto()) from e
-    return resultado["texto"]
+    return ToolResult(content=resultado["texto"],
+                      structured_content=resultado["estructurado"])
 
 
 # ------------------------------------------------------------- catálogo ----
 @mcp.tool(annotations=SOLO_LECTURA)
 async def co_datos_buscar_datasets(consulta: str = "", categoria: str = "",
                                    entidad: str = "", limite: int = 20,
-                                   offset: int = 0) -> str:
+                                   offset: int = 0) -> ToolResult:
     """Busca conjuntos de datos oficiales en el catálogo nacional datos.gov.co.
 
     `entidad` acepta una sigla conocida (DANE, CCE, MinDefensa, Fiscalía,
@@ -94,7 +104,7 @@ async def co_datos_buscar_datasets(consulta: str = "", categoria: str = "",
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
-async def co_datos_describir_dataset(dataset_id: str) -> str:
+async def co_datos_describir_dataset(dataset_id: str) -> ToolResult:
     """Devuelve el esquema en vivo de un dataset: campo técnico, nombre
     legible, tipo y descripción. Úsala ANTES de escribir cualquier filtro."""
     return await _ejecuta(catalogo.describir_dataset(dataset_id))
@@ -103,25 +113,34 @@ async def co_datos_describir_dataset(dataset_id: str) -> str:
 @mcp.tool(annotations=SOLO_LECTURA)
 async def co_datos_consultar(dataset_id: str, seleccionar: str = "", donde: str = "",
                              ordenar: str = "", limite: int = 20, offset: int = 0,
-                             detalle: str = "resumen") -> str:
+                             detalle: str = "resumen", formato: str = "tabla") -> ToolResult:
     """Consulta SoQL sobre cualquier dataset de datos.gov.co.
 
     `detalle`: "conteo" (solo el número, sin filas), "resumen" (campos
     curados) o "completo". Las columnas se validan contra el esquema vivo.
+
+    `formato`: "tabla" para leer, "csv" o "json" para extraer. Las filas van
+    además en el contenido estructurado de la respuesta.
     """
     return await _ejecuta(catalogo.consultar(
         dataset_id, seleccionar=seleccionar or None, donde=donde or None,
-        ordenar=ordenar or None, limite=limite, offset=offset, detalle=detalle))
+        ordenar=ordenar or None, limite=limite, offset=offset, detalle=detalle,
+        formato=formato))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
 async def co_datos_agregar(dataset_id: str, agrupar_por: str,
                            metricas: str = "count(*) as total", donde: str = "",
-                           teniendo: str = "", limite: int = 20) -> str:
-    """Agrega del lado del servidor: agrupa y devuelve grupos, no filas."""
+                           teniendo: str = "", limite: int = 20,
+                           formato: str = "tabla", grafica: bool = True) -> ToolResult:
+    """Agrega del lado del servidor: agrupa y devuelve grupos, no filas.
+
+    `grafica` añade una columna de barras proporcionales a la métrica, para
+    comparar los grupos de un vistazo. `formato`: "tabla", "csv" o "json".
+    """
     return await _ejecuta(catalogo.agregar(
         dataset_id, agrupar_por, metricas=metricas, donde=donde or None,
-        teniendo=teniendo or None, limite=limite))
+        teniendo=teniendo or None, limite=limite, formato=formato, grafica=grafica))
 
 
 # ---------------------------------------------------------------- SECOP ----
@@ -131,14 +150,17 @@ async def co_secop_buscar_contratos(entidad: str = "", nit_entidad: str = "",
                                     departamento: str = "", modalidad: str = "",
                                     desde: str = "", hasta: str = "", valor_min: float = 0,
                                     detalle: str = "resumen", limite: int = 20,
-                                    offset: int = 0) -> str:
-    """Busca contratos en SECOP II. Fechas en formato YYYY-MM-DD."""
+                                    offset: int = 0, formato: str = "tabla") -> ToolResult:
+    """Busca contratos en SECOP II. Fechas en formato YYYY-MM-DD.
+
+    `formato`: "tabla" para leer, "csv" o "json" para extraer.
+    """
     return await _ejecuta(secop.buscar_contratos(
         entidad=entidad or None, nit_entidad=nit_entidad or None,
         proveedor=proveedor or None, documento_proveedor=documento_proveedor or None,
         departamento=departamento or None, modalidad=modalidad or None,
         desde=desde or None, hasta=hasta or None, valor_min=valor_min or None,
-        detalle=detalle, limite=limite, offset=offset))
+        detalle=detalle, limite=limite, offset=offset, formato=formato))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
@@ -146,30 +168,30 @@ async def co_secop_buscar_procesos(entidad: str = "", nit_entidad: str = "",
                                    departamento: str = "", modalidad: str = "",
                                    desde: str = "", hasta: str = "",
                                    detalle: str = "resumen", limite: int = 20,
-                                   offset: int = 0) -> str:
+                                   offset: int = 0, formato: str = "tabla") -> ToolResult:
     """Busca procesos de contratación en SECOP II (adjudicados o no)."""
     return await _ejecuta(secop.buscar_procesos(
         entidad=entidad or None, nit_entidad=nit_entidad or None,
         departamento=departamento or None, modalidad=modalidad or None,
         desde=desde or None, hasta=hasta or None,
-        detalle=detalle, limite=limite, offset=offset))
+        detalle=detalle, limite=limite, offset=offset, formato=formato))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
-async def co_secop_detalle_contrato(id_contrato: str) -> str:
+async def co_secop_detalle_contrato(id_contrato: str) -> ToolResult:
     """Ficha completa de un contrato: datos, modificaciones y URL pública de
     verificación, en una sola llamada."""
     return await _ejecuta(secop.detalle_contrato(id_contrato))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
-async def co_secop_perfil_proveedor(documento: str, limite: int = 20) -> str:
+async def co_secop_perfil_proveedor(documento: str, limite: int = 20) -> ToolResult:
     """Perfil agregado de un contratista por cédula o NIT."""
     return await _ejecuta(secop.perfil_proveedor(documento, limite=limite))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
-async def co_secop_resolver_entidad(nombre: str, limite: int = 10) -> str:
+async def co_secop_resolver_entidad(nombre: str, limite: int = 10) -> ToolResult:
     """Traduce un nombre coloquial de entidad a su nombre canónico y NIT.
     Úsala antes de buscar por nombre: evita falsos negativos."""
     return await _ejecuta(secop.resolver_entidad(nombre, limite=limite))
@@ -178,33 +200,61 @@ async def co_secop_resolver_entidad(nombre: str, limite: int = 10) -> str:
 @mcp.tool(annotations=SOLO_LECTURA)
 async def co_secop_agregar(agrupar_por: str = "departamento", metrica: str = "valor",
                            entidad: str = "", desde: str = "", hasta: str = "",
-                           limite: int = 20) -> str:
+                           limite: int = 20, formato: str = "tabla",
+                           grafica: bool = True) -> ToolResult:
     """Totales de contratación por departamento, entidad, modalidad, proveedor,
-    sector, tipo o estado."""
+    sector, tipo o estado.
+
+    `grafica` añade barras proporcionales a la métrica por la que se ordena.
+    """
     return await _ejecuta(secop.agregar(
         agrupar_por=agrupar_por, metrica=metrica, donde_entidad=entidad or None,
-        desde=desde or None, hasta=hasta or None, limite=limite))
+        desde=desde or None, hasta=hasta or None, limite=limite,
+        formato=formato, grafica=grafica))
 
 
 # ----------------------------------------------------------------- geo ----
 @mcp.tool(annotations=SOLO_LECTURA)
 async def co_geo_divipola(consulta: str = "", codigo: str = "", nivel: str = "municipio",
                           con_coordenadas: bool = True, limite: int = 25,
-                          offset: int = 0) -> str:
+                          offset: int = 0, formato: str = "tabla") -> ToolResult:
     """Resuelve nombre y código DIVIPOLA con coordenadas.
 
     `nivel`: "departamento", "municipio" o "centro_poblado".
     """
     return await _ejecuta(geo.divipola(
         consulta=consulta or None, codigo=codigo or None, nivel=nivel,
-        con_coordenadas=con_coordenadas, limite=limite, offset=offset))
+        con_coordenadas=con_coordenadas, limite=limite, offset=offset,
+        formato=formato))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
-async def co_geo_cotejar_coordenadas(limite: int = 15) -> str:
+async def co_geo_cotejar_coordenadas(limite: int = 15) -> ToolResult:
     """Coteja las dos fuentes oficiales de coordenadas municipales y reporta
     las discrepancias mayores a ~1 km. Es un control de calidad del dato."""
     return await _ejecuta(geo.cotejar_coordenadas(limite=limite))
+
+
+@mcp.tool(annotations=ESCRIBE)
+async def co_datos_exportar(dataset_id: str, nombre_archivo: str, donde: str = "",
+                            seleccionar: str = "", ordenar: str = "",
+                            formato: str = "csv", max_filas: int = 50000) -> ToolResult:
+    """Descarga un dataset filtrado ENTERO y lo guarda en disco.
+
+    Es la única herramienta que escribe. Pagina hasta agotar el filtro, así que
+    sirve para sacar volúmenes que no caben en una respuesta.
+
+    `nombre_archivo` es un nombre, NO una ruta: el fichero se escribe siempre
+    bajo `CO_EXPORT_DIR` (por defecto `~/colombia-datos-export`).
+
+    `formato`: "csv" (sin dependencias), "json" o "parquet" (requiere pyarrow).
+    Si se alcanza `max_filas` antes que el total, la respuesta lo dice: el
+    fichero queda incompleto y hay que saberlo.
+    """
+    return await _ejecuta(exportar.exportar(
+        dataset_id, nombre_archivo, donde=donde or None,
+        seleccionar=seleccionar or None, ordenar=ordenar or None,
+        formato=formato, max_filas=max_filas))
 
 
 # ----------------------------------------------------------- resources ----

@@ -156,6 +156,56 @@ municipios con cabecera trasladada aparecen ahí legítimamente.
 
 ---
 
+## Sacar los datos del servidor
+
+**Para procesarlos en un cliente MCP**, no hace falta pedir nada: toda respuesta
+lleva `datos` y `_meta` por el canal estructurado del protocolo, con las filas ya
+tipadas. Las coordenadas llegan como `float`, no como el texto con coma decimal
+del origen.
+
+**Para copiar y pegar**, pide el formato:
+
+```
+co_secop_buscar_contratos(departamento="Chocó", limite=100, formato="csv")
+```
+
+El cuerpo sale en un bloque cercado, así que se copia limpio; el sobre sigue
+debajo con la procedencia y la URL reproducible.
+
+**Para volúmenes**, exporta a disco. Pagina hasta agotar el filtro, así que no
+está sujeto al presupuesto de tokens:
+
+```
+co_datos_exportar(dataset_id="jbjy-vk9h", nombre_archivo="contratos_choco",
+                  donde="departamento = 'Chocó'", max_filas=50000)
+```
+
+Tres cosas que conviene saber:
+
+- Es la **única herramienta que escribe**, y el fichero va siempre bajo
+  `CO_EXPORT_DIR`. `nombre_archivo` es un nombre, no una ruta.
+- Si se alcanza `max_filas` antes que el total, **el fichero queda incompleto y
+  la respuesta lo dice**. Compruébalo antes de analizar lo exportado.
+- El CSV lleva BOM para Excel. Con pandas: `encoding="utf-8-sig"`.
+
+## Comparar de un vistazo
+
+Las agregaciones traen barras proporcionales a la métrica:
+
+```
+co_secop_agregar(agrupar_por="modalidad", metrica="valor", limite=8)
+```
+
+Comparten escala, así que un grupo que llene la barra mientras el resto queda en
+`▏` no es un defecto de dibujo: es que ese grupo domina el total por uno o dos
+órdenes de magnitud. **Cuando eso pase con `metrica="valor"`, sospecha de los
+datos antes que de la realidad** — así se descubrieron los 3.452 contratos con
+valores imposibles que valen el 99,98 % de la suma de SECOP.
+
+Se apagan con `grafica=false`, y no aparecen si pides `formato="csv"`.
+
+---
+
 ## Leer el sobre
 
 Todas las respuestas terminan igual:

@@ -29,10 +29,12 @@ async def test_inventario_de_herramientas():
         "co_datos_agregar", "co_secop_buscar_contratos", "co_secop_buscar_procesos",
         "co_secop_detalle_contrato", "co_secop_perfil_proveedor",
         "co_secop_resolver_entidad", "co_secop_agregar",
-        "co_geo_divipola", "co_geo_cotejar_coordenadas",
+        "co_geo_divipola", "co_geo_cotejar_coordenadas", "co_datos_exportar",
     }
-    # Todas anotadas como solo lectura: ninguna herramienta muta nada.
-    assert all(t.annotations and t.annotations.readOnlyHint for t in tools)
+    # Exportar es la ÚNICA que escribe, y no puede anunciarse como solo lectura:
+    # el cliente decide con esa anotación si pedir confirmación al usuario.
+    escriben = {t.name for t in tools if not (t.annotations and t.annotations.readOnlyHint)}
+    assert escriben == {"co_datos_exportar"}
     # Prefijo co_ para no colisionar con otros MCP en la misma sesión.
     assert all(t.name.startswith("co_") for t in tools)
 
@@ -77,3 +79,28 @@ async def test_recurso_de_joins_es_json_valido():
     resultado = await mcp.read_resource("co://secop/joins")
     joins = json.loads(resultado.contents[0].content)
     assert any(j["desde"].startswith("p6dx-8zbt") for j in joins)
+
+
+async def test_la_respuesta_trae_contenido_estructurado(monkeypatch):
+    """El sobre ya calculaba `datos` y `_meta`, pero se descartaban: el cliente
+    solo recibía prosa y tenía que volver a parsear la tabla."""
+    monkeypatch.setattr(socrata, "_http", RedFalsa(
+        {"api/catalog/v1": CATALOGO, "/resource/jbjy-vk9h.json": _filas_de_contratos}))
+    r = await mcp.call_tool("co_secop_buscar_contratos", {"departamento": "Antioquía"})
+    assert r.structured_content is not None
+    assert set(r.structured_content) == {"datos", "_meta"}
+    meta = r.structured_content["_meta"]
+    assert meta["orden"] and meta["consulta"].startswith("https://")
+
+
+async def test_el_formato_csv_va_en_bloque_cercado(monkeypatch):
+    """Así el pie del sobre no contamina lo que se copia."""
+    monkeypatch.setattr(socrata, "_http", RedFalsa(
+        {"api/catalog/v1": CATALOGO, "/resource/jbjy-vk9h.json": _filas_de_contratos}))
+    r = await mcp.call_tool("co_secop_buscar_contratos",
+                             {"departamento": "Antioquía", "formato": "csv"})
+    texto = r.content[0].text
+    assert texto.startswith("```csv")
+    assert "```" in texto.split("```csv")[1]
+    # El sobre sigue estando: procedencia y URL no son opcionales.
+    assert "Consulta reproducible" in texto

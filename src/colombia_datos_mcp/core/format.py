@@ -6,6 +6,9 @@ forma es parte del contrato.
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 import re
 from datetime import datetime
 
@@ -112,3 +115,107 @@ def tabla_markdown(filas: list[dict], columnas: list[str] | None = None) -> str:
         for f in filas
     ]
     return "\n".join([cabecera, sep, *cuerpo])
+
+
+# ------------------------------------------------------------- extracción --
+FORMATOS = ("tabla", "csv", "json")
+
+
+def a_numero(valor):
+    """Número a partir de lo que manda Socrata, o None si no lo es.
+
+    Los valores llegan como string y a veces ya formateados (`$1.234`), así que
+    se limpia todo lo que no sea dígito o separador y se aplica la convención
+    colombiana: el punto separa miles y la coma es decimal.
+    """
+    if isinstance(valor, (int, float)):
+        return float(valor)
+    crudo = re.sub(r"[^\d,.\-]", "", str(valor or ""))
+    if not crudo or crudo in ("-", ".", ","):
+        return None
+    comas, puntos = crudo.count(","), crudo.count(".")
+    if comas and puntos:
+        corte = max(crudo.rfind(","), crudo.rfind("."))
+    elif comas + puntos == 1:
+        corte = max(crudo.rfind(","), crudo.rfind("."))
+        # "1.000" son mil, no uno con milésimas. Pero la forma de agrupación
+        # exige AMBAS mitades: hasta tres dígitos delante y exactamente tres
+        # detrás. Sin la primera condición, una suma agregada como
+        # `5093243848602202766138.364` se leía como separador de miles y salía
+        # mil veces mayor de lo que es.
+        entera, decimal = crudo[:corte].lstrip("-"), crudo[corte + 1:]
+        if len(decimal) == 3 and 1 <= len(entera) <= 3:
+            corte = -1
+    else:
+        corte = -1  # varios separadores iguales: todos son de miles
+    try:
+        if corte == -1:
+            return float(re.sub(r"[,.]", "", crudo))
+        return float(re.sub(r"[,.]", "", crudo[:corte]) + "." + crudo[corte + 1:])
+    except ValueError:
+        return None
+
+
+def csv_texto(filas: list[dict], columnas: list[str] | None = None) -> str:
+    """CSV con cabecera, separador coma y comillas RFC 4180.
+
+    Existe para que el resultado se pueda pegar en una hoja de cálculo o leer
+    desde un script sin volver a parsear una tabla markdown.
+    """
+    if not filas:
+        return ""
+    columnas = columnas or columnas_union(filas)
+    buffer = io.StringIO()
+    escritor = csv.DictWriter(buffer, fieldnames=columnas, extrasaction="ignore",
+                              lineterminator="\n")
+    escritor.writeheader()
+    for f in filas:
+        escritor.writerow({c: f.get(c, "") for c in columnas})
+    return buffer.getvalue().rstrip("\n")
+
+
+def json_texto(filas: list[dict]) -> str:
+    """JSON legible y sin escapar los acentos."""
+    return json.dumps(filas, ensure_ascii=False, indent=1)
+
+
+def cuerpo_por_formato(formato: str):
+    """Función `filas -> texto` para el formato pedido.
+
+    Se invoca dentro del presupuesto de tokens, así que tiene que funcionar con
+    cualquier subconjunto de filas.
+    """
+    if formato == "csv":
+        return csv_texto
+    if formato == "json":
+        return json_texto
+    return tabla_markdown
+
+
+# ----------------------------------------------------------------- barras --
+# Bloques de un octavo: dan resolución sin salirse de una celda de la tabla.
+_BLOQUES = "▏▎▍▌▋▊▉█"
+
+
+def barras(valores, ancho: int = 16) -> list[str]:
+    """Barras proporcionales al máximo absoluto, para leer una agregación de un
+    vistazo sin salir de la terminal.
+
+    Todas comparten escala, que es lo que las hace comparables. Un valor que no
+    es número devuelve cadena vacía: más honesto que dibujar una barra de cero.
+    """
+    nums = [a_numero(v) for v in valores]
+    tope = max((abs(n) for n in nums if n is not None), default=0.0)
+    salida = []
+    for n in nums:
+        if n is None or tope <= 0:
+            salida.append("")
+            continue
+        octavos = round(abs(n) / tope * ancho * 8)
+        llenos, resto = divmod(octavos, 8)
+        barra = "█" * llenos + (_BLOQUES[resto - 1] if resto else "")
+        # Un valor pequeño pero no nulo no debe verse igual que un cero.
+        if not barra and n:
+            barra = _BLOQUES[0]
+        salida.append(barra)
+    return salida

@@ -4,9 +4,10 @@ Tres capas y una regla: **el dominio no habla HTTP y el adaptador no sabe de
 SECOP**.
 
 ```
-server.py            12 herramientas + 3 recursos + el playbook del modelo
-    |                traduce CoDatosError -> ToolError
-domain/              catalogo.py  secop.py  geo.py
+server.py            13 herramientas + 3 recursos + el playbook del modelo
+    |                traduce CoDatosError -> ToolError, y devuelve ToolResult
+    |                con markdown + contenido estructurado
+domain/              catalogo.py  secop.py  geo.py  exportar.py
     |                construye filtros, proyecta columnas, arma el sobre
 adapters/socrata.py  Discovery API + SODA: params, caché, URL reproducible
     |
@@ -25,6 +26,7 @@ registry/            conocimiento de dominio curado y versionado
 | `core/format.py` | Markdown, moneda es-CO, fechas, mojibake. |
 | `core/texto.py` | Plegado y comparación de nombres contra fuentes acentuadas. |
 | `registry/datasets.py` | IDs, unidad de análisis, campos clave, alias, atribuciones. |
+| `domain/exportar.py` | La única operación que escribe: descarga paginada a disco. |
 
 ---
 
@@ -167,12 +169,9 @@ pliegan los acentos en el servidor con `replace()` anidado.
 
 Ser explícito aquí evita que alguien dé por implementado lo que no está:
 
-- **El `structuredContent` se calcula y se descarta.** `Sobre.render` produce
-  `texto` y `estructurado` —con `datos` y `_meta`—, pero las herramientas están
-  declaradas `-> str` y `server._ejecuta` solo devuelve el texto. Los metadatos
-  llegan al modelo en el pie en prosa, no por el canal estructurado del
-  protocolo. Cablearlo es un cambio pequeño y contenido en `_ejecuta`.
-- **El presupuesto solo recorta el markdown**, no el `estructurado`.
+- **El presupuesto solo recorta el markdown**, y el `estructurado` va con las
+  mismas filas ya recortadas: no hay una vía para recibir todas las filas en una
+  sola respuesta. Para eso está `co_datos_exportar`, que pagina a disco.
 - **Sin adaptador SDMX** (Banco de la República) ni **ArcGIS** (IGAC, MGN del
   DANE) con descubrimiento del corte vigente.
 - **Sin motor de privacidad**, y por tanto sin los módulos de seguridad y DDHH
