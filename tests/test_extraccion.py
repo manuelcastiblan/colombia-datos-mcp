@@ -133,3 +133,27 @@ async def test_exportar_sin_filas_no_crea_fichero(monkeypatch):
     salida = await exportar.exportar("jbjy-vk9h", "vacio")
     assert "no se escribió ningún fichero" in salida["texto"]
     assert not (exportar.DIR_EXPORT / "vacio.csv").exists()
+
+
+# ------------------------------------------------------------ atípicos ----
+async def test_valor_max_acota_por_arriba(monkeypatch):
+    """Sin un tope, dejar fuera los valores imposibles obliga a escribir SoQL
+    a mano en una herramienta que existe para no tener que escribirlo."""
+    from colombia_datos_mcp.domain import secop
+
+    red = RedFalsa({"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    monkeypatch.setattr(socrata, "_http", red)
+    await secop.buscar_contratos(valor_max="1.000.000.000.000", detalle="conteo")
+    donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
+    assert "valor_del_contrato <= 1000000000000.0" in donde
+
+
+async def test_valor_min_y_valor_max_se_combinan(monkeypatch):
+    from colombia_datos_mcp.domain import secop
+
+    red = RedFalsa({"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    monkeypatch.setattr(socrata, "_http", red)
+    await secop.buscar_contratos(valor_min=1_000_000, valor_max=1_000_000_000,
+                                 detalle="conteo")
+    donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
+    assert ">= 1000000.0" in donde and "<= 1000000000.0" in donde

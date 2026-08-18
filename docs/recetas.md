@@ -114,6 +114,34 @@ de filas y puede agotar el tiempo. El sobre lo advierte.
 **Los montos son nominales.** Comparar $575.132 de 2018 con $93 millones de 2026
 no dice nada sin deflactar.
 
+### Y antes de dar una suma de dinero, acótala
+
+```
+co_secop_agregar(agrupar_por="departamento", metrica="valor")
+```
+
+devuelve cifras dominadas por errores de digitación: **9 contratos aportan el
+94 % de la suma** de todo SECOP II. El servidor te lo advierte con los números
+de tu filtro, pero no decide por ti.
+
+Lo que **no** funciona es filtrar por estado. Aunque el 97 % de los atípicos
+está en `Cancelado` o `Borrador`, los 83 que sobreviven siguen arrastrando el
+total. Lo que funciona es acotar por magnitud:
+
+```
+co_secop_buscar_contratos(valor_max=1000000000000, detalle="conteo")
+→ 5.955.101 contratos · $997,5 billones
+```
+
+O medir lo que de verdad se movió, que en los atípicos es cero:
+
+```
+co_datos_agregar(dataset_id="jbjy-vk9h", agrupar_por="departamento",
+                 metricas="sum(valor_pagado) as pagado",
+                 donde="valor_pagado > 0")
+→ 2.826.295 contratos · $251,6 billones
+```
+
 ---
 
 ## La historia completa de un contrato

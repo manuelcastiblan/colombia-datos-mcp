@@ -76,9 +76,11 @@ def _advierte_absurdos(sobre, absurdos, global_):
     parte = f", el {ruido / total * 100:.1f} % de la suma del filtro" if total else ""
     sobre.advertir(
         f"ATENCIÓN: {fmt.numero(n)} contrato(s) del filtro superan el billón de "
-        f"pesos{parte}. Son errores de digitación de la fuente y arrastran la "
-        f"suma entera. Para una cifra utilizable, excluye los atípicos o usa la "
-        f"mediana."
+        f"pesos{parte}. Son errores de digitación —hay contratos de un enfermero "
+        f"por 9,97 billones— y arrastran la suma entera. Filtrar por estado NO "
+        f"basta: aunque el 97 % están Cancelado o Borrador, los que quedan siguen "
+        f"dominando el total. Usa valor_max para acotarlos, o suma valor_pagado, "
+        f"que en los atípicos es cero."
     )
 
 
@@ -133,6 +135,8 @@ async def _construye_where(ds: reg.Dataset, **filtros):
         partes.append(f"{c['fecha']} <= '{socrata.escapa(filtros['hasta'])}'")
     if filtros.get("valor_min") and c.get("valor"):
         partes.append(f"{c['valor']} >= {_numero(filtros['valor_min'], 'valor_min')}")
+    if filtros.get("valor_max") and c.get("valor"):
+        partes.append(f"{c['valor']} <= {_numero(filtros['valor_max'], 'valor_max')}")
 
     return (" AND ".join(partes) if partes else None), avisos, False
 
@@ -218,10 +222,10 @@ def _valor(campo: str, valor):
 # ------------------------------------------------------------ públicas ----
 async def buscar_contratos(entidad=None, nit_entidad=None, proveedor=None,
                            documento_proveedor=None, departamento=None, modalidad=None,
-                           desde=None, hasta=None, valor_min=None,
+                           desde=None, hasta=None, valor_min=None, valor_max=None,
                            detalle="resumen", limite=20, offset=0, formato="tabla"):
     return await _buscar("contratos", detalle=detalle, limite=limite, offset=offset,
-                         formato=formato,
+                         formato=formato, valor_max=valor_max,
                          entidad=entidad, nit_entidad=nit_entidad, proveedor=proveedor,
                          documento_proveedor=documento_proveedor, departamento=departamento,
                          modalidad=modalidad, desde=desde, hasta=hasta, valor_min=valor_min)

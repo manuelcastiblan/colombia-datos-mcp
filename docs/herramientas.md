@@ -149,6 +149,7 @@ Contratos de SECOP II (`jbjy-vk9h`, ~5,9 M filas).
 | `modalidad` | string | `""` | Dominio cerrado. |
 | `desde` / `hasta` | string | `""` | Sobre `fecha_de_firma`. |
 | `valor_min` | number | `0` | Acepta `1000000`, `"1.000.000"` y `"$1.000.000"`. |
+| `valor_max` | number | `0` | Tope por arriba. Sirve para dejar fuera los ~3.450 valores imposibles. |
 | `detalle` | string | `"resumen"` | |
 | `limite` | int | `20` | Tope 100. |
 | `offset` | int | `0` | |
@@ -248,9 +249,13 @@ valores entre años distintos sin ajustar.
 
 Y advierte, con las cifras del filtro que hayas pedido, cuántos contratos
 superan el billón de pesos y qué parte de la suma representan. Sobre el dataset
-completo son 3.452 registros que aportan el **99,99998 %** del total: errores de
-digitación que hacen inservible cualquier suma que los incluya. Sin ellos, los
-5.955.101 contratos restantes suman $997,5 billones.
+completo, **9 contratos aportan el 94 %** de la suma y los 3.452 que pasan del
+billón aportan el 99,99998 %.
+
+Ojo: **filtrar por estado no arregla esto**. El 97 % de los atípicos está en
+`Cancelado` o `Borrador`, pero los 83 que sobreviven siguen dominando el total.
+Acota con `valor_max` en `co_secop_buscar_contratos`, o agrega sobre
+`valor_pagado`, que en los atípicos es cero sin excepción.
 
 ---
 

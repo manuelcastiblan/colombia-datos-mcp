@@ -141,15 +141,30 @@ firmados —no traen `fecha_de_firma` y su `valor_pagado` es 0—, pero cuentan 
 estado. En un caso real que motivó esta nota, el borrador era $93.192.634 de un
 total de $547.285.071: un **17 %** de la cifra que se habría citado.
 
-**5. Desconfía de cualquier suma de `valor_del_contrato`.** SECOP contiene
-**3.452 contratos por encima del billón de pesos**. El mayor son 881,8
-*trillones* —unas 560.000 veces el PIB de Colombia— para una institución
-universitaria: errores de digitación que arrastran cualquier total en el que
-caigan. Medido sobre el dataset completo: esos 3.452
-registros aportan el **99,99998 %** de la suma de los 5,96 M de contratos. Los
-otros 5.955.101 contratos —los reales— suman $997,5 billones entre todos, que
-es la cifra utilizable. Las herramientas de agregación ahora lo advierten con
-los números del filtro que hayas pedido, pero la decisión de excluirlos es tuya.
+**5. `sum(valor_del_contrato)` sin acotar no sirve para nada.** De los 5.958.553
+contratos de SECOP II, **9 aportan el 94 % de la suma**. Son errores de
+digitación: el mayor son 881,8 *trillones* de pesos —unas 560.000 veces el PIB
+de Colombia— para una institución universitaria. Y no hace falta irse a los
+extremos: en la banda de 1 a 10 billones hay contratos de **un enfermero por
+9,97 billones** y de **un higienista oral por 9,65 billones**.
+
+Ampliando a los 3.452 contratos por encima del billón, aportan el **99,99998 %**
+del total. Dos cosas que ayudan a identificarlos: el **100 %** tiene
+`valor_pagado = 0`, y el 97 % está en `Cancelado` o `Borrador`.
+
+**Pero filtrar por estado NO basta.** Excluyendo cancelados y borradores
+sobreviven 83 atípicos, y siguen dominando la suma entera. Hay que acotar por
+magnitud, con `valor_max`. Las tres cifras defendibles:
+
+| Qué mides | Contratos | Suma |
+|---|---|---|
+| Valor contratado, sin los imposibles | 5.955.101 | **$997,5 billones** |
+| Ídem, sin cancelados ni borradores | 5.602.420 | **$855,8 billones** |
+| Efectivamente **pagado** | 2.826.295 | **$251,6 billones** |
+
+La última es la más honesta si lo que te interesa es dinero que se movió. Las
+herramientas de agregación advierten con los números de tu filtro, pero la
+decisión de excluir es tuya.
 
 **6. Los montos son nominales y sin deflactar.** Comparar $575.132 de 2018 con
 $93 millones de 2026 no dice nada por sí solo.

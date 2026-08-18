@@ -149,9 +149,13 @@ async def co_secop_buscar_contratos(entidad: str = "", nit_entidad: str = "",
                                     proveedor: str = "", documento_proveedor: str = "",
                                     departamento: str = "", modalidad: str = "",
                                     desde: str = "", hasta: str = "", valor_min: float = 0,
+                                    valor_max: float = 0,
                                     detalle: str = "resumen", limite: int = 20,
                                     offset: int = 0, formato: str = "tabla") -> ToolResult:
     """Busca contratos en SECOP II. Fechas en formato YYYY-MM-DD.
+
+    `valor_max` acota por arriba. Sirve para dejar fuera los ~3.450 contratos
+    con valores imposibles por error de digitación, que arrastran cualquier suma.
 
     `formato`: "tabla" para leer, "csv" o "json" para extraer.
     """
@@ -160,6 +164,7 @@ async def co_secop_buscar_contratos(entidad: str = "", nit_entidad: str = "",
         proveedor=proveedor or None, documento_proveedor=documento_proveedor or None,
         departamento=departamento or None, modalidad=modalidad or None,
         desde=desde or None, hasta=hasta or None, valor_min=valor_min or None,
+        valor_max=valor_max or None,
         detalle=detalle, limite=limite, offset=offset, formato=formato))
 
 

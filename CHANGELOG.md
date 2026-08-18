@@ -22,13 +22,19 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
   respuesta lo dice. El CSV lleva BOM para que Excel respete los acentos.
 - **Barras en las agregaciones**, proporcionales a la métrica y a escala
   compartida. Cero dependencias. Se apagan con `grafica=false`.
-- **Aviso de valores imposibles.** SECOP tiene 3.452 contratos por encima del
-  billón de pesos —el mayor son 881,8 trillones, unas 560.000 veces el PIB del
-  país— que
-  son errores de digitación y aportan el **99,99998 %** de la suma de los 5,96 M
-  de contratos. `co_secop_agregar` ahora cuenta cuántos caen en el filtro y qué
+- **Aviso de valores imposibles.** De los 5.958.553 contratos de SECOP II,
+  **nueve aportan el 94 %** de la suma. El mayor son 881,8 trillones de pesos
+  —unas 560.000 veces el PIB del país—, y en la banda de 1 a 10 billones hay
+  contratos de un enfermero por 9,97 billones. Ampliando al umbral del billón,
+  son 3.452 registros que aportan el 99,99998 % del total; el **100 %** tiene
+  `valor_pagado = 0`. `co_secop_agregar` cuenta cuántos caen en tu filtro y qué
   parte de la suma representan. Lo destapó una de las barras nuevas: un solo
   departamento llenaba la escala.
+- **`valor_max` en `co_secop_buscar_contratos`**, simétrico de `valor_min`.
+  Acotar por magnitud es la ÚNICA forma de sacar los imposibles: filtrar por
+  estado no basta —el 97 % están cancelados o en borrador, pero los 83 que
+  sobreviven siguen dominando la suma—. Cifras utilizables: $997,5 billones
+  contratados sin los imposibles, $251,6 billones efectivamente pagados.
 - 22 pruebas nuevas (83 → 105), incluidas las del saneamiento de rutas.
 
 ### Documentación
