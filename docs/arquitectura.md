@@ -3,17 +3,24 @@
 Tres capas y una regla: **el dominio no habla HTTP y el adaptador no sabe de
 SECOP**.
 
+```mermaid
+flowchart TD
+    cliente["Cliente MCP"]
+    server["server.py<br/>13 herramientas · 3 recursos · playbook<br/>traduce los errores tipados y arma el ToolResult"]
+    dominio["domain/ · catalogo · secop · geo · exportar<br/>construye filtros, proyecta columnas, arma el sobre"]
+    adaptador["adapters/socrata.py<br/>Discovery API + SODA · URL reproducible"]
+    fuente[("datos.gov.co")]
+    registro["registry/<br/>unidad de análisis · campos clave · alias · atribuciones"]
+    nucleo["core/<br/>sobre · presupuesto · caché · HTTP · errores · coordenadas · texto"]
+
+    cliente --> server --> dominio --> adaptador --> fuente
+    dominio -.- registro
+    dominio -.- nucleo
+    adaptador -.- nucleo
 ```
-server.py            13 herramientas + 3 recursos + el playbook del modelo
-    |                traduce CoDatosError -> ToolError, y devuelve ToolResult
-    |                con markdown + contenido estructurado
-domain/              catalogo.py  secop.py  geo.py  exportar.py
-    |                construye filtros, proyecta columnas, arma el sobre
-adapters/socrata.py  Discovery API + SODA: params, caché, URL reproducible
-    |
-core/                envelope  budget  cache  http  errors  coords  format  texto
-registry/            conocimiento de dominio curado y versionado
-```
+
+La flecha continua es la petición; la punteada, de qué se apoya cada capa. El
+dominio nunca llama a `httpx` y el adaptador nunca sabe qué es un contrato.
 
 | Módulo | Responsabilidad |
 |---|---|
@@ -27,6 +34,45 @@ registry/            conocimiento de dominio curado y versionado
 | `core/texto.py` | Plegado y comparación de nombres contra fuentes acentuadas. |
 | `registry/datasets.py` | IDs, unidad de análisis, campos clave, alias, atribuciones. |
 | `domain/exportar.py` | La única operación que escribe: descarga paginada a disco. |
+
+---
+
+## El ciclo de vida de una consulta
+
+Lo que pasa entre que una herramienta pide datos y el cliente recibe la
+respuesta. Las secciones siguientes explican cada pieza por separado; esto es
+cómo encajan.
+
+```mermaid
+flowchart TD
+    inicio["Una herramienta pide datos"] --> l1{"¿está en L1?<br/>memoria · 15 min"}
+    l1 -->|sí| sobre
+    l1 -->|no| l2{"¿está en L2?<br/>disco · 24 h"}
+    l2 -->|sí| sobre
+    l2 -->|no| vuelo{"¿la misma petición<br/>ya está en vuelo?"}
+    vuelo -->|sí| comparte["Espera ese resultado<br/>en vez de duplicar la petición"]
+    comparte --> sobre
+    vuelo -->|no| breaker{"¿circuito abierto<br/>para este host?"}
+    breaker -->|sí| caida["FUENTE_CAIDA<br/>sin tocar la red"]
+    breaker -->|no| cubeta["Token bucket · 5 req/s por host"]
+    cubeta --> get["GET a datos.gov.co"]
+    get --> resp{"código de respuesta"}
+    resp -->|200| sobre
+    resp -->|"202 · 429 · 5xx"| backoff["Backoff exponencial<br/>o Retry-After si la fuente lo manda"]
+    backoff --> cubeta
+    resp -->|"400 · 403 · 404"| tipado["VALIDACION · NO_ENCONTRADO<br/>el host respondió: NO cuenta para el breaker"]
+    sobre["Sobre: filas · total · orden<br/>URL reproducible · advertencias"] --> cabe{"¿cabe en el presupuesto<br/>de tokens?"}
+    cabe -->|sí| salida["markdown + contenido estructurado"]
+    cabe -->|no| recorta["Recorta filas por búsqueda binaria<br/>y marca truncado: true"]
+    recorta --> salida
+```
+
+Dos detalles que el diagrama hace evidentes y la prosa escondía:
+
+- **Un 4xx no abre el circuito.** El host respondió, así que está vivo; una
+  consulta mal escrita no puede dejar fuera de servicio a los demás.
+- **El recorte por presupuesto ocurre después del sobre**, no antes. Por eso el
+  `siguiente_offset` se calcula sobre lo que realmente se devolvió.
 
 ---
 

@@ -258,6 +258,24 @@ es `Atlántico`, `nom_mpio` es `MEDELLÍN`—, y SoQL no tiene `unaccent()`: su
 | Dominio enumerable (`departamento`, `modalidad`, municipios) | Se traen los valores canónicos (cacheados 24 h), se resuelve el término en Python y se filtra con `in ('Atlántico')` | Exacto, y compara por igualdad: 1,7 s frente a 7-20 s |
 | Texto libre (`nombre_entidad`, `proveedor_adjudicado`) | El plegado se hace **en el servidor**, con `replace()` anidado sobre la columna | No hay lista que enumerar; exacto y de coste constante en la longitud del término |
 
+```mermaid
+flowchart TD
+    inicio["Escribes 'atlantico'"] --> tipo{"¿el campo tiene<br/>dominio enumerable?"}
+
+    tipo -->|"sí · departamento,<br/>modalidad, municipios"| trae["Trae los valores canónicos<br/>de la fuente · caché 24 h"]
+    trae --> compara["Pliega los acentos de AMBOS lados<br/>en Python y compara"]
+    compara --> casa{"¿casa algún<br/>valor real?"}
+    casa -->|sí| igualdad["departamento in 'Atlántico'<br/>igualdad exacta · 1,7 s"]
+    casa -->|no| honesto["Cero honesto: te dice que el término<br/>no existe y NO gasta la consulta"]
+
+    tipo -->|"no · nombre de entidad,<br/>de proveedor"| servidor["Pliega la COLUMNA en el servidor<br/>con replace anidado"]
+    servidor --> subcadena["like sobre el texto ya plegado<br/>exacto · unos 20 s"]
+```
+
+La rama de la izquierda es la que faltaba antes: un término que no corresponde a
+ningún valor real no se consulta, se explica. Un cero silencioso es
+indistinguible de «no hay datos».
+
 Se descartaron dos alternativas por medición contra los 1.122 municipios reales,
 no por intuición: los comodines sobre las vocales alcanzaban el 100 % de recall
 pero contaminaban el 32 % de las consultas —«ANDES» casaba con «CALDAS»—, y un

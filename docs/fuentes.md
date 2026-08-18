@@ -123,16 +123,29 @@ el caso que `core/coords.py` absorbe y que la suite de contrato vigila.
 
 ## Joins verificados
 
-```
-p6dx-8zbt.id_del_proceso            -> jbjy-vk9h.proceso_de_compra
-jbjy-vk9h.id_contrato               -> cb9c-h8sn.id_contrato
-rgxm-mmea.identificador_de_la_orden -> usqp-5nsn.orden
-hgi6-6wh3.id_procedimiento          -> p6dx-8zbt.id_del_proceso
+```mermaid
+flowchart LR
+    hgi6["hgi6-6wh3<br/>id_procedimiento"]
+    p6dx["p6dx-8zbt<br/>Procesos de Contratación<br/>una fila = un proceso"]
+    jbjy["jbjy-vk9h<br/>Contratos Electrónicos<br/>una fila = un contrato"]
+    cb9c["cb9c-h8sn<br/>Adiciones<br/>una fila = una modificación"]
+    rgxm["rgxm-mmea<br/>TVEC · órdenes"]
+    usqp["usqp-5nsn<br/>orden"]
+
+    hgi6 -->|"id_procedimiento = id_del_proceso"| p6dx
+    p6dx -->|"id_del_proceso = proceso_de_compra"| jbjy
+    jbjy -->|"id_contrato = id_contrato · 1:N pesado"| cb9c
+    rgxm -->|"identificador_de_la_orden = orden"| usqp
 ```
 
 Disponibles como recurso MCP en `co://secop/joins`. `usqp-5nsn` y `hgi6-6wh3`
 aparecen solo como destino de join: no están en el registro con unidad de
 análisis propia.
+
+Fíjate en que **la unidad de análisis cambia en cada salto**: un proceso puede
+dar varios contratos y un contrato varias adiciones. Son 26,1 M de adiciones
+para ~5,9 M de contratos, así que contar filas después de un join no cuenta
+contratos.
 
 **DIVIPOLA es la clave de join universal** entre fuentes territoriales, y los
 códigos son **texto con ceros a la izquierda** (`05`, `08`). Tratarlos como

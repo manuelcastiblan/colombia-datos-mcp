@@ -14,7 +14,25 @@ Dos reglas que atraviesan todo:
 
 ## Contratos de una persona natural
 
-El caso incómodo: solo tienes un nombre.
+El caso incómodo: solo tienes un nombre. Cada rombo de aquí es un sitio donde se
+puede dar por buena una cifra equivocada.
+
+```mermaid
+flowchart TD
+    inicio["Solo tienes un nombre"] --> conteo["buscar_contratos con proveedor<br/>detalle='conteo'"]
+    conteo --> cuantos{"¿cuántos<br/>contratos?"}
+    cuantos -->|"cero"| apellidos["Prueba solo con los apellidos:<br/>la fuente puede guardarlos delante"]
+    apellidos --> conteo
+    cuantos -->|"alguno"| agrupa["Agrupa por documento_proveedor"]
+    agrupa --> cedulas{"¿cuántas<br/>cédulas salen?"}
+    cedulas -->|"más de una"| homonimos["Son homónimos distintos.<br/>Elige la cédula ANTES de sumar nada"]
+    cedulas -->|"una"| perfil["perfil_proveedor con la cédula:<br/>agregado exacto del servidor"]
+    perfil --> estados["Mira los estados de los contratos"]
+    estados --> borrador{"¿hay alguno<br/>en Borrador?"}
+    borrador -->|sí| resta["No están firmados y su valor_pagado es 0.<br/>Réstalos si quieres contratación real"]
+    borrador -->|no| citable["Cifra citable"]
+    resta --> citable
+```
 
 ```
 co_secop_buscar_contratos(proveedor="Jhon Sebastian Chaparro Carmona",

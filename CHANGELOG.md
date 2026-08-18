@@ -32,6 +32,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ### Documentación
 
+- **Cinco diagramas Mermaid** donde la prosa escondía la estructura: las capas y
+  el ciclo de vida completo de una consulta —caché, dedup, breaker, reintentos,
+  presupuesto— en `arquitectura.md`; el árbol de decisión de la comparación de
+  nombres en el README, que es lo único que muestra la rama del cero honesto; el
+  flujo de buscar a una persona natural en `recetas.md`, con un rombo en cada
+  sitio donde se puede dar por buena una cifra equivocada; y el grafo de joins
+  en `fuentes.md`, donde se ve que la unidad de análisis cambia en cada salto.
 - Los ejemplos de gráficas de los `.md` eran **inventados**: valores elididos con
   `…`, columnas alineadas a mano y, sobre todo, ilustraban la función con las
   sumas corruptas que el propio README declara inservibles. Sustituidos por
