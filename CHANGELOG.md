@@ -24,6 +24,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 - `docs/operacion.md` — diagnóstico: caché, throttling, timeouts medidos, la
   fragilidad de stdio y **por qué el servidor sigue ejecutando código viejo**
   aunque la instalación sea editable.
+- **README reestructurado para ser claro por sí solo**, sin obligar a abrir
+  `docs/`: un ejemplo real de respuesta con el sobre anotado línea por línea, la
+  sección «Antes de citar una cifra» con las siete reglas que el servidor no
+  puede decidir por ti, la lista explícita de lo que el servidor NO hace, y el
+  aviso de que un proceso MCP viejo sigue ejecutando código viejo. Las trampas
+  se separan en las que absorbe el servidor y las que te tocan a ti.
 - Índice de documentación en el README.
 - 2 pruebas de regresión de las columnas dispersas (81 → 83).
 

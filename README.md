@@ -7,6 +7,11 @@ Servidor MCP para datos públicos de Colombia: catálogo nacional de
 Esta es la **fase F0 + la mitad Socrata de F1** del diseño: núcleo completo,
 adaptador de Socrata y los módulos de catálogo, SECOP y DIVIPOLA.
 
+> **Si vas a citar una cifra de aquí, lee
+> [Antes de citar una cifra](#antes-de-citar-una-cifra).** Estos datos tienen
+> trampas que no se ven: contratos en borrador que suman, unidades de análisis
+> que no se pueden mezclar y montos sin deflactar.
+
 ## Instalación
 
 ```bash
@@ -54,6 +59,39 @@ Todas son opcionales y tienen valores conservadores.
 | `CO_MAX_REINTENTOS` | `4` | Intentos por petición antes de rendirse. |
 | `CO_USER_AGENT` | `colombia-datos-mcp/<versión> (+URL del repo)` | Identificación ante la fuente. |
 
+## Qué devuelve: un ejemplo real
+
+Pidiendo `co_geo_divipola(consulta="Itagui", limite=2)` —sin tilde, a propósito—
+la respuesta completa es:
+
+```markdown
+| cod_dpto | departamento | cod_mpio | municipio | tipo | lon | lat |
+|---|---|---|---|---|---|---|
+| 05 | ANTIOQUIA | 05360 | ITAGÜÍ | Municipio | -75.612056 | 6.175079 |
+
+**1 fila(s)** de **1** coincidencias · orden: `cod_mpio`
+
+Fuente: `gdxc-w37w` DIVIPOLA - Códigos municipios · CC BY-SA 4.0
+
+Consulta reproducible: https://www.datos.gov.co/resource/gdxc-w37w.json?%24where=nom_mpio+in+%28%27ITAG%C3%9C%C3%8D%27%29&%24order=cod_mpio&%24limit=2
+
+> Los códigos DIVIPOLA son texto con ceros a la izquierda: consérvalos como string.
+```
+
+Todo lo que hay debajo de la tabla es **el sobre**, y es parte del contrato:
+
+| Línea | Para qué sirve |
+|---|---|
+| `1 fila(s)` de `1` coincidencias | Si los dos números son iguales tienes el conjunto completo y puedes sumar. Si difieren, **estás viendo una parte**. |
+| `orden: cod_mpio` | Sin orden declarado, «los 20 primeros» no significa nada. |
+| `Fuente` + licencia | La atribución que debes propagar si republicas. |
+| `Consulta reproducible` | El SoQL exacto que se ejecutó. Pégalo en el navegador y verifica: **es la prueba**. |
+| Líneas con `>` | Advertencias del servidor. No son decorativas. |
+
+Fíjate en la URL: escribí «Itagui» y el filtro salió `nom_mpio in ('ITAGÜÍ')`. Eso
+es la resolución de nombres funcionando — ver
+[Cómo se comparan los nombres](#cómo-se-comparan-los-nombres).
+
 ## Herramientas
 
 | Herramienta | Qué hace |
@@ -78,30 +116,43 @@ Más tres *resources*: `co://secop/datasets`, `co://secop/joins`,
 [docs/herramientas.md](docs/herramientas.md).** Secuencias que funcionan, con sus
 trampas: [docs/recetas.md](docs/recetas.md).
 
-## Qué hace distinto
+## Antes de citar una cifra
 
-**El contrato de respuesta.** Toda respuesta trae un sobre con filas devueltas,
-total de coincidencias, orden aplicado y **la URL exacta reproducible**. Si
-`devueltos < total`, el servidor lo dice y advierte que no se concluya nada
-cuantitativo desde esas filas.
+Esto es lo que el servidor **no puede decidir por ti**. Son siete reglas, y
+saltárselas produce cifras que parecen correctas y no lo son.
 
-**Presupuesto de tokens con degradación explícita.** Si la respuesta no cabe, se
-recorta y se marca `truncado: true` con instrucciones de qué hacer. Contar nunca
-implica traer filas: `detalle="conteo"` cuesta ~200 tokens.
+**1. Comprueba `devueltos` contra `total`.** Si el sobre dice «20 filas de 4.312
+coincidencias», sumar esas 20 no da el total de nada. Usa una herramienta de
+agregación. El servidor te lo advierte, pero no puede impedírtelo.
 
-**Paginación honesta.** `siguiente_offset` se calcula sobre lo realmente
-devuelto, nunca sobre lo descargado. Y el orden estable se fuerza ya en la
-primera página: si la página 1 no tiene orden, la 2 no puede tenerlo.
+**2. Cuenta antes de traer.** `detalle="conteo"` cuesta ~200 tokens y te dice si
+el filtro está bien antes de gastar miles en filas.
 
-**Errores tipados.** `[VALIDACION]`, `[FUENTE_CAIDA]`, `[LIMITE_TASA]`… con
-sugerencia accionable. Una fuente caída nunca se confunde con cero resultados.
+**3. No mezcles unidades de análisis.** Un contrato no es un proceso, y una
+adición no es un contrato: hay **26,1 M de adiciones para ~5,9 M de contratos**.
+Cada respuesta declara su unidad; sumar filas de dos datasets distintos produce
+un número sin significado.
 
-**Esquema en vivo, nunca cableado.** Las columnas se validan contra el esquema
-real; un campo inexistente se rechaza listando los válidos.
+**4. Los contratos en `Borrador` están en el dataset y suman.** No están
+firmados —no traen `fecha_de_firma` y su `valor_pagado` es 0—, pero cuentan en
+`sum(valor_del_contrato)`. Si lo que te interesa es contratación real, filtra por
+estado. En un caso real que motivó esta nota, el borrador era $93.192.634 de un
+total de $547.285.071: un **17 %** de la cifra que se habría citado.
 
-**Cero honesto.** Cuando un término no existe en la fuente, el servidor lo dice
-en vez de devolver una tabla vacía. Una tabla vacía es indistinguible de «no hay
-datos».
+**5. Los montos son nominales y sin deflactar.** Comparar $575.132 de 2018 con
+$93 millones de 2026 no dice nada por sí solo.
+
+**6. Confirma que un nombre es una sola persona.** Dos personas distintas con el
+mismo nombre se mezclan sin aviso. Agrupa por `documento_proveedor` antes de dar
+un total por nombre; si sale más de una cédula, son varias personas.
+
+**7. Casi todo es solo SECOP II.** Para contratación anterior a la plataforma hay
+que consultar también `rpmr-utcd` (SECOP Integrado). Un «cero contratos» puede
+significar «no está en SECOP II», no «no contrató nunca».
+
+Y una que el servidor sí garantiza: **cero filas nunca es lo mismo que fuente
+caída.** Son mensajes distintos a propósito. Un `[FUENTE_CAIDA]` no significa
+«no hay datos», y una tabla vacía no es un fallo.
 
 ## Cómo se comparan los nombres
 
@@ -116,16 +167,48 @@ es `Atlántico`, `nom_mpio` es `MEDELLÍN`—, y SoQL no tiene `unaccent()`: su
 | Dominio enumerable (`departamento`, `modalidad`, municipios) | Se traen los valores canónicos (cacheados 24 h), se resuelve el término en Python y se filtra con `in ('Atlántico')` | Exacto, y compara por igualdad: 1,7 s frente a 7-20 s |
 | Texto libre (`nombre_entidad`, `proveedor_adjudicado`) | El plegado se hace **en el servidor**, con `replace()` anidado sobre la columna | No hay lista que enumerar; exacto y de coste constante en la longitud del término |
 
-Se descartaron dos alternativas por medición contra los 1.122 municipios
-reales, no por intuición: los comodines sobre las vocales alcanzaban el 100 % de
-recall pero contaminaban el 32 % de las consultas —«ANDES» casaba con
-«CALDAS»—, y un solo comodín por posición bajaba el ruido al 18 % pero perdía
-los nombres con dos tildes («ITAGÜÍ», «EL PEÑÓN»). Las tres mediciones están en
+Se descartaron dos alternativas por medición contra los 1.122 municipios reales,
+no por intuición: los comodines sobre las vocales alcanzaban el 100 % de recall
+pero contaminaban el 32 % de las consultas —«ANDES» casaba con «CALDAS»—, y un
+solo comodín por posición bajaba el ruido al 18 % pero perdía los nombres con dos
+tildes («ITAGÜÍ», «EL PEÑÓN»). Las tres mediciones están en
 `tests/test_texto.py`.
 
 En la práctica: **escribe los nombres con tilde o sin ella, da igual.**
 
-## Trampas de la fuente que el servidor absorbe
+Lo que sí importa es el **orden de las palabras**: el filtro busca la cadena
+completa como subcadena. Si la fuente guarda `CHAPARRO CARMONA JHON SEBASTIAN` y
+buscas el nombre en orden natural, obtienes cero. Si un nombre de persona da
+cero, prueba solo con los apellidos.
+
+## Qué hace distinto
+
+**El contrato de respuesta.** Toda respuesta trae el sobre del ejemplo de arriba,
+con la URL exacta reproducible.
+
+**Presupuesto de tokens con degradación explícita.** Si la respuesta no cabe, se
+recorta y se marca `truncado: true` con instrucciones de qué hacer. Nunca hay
+truncamiento silencioso.
+
+**Paginación honesta.** `siguiente_offset` se calcula sobre lo realmente
+devuelto, nunca sobre lo descargado. Y el orden estable se fuerza ya en la
+primera página: si la página 1 no tiene orden, la 2 no puede tenerlo.
+
+**Errores tipados.** `[VALIDACION]`, `[FUENTE_CAIDA]`, `[LIMITE_TASA]`,
+`[NO_ENCONTRADO]`, `[TIMEOUT]`, `[CONFIG]`, cada uno con una sugerencia
+accionable.
+
+**Esquema en vivo, nunca cableado.** Las columnas se validan contra el esquema
+real; un campo inexistente se rechaza listando los válidos.
+
+**Cero honesto.** Cuando un término categórico no existe en la fuente, el
+servidor lo dice con esas palabras y **no gasta la consulta**. Una tabla vacía es
+indistinguible de «no hay datos».
+
+## Trampas de la API que el servidor absorbe por ti
+
+No tienes que hacer nada con esta lista: está aquí para que se sepa qué hay
+debajo, y porque cada punto costó una verificación contra la fuente viva.
 
 - `search_context` es obligatorio en la Discovery API o `categories`/`tags`
   devuelven **0 en silencio**.
@@ -133,36 +216,66 @@ En la práctica: **escribe los nombres con tilde o sin ella, da igual.**
   `attribution=DANE` da cero; hay que usar `Departamento Administrativo Nacional
   de Estadísticas - DANE, Bogotá D.C.` — con «Estadísticas» en plural, que no es
   el nombre real de la entidad.
-- `$order` es obligatorio al paginar o se pierden o duplican filas. Pero **no se
+- `$order` es obligatorio al paginar o se pierden y duplican filas. Pero **no se
   puede ordenar por `:id` una consulta agregada**: Socrata responde «Column
   ':id' is not in group by».
-- Los números llegan como string; los códigos DIVIPOLA son texto con ceros a la
-  izquierda.
+- Los números llegan como **string**; los códigos DIVIPOLA son texto con ceros a
+  la izquierda (`05`, `08`). Tratarlos como enteros rompe todos los joins.
+- **Socrata omite los campos nulos** en vez de mandarlos vacíos, así que dos
+  filas del mismo dataset llegan con juegos de claves distintos. Deducir las
+  columnas de la primera fila perdía datos en silencio.
 - Los acentos vienen destruidos en origen **solo en el texto libre**
-  (`descripcion` trae `EJECUCIoN`). Las columnas **categóricas los conservan**.
-  Dar por buena la primera mitad y aplicarla a todo dejaba 392 de 1.122
-  municipios, 12 de 33 departamentos y ~2,8 M de contratos inalcanzables por
-  nombre. Ver *Cómo se comparan los nombres*.
+  (`descripcion` trae `EJECUCIoN`); las columnas categóricas los conservan. Dar
+  por buena la primera mitad y aplicarla a todo dejaba 392 de 1.122 municipios,
+  12 de 33 departamentos y ~2,8 M de contratos inalcanzables por nombre.
 - **SoQL sí soporta `replace()` anidado.** Una prueba con `curl` sugería lo
   contrario, pero era el shell corrompiendo el acento, no la API.
 - **Coordenadas:** en `xaxy-8nri` exactamente un registro de 8.161 —Medellín—
-  trae separador de miles (`-75,581,775`), y `float(s.replace(",", "."))`
-  **lanza `ValueError`** sobre él. `core/coords.py` aplica «la primera coma es el
+  trae separador de miles (`-75,581,775`), y `float(s.replace(",", "."))` **lanza
+  `ValueError`** sobre él. `core/coords.py` aplica «la primera coma es el
   decimal» y valida contra la caja envolvente del país. Cuidado: esa regla es
   correcta para coordenadas y **falsa para dinero**, donde `1.000.000` es un
   millón.
 - Las «modificaciones contractuales» se llaman **Adiciones**; buscar
-  «modificaciones» devuelve cero.
-- **Socrata omite los campos nulos** en vez de mandarlos vacíos, así que dos
-  filas del mismo dataset llegan con juegos de claves distintos. Un contrato en
-  `Borrador` no trae `fecha_de_firma`, y deducir las columnas de la primera fila
-  borraba la fecha de todas las demás.
-- **Los contratos en `Borrador` están en el dataset** y suman en
-  `sum(valor_del_contrato)`, pero no están firmados y su `valor_pagado` es 0.
-  Filtra por estado si lo que quieres es contratación real.
-- Varias entidades se registran en SECOP con su sigla y nada más: **INVIAS** y
-  **UNGRD** figuran así, y expandirlas a su razón social da cero. **RTVC** no
-  está en el dataset de contratos con ningún nombre, solo en SECOP Integrado.
+  «modificaciones» en el catálogo devuelve cero.
+- Varias entidades se registran en SECOP con su **sigla y nada más**: INVIAS y
+  UNGRD figuran así, y expandirlas a su razón social da cero. **RTVC** no está en
+  el dataset de contratos con ningún nombre, solo en SECOP Integrado.
+- Las columnas de fecha del Plan Anual de Adquisiciones (`9sue-ezhx`) son de tipo
+  `text`, no `calendar_date`: no se filtran con `between`.
+
+## Lo que este servidor NO hace
+
+Explícito para que nadie lo dé por hecho:
+
+- **No expone `structuredContent`.** El sobre se calcula con `datos` y `_meta`,
+  pero las herramientas devuelven texto: los metadatos llegan en el pie en prosa,
+  no por el canal estructurado del protocolo.
+- **No degrada entre niveles de detalle.** Ante una respuesta grande recorta
+  filas; no baja de `completo` a `resumen` por su cuenta.
+- **No tiene motor de privacidad**, y por tanto no incluye los módulos de
+  seguridad y DDHH que dependían de él.
+- **No cubre Banco de la República ni IGAC / MGN del DANE**: faltan los
+  adaptadores SDMX y ArcGIS.
+- `ESQUEMA_CAMBIADO`, `FUERA_DE_JURISDICCION` y `PRIVACIDAD` están definidos como
+  errores pero **ningún camino de código los lanza todavía**.
+
+Detalle en [docs/arquitectura.md](docs/arquitectura.md#lo-que-todavía-no-hace).
+
+## Si editas el código
+
+El cliente MCP lanza el servidor como un proceso hijo de larga vida, y **Python
+no recarga módulos en caliente**. Un proceso arrancado antes de tu cambio seguirá
+ejecutando el código viejo indefinidamente, aunque la instalación sea editable y
+las pruebas pasen.
+
+Para confirmarlo, mira la `Consulta reproducible` del sobre: muestra el SoQL que
+el proceso generó de verdad. Si esperabas un `replace(replace(...))` y ves un
+`upper(campo) like '%…%'` plano, el proceso es anterior al arreglo.
+
+La solución es reiniciar la sesión del cliente MCP. Más detalle y otros síntomas
+—incluido el `WinError 32` al reinstalar en Windows— en
+[docs/operacion.md](docs/operacion.md).
 
 ## Pruebas
 
@@ -179,14 +292,15 @@ pytest -m contrato  # 13 pruebas contra la API viva (~5 min)
 ```
 
 Las fixtures son respuestas **reales** capturadas de la API el 18-ago-2026, con
-sus defectos intactos: coma decimal, separador de miles en Medellín, números
-como string.
+sus defectos intactos: coma decimal, separador de miles en Medellín, números como
+string. Una fixture idealizada esconde el bug — el defecto de los acentos
+sobrevivió a 54 pruebas porque las fixtures tenían las tildes bien puestas.
 
 La suite de contrato comprueba los supuestos sobre los que está construido el
-código —que DIVIPOLA y SECOP siguen acentuando, que SoQL sigue aceptando
+código: que DIVIPOLA y SECOP siguen acentuando, que SoQL sigue aceptando
 `replace()` anidado, que los alias curados siguen resolviendo, que el registro
-envenenado de Medellín sigue ahí, que los IDs no rotaron—. Corre a diario en CI
-y **su fallo no es un bug del servidor: es la señal de que el Estado cambió el
+envenenado de Medellín sigue ahí, que los IDs no rotaron. Corre a diario en CI y
+**su fallo no es un bug del servidor: es la señal de que el Estado cambió el
 esquema.**
 
 ## Documentación
@@ -206,15 +320,12 @@ esquema.**
 Implementado: núcleo (sobre, presupuesto, caché de dos niveles, HTTP con
 autolímite y circuit breaker, errores tipados, coordenadas), adaptador Socrata,
 comparación de nombres tolerante a acentos, y los módulos de catálogo, SECOP y
-DIVIPOLA. CI con las pruebas sin red en Python 3.11-3.13 y el contrato
-programado a diario.
+DIVIPOLA. CI con las pruebas sin red en Python 3.11-3.13 y el contrato programado
+a diario.
 
 Pendiente, en orden: adaptador SDMX para Banco de la República, adaptador ArcGIS
 (IGAC / MGN del DANE) con descubrimiento dinámico del corte vigente, el motor de
 privacidad, y solo después los módulos de seguridad y DDHH.
-
-Lo que hoy **no** hace, para que nadie lo dé por hecho, está enumerado en
-[docs/arquitectura.md](docs/arquitectura.md#lo-que-todavía-no-hace).
 
 ## Licencia y atribución
 
