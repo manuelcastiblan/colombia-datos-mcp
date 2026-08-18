@@ -2,6 +2,48 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.4.0] — 2026-08-18
+
+### Añadido
+
+- **Módulo de criminalidad**: `co_crimen_serie`, `co_crimen_por_municipio` y
+  `co_crimen_comparar`, sobre 23 datasets de MinDefensa con esquema común
+  (`cod_muni`, `fecha_hecho`, `cantidad`) verificados uno a uno contra la API.
+  Series desde 2003, con `cod_mpio` en la salida para cruzar por código.
+- Registro curado de los 23 delitos, con su unidad de análisis y sus trampas.
+- 4 pruebas de contrato que vigilan que los IDs no roten, que el esquema siga
+  siendo común, y las dos suposiciones de abajo.
+- 16 pruebas sin red del módulo (107 → 123).
+
+### Decisiones que documenta el registro
+
+- **Se excluyen los datasets operativos.** MinDefensa publica 37 con el mismo
+  esquema, pero incautaciones y erradicación no comparten unidad: en
+  `ERRADICACIÓN` la `cantidad` son HECTÁREAS y en las incautaciones la columna
+  `unidad` trae valores como `0.002`. Mezclarlos con homicidios produce sumas
+  sin significado, así que el registro solo expone delitos.
+- **«HURTO A COMERCIO» y «HURTO A RESIDENCIAS» son el mismo dato**, con cifras
+  idénticas año por año: 613.637 filas y 614.669 casos en ambos. Uno de los dos
+  títulos está mal en la fuente. Sumarlos duplicaría la cifra de hurtos, y las
+  notas del registro lo advierten en los dos.
+- **`cantidad` no siempre vale uno**: homicidio tiene 342.971 filas y 343.680
+  víctimas. Se suma `cantidad`, nunca se cuentan filas.
+
+### Lo que el sobre advierte, y por qué
+
+- **Casos registrados no son delitos cometidos.** Una subida en extorsión o en
+  violencia intrafamiliar puede ser más denuncia y no más delito; el homicidio
+  es el indicador menos sensible a eso.
+- **El año base decide el titular.** El secuestro subió 259 % contra 2017 y bajó
+  67 % contra 2003: la misma serie. `co_crimen_serie` devuelve el máximo y el
+  mínimo junto a los datos, y `comparar` recuerda que la elección no es neutral.
+- **Cada dataset corta por su cuenta.** Se consulta `max(fecha_hecho)` y se
+  avisa de que el último año está incompleto: comparar un año a medias con años
+  cerrados es la forma más fácil de inventarse una caída.
+- **Sin población no hay tasas.** Se buscaron proyecciones municipales en la
+  fuente, incluido el facet del DANE, y no están. Las listas por municipio se
+  parecen a listas de municipios grandes, y el sobre lo dice.
+
 ## [0.3.0] — 2026-08-18
 
 ### Añadido

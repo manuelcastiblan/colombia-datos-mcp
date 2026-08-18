@@ -16,7 +16,7 @@ from fastmcp.tools.tool import ToolResult
 from . import __version__
 from .adapters import socrata
 from .core.errors import CoDatosError
-from .domain import catalogo, exportar, geo, secop
+from .domain import catalogo, crimen, exportar, geo, secop
 from .registry import datasets as reg
 
 PLAYBOOK = """
@@ -260,6 +260,52 @@ async def co_datos_exportar(dataset_id: str, nombre_archivo: str, donde: str = "
         dataset_id, nombre_archivo, donde=donde or None,
         seleccionar=seleccionar or None, ordenar=ordenar or None,
         formato=formato, max_filas=max_filas))
+
+
+# --------------------------------------------------------------- crimen ----
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_crimen_serie(delito: str, desde: int = 0, hasta: int = 0,
+                          agrupar_por: str = "anio", formato: str = "tabla",
+                          grafica: bool = True) -> ToolResult:
+    """Serie temporal de un delito, por año o por mes, desde 2003.
+
+    23 delitos de MinDefensa con esquema comparable: homicidio, extorsión,
+    secuestro, hurto_personas, violencia_intrafamiliar, delitos_sexuales,
+    terrorismo, lesiones, trata_personas, delitos_informaticos y más.
+
+    Mira SIEMPRE la serie antes de citar un porcentaje: el año que elijas de
+    base cambia el resultado, y a veces lo invierte.
+    """
+    return await _ejecuta(crimen.serie(
+        delito, desde=desde or None, hasta=hasta or None,
+        agrupar_por=agrupar_por, formato=formato, grafica=grafica))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_crimen_por_municipio(delito: str, anio: int, limite: int = 20,
+                                  departamento: str = "", formato: str = "tabla",
+                                  grafica: bool = True) -> ToolResult:
+    """Municipios con más casos de un delito en un año.
+
+    Devuelve `cod_mpio`, la clave DIVIPOLA, para cruzar con otras fuentes.
+    Son conteos absolutos: sin población, la lista se parece a una de
+    municipios grandes.
+    """
+    return await _ejecuta(crimen.por_municipio(
+        delito, anio, limite=limite, departamento=departamento or None,
+        formato=formato, grafica=grafica))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_crimen_comparar(anio_a: int, anio_b: int, delitos: str = "",
+                             formato: str = "tabla") -> ToolResult:
+    """Compara varios delitos entre dos años, ordenados por variación.
+
+    `delitos` es una lista separada por comas; vacío compara todos. El sobre
+    recuerda que la elección del año base no es neutral.
+    """
+    return await _ejecuta(crimen.comparar(anio_a, anio_b, delitos=delitos,
+                                          formato=formato))
 
 
 # ----------------------------------------------------------- resources ----

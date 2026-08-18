@@ -218,6 +218,202 @@ ALIAS_ENTIDADES = {
 # Ponerlo como alias de contratos garantizaba cero, así que se documenta aquí.
 SOLO_EN_INTEGRADO = {"RTVC": "RADIO TELEVISION NACIONAL DE COLOMBIA."}
 
+
+
+# ---------------------------------------------------------------- crimen --
+# Los 23 datasets de MinDefensa que cuentan DELITOS, verificados contra la API
+# el 18-ago-2026. De los 37 que comparten esquema se excluyen a propósito los
+# operativos —incautaciones, erradicación, minas intervenidas—: ahí `cantidad`
+# son hectáreas o kilos, no casos, y mezclarlos con homicidios produce sumas
+# sin significado.
+CRIMEN = {
+    'abigeato': Dataset(
+        id='p88b-5ac7',
+        nombre='ABIGEATO',
+        unidad='una cabeza de ganado hurtada',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+        notas=(
+            'La unidad son cabezas de ganado hurtadas, no casos.',
+        ),
+    ),
+    'afectacion_fuerza_publica': Dataset(
+        id='8rpn-wpty',
+        nombre='AFECTACION FUERZA PUBLICA',
+        unidad='un miembro de la fuerza pública afectado',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+        notas=(
+            'La serie empieza en 2010.',
+        ),
+    ),
+    'delitos_ambientales': Dataset(
+        id='9zck-qfvc',
+        nombre='DELITOS AMBIENTALES',
+        unidad='un delito ambiental',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'delitos_informaticos': Dataset(
+        id='4v6r-wu98',
+        nombre='DELITOS INFORMATICOS',
+        unidad='un delito informático',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+        notas=(
+            'La serie empieza en 2006: la categoría no existía antes. Un porcentaje contra 2003 mide la creación de la categoría.',
+        ),
+    ),
+    'delitos_sexuales': Dataset(
+        id='bz43-8ahq',
+        nombre='DELITOS SEXUALES',
+        unidad='una víctima de delito sexual',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+        notas=(
+            'Muy sensible a la propensión a denunciar.',
+        ),
+    ),
+    'extorsion': Dataset(
+        id='q2ib-t9am',
+        nombre='EXTORSION',
+        unidad='un caso de extorsión',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'homicidio': Dataset(
+        id='m8fd-ahd9',
+        nombre='HOMICIDIO',
+        unidad='una víctima de homicidio',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+        notas=(
+            'El indicador menos sensible al subregistro: un muerto es difícil de no registrar. 2017 fue el mínimo de la serie, con 11.957 víctimas.',
+        ),
+    ),
+    'homicidio_transito': Dataset(
+        id='uav5-b85g',
+        nombre='HOMICIDIO TRANSITO',
+        unidad='una víctima en accidente de tránsito',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'hurto_comercio': Dataset(
+        id='7i2x-h5vp',
+        nombre='HURTO COMERCIO',
+        unidad='un hurto a comercio',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+        notas=(
+            '«HURTO A COMERCIO» y «HURTO A RESIDENCIAS» son el MISMO dato: cifras idénticas año por año. Uno de los dos títulos está mal en la fuente. Nunca los sumes: duplicarías la cifra.',
+        ),
+    ),
+    'hurto_financieras': Dataset(
+        id='i7h7-wmjc',
+        nombre='HURTO FINANCIERAS',
+        unidad='un hurto a entidad financiera',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'hurto_personas': Dataset(
+        id='4rxi-8m8d',
+        nombre='HURTO PERSONAS',
+        unidad='un hurto a persona',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'hurto_residencias': Dataset(
+        id='7mn7-vzqp',
+        nombre='HURTO RESIDENCIAS',
+        unidad='un hurto a residencia',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+        notas=(
+            'Idéntico a «HURTO A COMERCIO» (7i2x-h5vp), año por año. Uno de los dos títulos está mal en la fuente. No los sumes.',
+        ),
+    ),
+    'hurto_vehiculos': Dataset(
+        id='csb4-y6v2',
+        nombre='HURTO VEHICULOS',
+        unidad='un hurto de vehículo',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'invasion_tierras': Dataset(
+        id='kvjj-d2ay',
+        nombre='INVASION TIERRAS',
+        unidad='un caso de invasión de tierras',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'lesiones': Dataset(
+        id='jr6v-i33g',
+        nombre='LESIONES',
+        unidad='una víctima de lesiones personales',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'lesiones_transito': Dataset(
+        id='ntej-qq7v',
+        nombre='LESIONES TRANSITO',
+        unidad='una víctima lesionada en accidente',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'pirateria_terrestre': Dataset(
+        id='sutf-7dyz',
+        nombre='PIRATERIA TERRESTRE',
+        unidad='un caso de piratería terrestre',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'secuestro': Dataset(
+        id='d7zw-hpf4',
+        nombre='SECUESTRO',
+        unidad='una víctima de secuestro',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'terrorismo': Dataset(
+        id='yi5j-5fe9',
+        nombre='TERRORISMO',
+        unidad='un hecho terrorista',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'trata_personas': Dataset(
+        id='95c7-mm6s',
+        nombre='TRATA PERSONAS',
+        unidad='una víctima de trata',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'violencia_intrafamiliar': Dataset(
+        id='gepp-dxcs',
+        nombre='VIOLENCIA INTRAFAMILIAR',
+        unidad='un caso de violencia intrafamiliar',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+        notas=(
+            'Muy sensible a la propensión a denunciar: el alza desde 2003 mide sobre todo cuánto se denuncia hoy.',
+        ),
+    ),
+    'voladura_oleoductos': Dataset(
+        id='ec2r-4byk',
+        nombre='VOLADURA OLEODUCTOS',
+        unidad='una voladura de oleoducto',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+    'voladura_puentes': Dataset(
+        id='m98b-cdys',
+        nombre='VOLADURA PUENTES',
+        unidad='una voladura de puente o vía',
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad"},
+    ),
+}
+
 LICENCIA_POR_DEFECTO = "CC BY-SA 4.0 (verificar por dataset)"
 
 

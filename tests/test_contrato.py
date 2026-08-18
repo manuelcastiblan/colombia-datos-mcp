@@ -143,3 +143,45 @@ async def test_rtvc_sigue_ausente_del_dataset_de_contratos():
         reg.SECOP["contratos"].id, seleccionar="count(*) as total",
         donde=socrata.filtro_texto_libre("nombre_entidad", "RADIO TELEVISION"))
     assert int(r["filas"][0]["total"]) == 0
+
+
+# ------------------------------------------------------------- crimen ----
+async def test_los_datasets_de_crimen_siguen_existiendo():
+    """23 IDs curados de MinDefensa. Si uno rota, el módulo entero se cae."""
+    faltantes = []
+    for clave, ds in reg.CRIMEN.items():
+        if not await socrata.esquema(ds.id):
+            faltantes.append(f"{clave}={ds.id}")
+    assert not faltantes, f"datasets de crimen desaparecidos: {faltantes}"
+
+
+async def test_el_esquema_de_crimen_sigue_siendo_comun():
+    """El módulo asume que todos traen fecha_hecho, cantidad y cod_muni."""
+    from colombia_datos_mcp.adapters.socrata import campos_validos
+
+    fallan = []
+    for clave, ds in reg.CRIMEN.items():
+        campos = await campos_validos(ds.id)
+        if not {"fecha_hecho", "cantidad", "cod_muni"} <= campos:
+            fallan.append(clave)
+    assert not fallan, f"esquema cambiado en: {fallan}"
+
+
+async def test_los_operativos_siguen_midiendo_otra_cosa():
+    """Justifica excluirlos del registro: en ERRADICACIÓN la cantidad son
+    hectáreas. Si algún día se unificara la unidad, podrían entrar."""
+    r = await socrata.consultar("p72f-qcvk", seleccionar="unidad, count(*) as n",
+                                agrupar="unidad", limite=5)
+    unidades = {f.get("unidad") for f in r["filas"]}
+    assert "HECTAREA" in unidades
+
+
+async def test_los_dos_hurtos_siguen_siendo_el_mismo_dato():
+    """Si algún día dejan de ser idénticos, hay que quitar la nota y exponer
+    los dos como datasets distintos."""
+    tot = {}
+    for clave in ("hurto_comercio", "hurto_residencias"):
+        r = await socrata.consultar(reg.CRIMEN[clave].id,
+                                    seleccionar="sum(cantidad) as v", limite=1)
+        tot[clave] = r["filas"][0]["v"]
+    assert tot["hurto_comercio"] == tot["hurto_residencias"], tot

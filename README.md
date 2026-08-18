@@ -1,8 +1,8 @@
 # colombia-datos-mcp
 
 Servidor MCP para datos públicos de Colombia: catálogo nacional de
-`datos.gov.co`, contratación pública (SECOP) y división territorial (DIVIPOLA).
-13 herramientas, sin credenciales.
+`datos.gov.co`, contratación pública (SECOP), criminalidad (MinDefensa) y
+división territorial (DIVIPOLA). 16 herramientas, sin credenciales.
 
 Esta es la **fase F0 + la mitad Socrata de F1** del diseño: núcleo completo,
 adaptador de Socrata y los módulos de catálogo, SECOP y DIVIPOLA.
@@ -110,6 +110,9 @@ es la resolución de nombres funcionando — ver
 | `co_geo_divipola` | Códigos y coordenadas de departamentos, municipios y centros poblados |
 | `co_geo_cotejar_coordenadas` | Control de calidad entre las dos fuentes oficiales de coordenadas |
 | `co_datos_exportar` | Descarga un filtro entero a CSV, JSON o Parquet en disco |
+| `co_crimen_serie` | Serie temporal de un delito desde 2003, por año o por mes |
+| `co_crimen_por_municipio` | Municipios con más casos de un delito en un año |
+| `co_crimen_comparar` | Varios delitos entre dos años, ordenados por variación |
 
 Más tres *resources*: `co://secop/datasets`, `co://secop/joins`,
 `co://atribuciones`.
@@ -262,6 +265,41 @@ respuesta trae el aviso con las cifras del filtro.
 
 Una gráfica que no cuadra con lo que sabes del mundo es información, no ruido.
 
+## Criminalidad
+
+23 datasets de MinDefensa con esquema común (`cod_muni`, `fecha_hecho`,
+`cantidad`): homicidio, extorsión, secuestro, hurtos, violencia intrafamiliar,
+delitos sexuales, terrorismo, trata de personas, delitos informáticos y más.
+
+Tres cosas que el módulo decide por ti, y conviene saber por qué:
+
+**Solo delitos, nunca operativos.** MinDefensa publica 37 datasets con ese mismo
+esquema, pero los de incautación y erradicación miden otra cosa: en
+`ERRADICACIÓN` la `cantidad` son **hectáreas**, y en las incautaciones la columna
+`unidad` trae valores como `0.002`. Sumarlos junto a homicidios sería sumar kilos
+con personas, así que no están en el registro.
+
+**Se suma `cantidad`, nunca se cuentan filas.** Un hecho puede tener varias
+víctimas: homicidio tiene 342.971 filas y 343.680 víctimas.
+
+**«HURTO A COMERCIO» y «HURTO A RESIDENCIAS» son el mismo dato**, con cifras
+idénticas año por año. Uno de los dos títulos está mal en la fuente. Sumarlos
+duplicaría la cifra, y el registro lo advierte.
+
+### El año base no es neutral
+
+El secuestro **subió 259 %** contra 2017 y **bajó 67 %** contra 2003. Es la misma
+serie: 2.121 casos en 2003, 195 en 2017, 701 en 2025.
+
+Por eso `co_crimen_serie` devuelve el máximo y el mínimo de la serie junto a los
+datos, y `co_crimen_comparar` recuerda que la elección del año cambia el
+resultado. Un porcentaje sin su serie es técnicamente cierto y sustancialmente
+engañoso.
+
+Y sobre todo: **son casos registrados, no delitos cometidos.** Una subida en
+extorsión o violencia intrafamiliar puede ser más denuncia y no más delito. El
+homicidio es el indicador menos sensible a eso. Va advertido en cada respuesta.
+
 ## Cómo se comparan los nombres
 
 Es la pieza menos obvia del servidor, y nació de un defecto medido.
@@ -407,11 +445,11 @@ pip install -e ".[dev]"
 ```
 
 ```bash
-pytest              # 105 pruebas, sin red
+pytest              # 123 pruebas, sin red
 ```
 
 ```bash
-pytest -m contrato  # 13 pruebas contra la API viva (~5 min)
+pytest -m contrato  # 17 pruebas contra la API viva (~5 min)
 ```
 
 Las fixtures son respuestas **reales** capturadas de la API el 18-ago-2026, con
