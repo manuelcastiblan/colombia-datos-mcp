@@ -16,6 +16,7 @@ import time
 
 import httpx
 
+from .. import __version__
 from .errors import (
     ErrorConfig,
     ErrorFuenteCaida,
@@ -25,9 +26,9 @@ from .errors import (
     ErrorValidacion,
 )
 
+_REPO = "https://github.com/manuelcastiblan/colombia-datos-mcp"
 USER_AGENT = os.environ.get(
-    "CO_USER_AGENT",
-    "colombia-datos-mcp/0.1 (+https://github.com/manuelcastiblan/colombia-datos-mcp)",
+    "CO_USER_AGENT", f"colombia-datos-mcp/{__version__} (+{_REPO})"
 )
 
 REQ_POR_SEGUNDO = float(os.environ.get("CO_REQ_POR_SEGUNDO", "5"))

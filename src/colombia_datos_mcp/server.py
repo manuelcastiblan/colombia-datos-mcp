@@ -12,6 +12,7 @@ import sys
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
+from . import __version__
 from .adapters import socrata
 from .core.errors import CoDatosError
 from .domain import catalogo, geo, secop
@@ -58,7 +59,7 @@ una respuesta con cero filas, que significa que la consulta no encontró nada.
 No los confundas al explicarle el resultado al usuario.
 """.strip()
 
-mcp = FastMCP(name="colombia-datos", instructions=PLAYBOOK, version="0.1.0")
+mcp = FastMCP(name="colombia-datos", instructions=PLAYBOOK, version=__version__)
 
 SOLO_LECTURA = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True}
 
