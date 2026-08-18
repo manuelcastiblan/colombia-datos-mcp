@@ -40,6 +40,18 @@ Toda respuesta lleva al pie los mismos metadatos, y son parte del contrato:
 - **advertencias** — unidad de análisis, montos sin deflactar, coordenadas
   inutilizables, cadenas de atribución traducidas, alias caducos.
 
+Cómo leerlo en la práctica, señal por señal:
+[recetas](recetas.md#leer-el-sobre).
+
+### Columnas dispersas
+
+Socrata **omite los campos nulos** en vez de enviarlos vacíos, así que dos filas
+del mismo dataset llegan con juegos de claves distintos. Las columnas de una
+tabla se toman de la unión de todas las filas —y, cuando hay proyección curada,
+en el orden curado—. Deducirlas de la primera fila perdía datos en silencio: un
+contrato en `Borrador` sin `fecha_de_firma` a la cabeza borraba la fecha de las
+once filas que sí la tenían.
+
 ### Paginación honesta
 
 `siguiente_offset` se calcula sobre lo **realmente devuelto**, nunca sobre lo

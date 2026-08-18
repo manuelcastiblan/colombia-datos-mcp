@@ -171,14 +171,20 @@ async def _buscar(clave: str, detalle="resumen", limite=20, offset=0, **filtros)
 
 
 def _proyecta(filas, columnas, ds):
+    """Proyecta a las columnas curadas conservando SU orden.
+
+    Se emiten las columnas que aparecen en alguna fila, no solo las de la
+    primera: Socrata omite los campos nulos, así que un contrato en borrador
+    sin `fecha_de_firma` a la cabeza borraba la fecha de todas las demás.
+    Las que no aparecen en ninguna fila se omiten, para no añadir ruido.
+    """
+    if not filas:
+        return []
+    cols = list(columnas) if columnas else fmt.columnas_union(filas)
+    presentes = [c for c in cols if any(c in f for f in filas)]
     salida = []
     for f in filas:
-        cols = columnas or list(f.keys())
-        fila = {}
-        for c in cols:
-            if c not in f:
-                continue
-            fila[_etiqueta(c)] = _valor(c, f[c])
+        fila = {_etiqueta(c): _valor(c, f[c]) if c in f else "" for c in presentes}
         salida.append(fila or {k: _valor(k, v) for k, v in f.items()})
     return salida
 

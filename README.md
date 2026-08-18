@@ -52,7 +52,7 @@ Todas son opcionales y tienen valores conservadores.
 | `CO_CACHE_DIR` | `~/.cache/colombia-datos-mcp` | Dónde vive la caché L2. |
 | `CO_REQ_POR_SEGUNDO` | `5` | Autolímite por host. |
 | `CO_MAX_REINTENTOS` | `4` | Intentos por petición antes de rendirse. |
-| `CO_USER_AGENT` | `colombia-datos-mcp/0.1 (+URL del repo)` | Identificación ante la fuente. |
+| `CO_USER_AGENT` | `colombia-datos-mcp/<versión> (+URL del repo)` | Identificación ante la fuente. |
 
 ## Herramientas
 
@@ -74,7 +74,9 @@ Todas son opcionales y tienen valores conservadores.
 Más tres *resources*: `co://secop/datasets`, `co://secop/joins`,
 `co://atribuciones`.
 
-**Parámetros, topes y advertencias de cada una: [docs/herramientas.md](docs/herramientas.md).**
+**Parámetros, topes y advertencias de cada una:
+[docs/herramientas.md](docs/herramientas.md).** Secuencias que funcionan, con sus
+trampas: [docs/recetas.md](docs/recetas.md).
 
 ## Qué hace distinto
 
@@ -151,6 +153,13 @@ En la práctica: **escribe los nombres con tilde o sin ella, da igual.**
   millón.
 - Las «modificaciones contractuales» se llaman **Adiciones**; buscar
   «modificaciones» devuelve cero.
+- **Socrata omite los campos nulos** en vez de mandarlos vacíos, así que dos
+  filas del mismo dataset llegan con juegos de claves distintos. Un contrato en
+  `Borrador` no trae `fecha_de_firma`, y deducir las columnas de la primera fila
+  borraba la fecha de todas las demás.
+- **Los contratos en `Borrador` están en el dataset** y suman en
+  `sum(valor_del_contrato)`, pero no están firmados y su `valor_pagado` es 0.
+  Filtra por estado si lo que quieres es contratación real.
 - Varias entidades se registran en SECOP con su sigla y nada más: **INVIAS** y
   **UNGRD** figuran así, y expandirlas a su razón social da cero. **RTVC** no
   está en el dataset de contratos con ningún nombre, solo en SECOP Integrado.
@@ -162,7 +171,7 @@ pip install -e ".[dev]"
 ```
 
 ```bash
-pytest              # 81 pruebas, sin red
+pytest              # 83 pruebas, sin red
 ```
 
 ```bash
@@ -180,9 +189,17 @@ envenenado de Medellín sigue ahí, que los IDs no rotaron—. Corre a diario en
 y **su fallo no es un bug del servidor: es la señal de que el Estado cambió el
 esquema.**
 
-Cómo trabajar en el proyecto: [CONTRIBUTING.md](CONTRIBUTING.md).
-Cómo está construido: [docs/arquitectura.md](docs/arquitectura.md).
-Qué cambió: [CHANGELOG.md](CHANGELOG.md).
+## Documentación
+
+| Documento | Para qué |
+|---|---|
+| [docs/herramientas.md](docs/herramientas.md) | Las 12 herramientas: parámetros, valores por defecto y topes. |
+| [docs/recetas.md](docs/recetas.md) | Secuencias que funcionan, con las trampas de cada una y cómo leer el sobre. |
+| [docs/fuentes.md](docs/fuentes.md) | Los 11 datasets: unidad de análisis, campos clave, joins y atribuciones. |
+| [docs/arquitectura.md](docs/arquitectura.md) | Cómo está construido, y qué **no** hace todavía. |
+| [docs/operacion.md](docs/operacion.md) | Diagnóstico: caché, throttling, timeouts, y por qué el servidor no recoge tus cambios. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Las capas de prueba y cómo añadir un dataset o un filtro. |
+| [CHANGELOG.md](CHANGELOG.md) | Qué cambió en cada versión. |
 
 ## Estado y siguiente paso
 

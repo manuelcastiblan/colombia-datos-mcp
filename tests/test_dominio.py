@@ -374,3 +374,26 @@ async def test_un_alias_caduco_reintenta_con_lo_que_escribio_el_usuario(monkeypa
     salida = await secop.resolver_entidad("invias")
     assert "INVIAS" in salida["texto"]
     assert "caduco" in salida["texto"]
+
+
+async def test_el_resumen_conserva_una_columna_ausente_en_la_primera_fila(monkeypatch):
+    """Regresión: el contrato de mayor valor podía no traer `fecha_de_firma`
+    —los borradores no la tienen— y eso borraba la fecha de todas las demás."""
+    def respuesta(params):
+        if "count(*)" in params.get("$select", ""):
+            return [{"total": "2"}]
+        return [
+            {"id_contrato": "CO1.PCCNTR.1", "nombre_entidad": "ANLA",
+             "valor_del_contrato": "93192634", "estado_contrato": "Borrador"},
+            {"id_contrato": "CO1.PCCNTR.2", "nombre_entidad": "MINMINAS",
+             "valor_del_contrato": "81650000", "estado_contrato": "Modificado",
+             "fecha_de_firma": "2026-01-10T00:00:00.000"},
+        ]
+
+    _instala(monkeypatch, {"/resource/jbjy-vk9h.json": respuesta})
+    salida = await secop.buscar_contratos(documento_proveedor="1032472802")
+    assert "fecha de firma" in salida["texto"]
+    assert "2026-01-10" in salida["texto"]
+    # Y el orden curado se conserva: la fecha no se va al final de la tabla.
+    cabecera = salida["texto"].splitlines()[0]
+    assert cabecera.index("fecha de firma") < cabecera.index("estado contrato")

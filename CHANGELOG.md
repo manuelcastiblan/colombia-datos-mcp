@@ -2,6 +2,31 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.2.1] — 2026-08-18
+
+### Corregido
+
+- **Columnas perdidas en silencio cuando la primera fila era más corta.**
+  Socrata omite los campos nulos en vez de mandarlos vacíos, y las columnas de
+  la tabla se deducían de `filas[0]`. Un contrato en `Borrador` —que no trae
+  `fecha_de_firma`— encabezando el resultado **borraba la fecha de las once
+  filas que sí la tenían**. Ahora se toma la unión de las claves de todas las
+  filas, y con proyección curada se conserva el orden curado.
+
+### Añadido
+
+- `docs/fuentes.md` — los 11 datasets con su unidad de análisis, campos clave,
+  joins, atribuciones y trampas propias. Hasta ahora eso solo existía dentro de
+  `registry/datasets.py`.
+- `docs/recetas.md` — secuencias que funcionan, con la trampa de cada una: buscar
+  a una persona natural, resolver una entidad antes de filtrar, agregar por
+  territorio, y cómo leer el sobre señal por señal.
+- `docs/operacion.md` — diagnóstico: caché, throttling, timeouts medidos, la
+  fragilidad de stdio y **por qué el servidor sigue ejecutando código viejo**
+  aunque la instalación sea editable.
+- Índice de documentación en el README.
+- 2 pruebas de regresión de las columnas dispersas (81 → 83).
+
 ## [0.2.0] — 2026-08-18
 
 Corrige un defecto que hacía inalcanzable por nombre una parte grande de los

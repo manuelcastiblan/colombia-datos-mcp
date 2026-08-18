@@ -200,3 +200,16 @@ async def test_el_fallo_cacheado_no_deja_una_excepcion_sin_recoger(tmp_path):
 
     await asyncio.sleep(0)
     assert not c._en_vuelo  # el registro en vuelo se limpia siempre
+
+
+def test_las_columnas_salen_de_todas_las_filas_no_solo_de_la_primera():
+    """Socrata OMITE los campos nulos en vez de mandarlos vacíos.
+
+    Un contrato en borrador sin `fecha_de_firma` encabezando la tabla borraba la
+    fecha de las once filas que sí la tenían.
+    """
+    filas = [{"id": "A", "valor": 1}, {"id": "B", "valor": 2, "fecha": "2025-01-31"}]
+    assert fmt.columnas_union(filas) == ["id", "valor", "fecha"]
+    tabla = fmt.tabla_markdown(filas)
+    assert "fecha" in tabla.splitlines()[0]
+    assert "2025-01-31" in tabla

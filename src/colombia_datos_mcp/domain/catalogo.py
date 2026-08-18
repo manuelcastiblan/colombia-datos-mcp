@@ -220,14 +220,17 @@ def _orden_de_metrica(metricas: str, agrupar_por: str) -> str:
 
 
 def _proyecta(filas, columnas):
-    if not columnas:
+    """Igual que en `domain.secop`: las columnas se toman de TODAS las filas.
+
+    Socrata omite los campos nulos, así que fiarse de la primera fila pierde en
+    silencio los datos de las siguientes.
+    """
+    if not columnas or not filas:
         return filas
+    presentes = [c for c in columnas if any(c in f for f in filas)]
     proyectadas = []
     for f in filas:
-        fila = {}
-        for c in columnas:
-            if c in f:
-                fila[c] = _formatea_valor(c, f[c])
+        fila = {c: _formatea_valor(c, f[c]) if c in f else "" for c in presentes}
         proyectadas.append(fila or f)
     return proyectadas
 

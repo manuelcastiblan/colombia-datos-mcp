@@ -84,11 +84,27 @@ def recorta(valor, ancho: int = 60) -> str:
     return s if len(s) <= ancho else s[: ancho - 1] + "…"
 
 
+def columnas_union(filas: list[dict]) -> list[str]:
+    """Unión de las claves de todas las filas, en orden de aparición.
+
+    Socrata OMITE los campos nulos en vez de mandarlos vacíos, así que dos
+    filas del mismo dataset traen juegos de claves distintos. Deducir las
+    columnas solo de la primera fila perdía en silencio los datos de las demás:
+    un contrato en borrador sin `fecha_de_firma` a la cabeza de la tabla
+    borraba la fecha de las once filas que sí la tenían.
+    """
+    vistas = {}
+    for f in filas:
+        for k in f:
+            vistas.setdefault(k, None)
+    return list(vistas)
+
+
 def tabla_markdown(filas: list[dict], columnas: list[str] | None = None) -> str:
     """Tabla markdown compacta. Sin filas devuelve una nota, no una tabla vacía."""
     if not filas:
         return "_Sin resultados para esta consulta._"
-    columnas = columnas or list(filas[0].keys())
+    columnas = columnas or columnas_union(filas)
     cabecera = "| " + " | ".join(columnas) + " |"
     sep = "|" + "|".join("---" for _ in columnas) + "|"
     cuerpo = [
