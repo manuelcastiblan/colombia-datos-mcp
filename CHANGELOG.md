@@ -30,6 +30,16 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
   departamento llenaba la escala.
 - 22 pruebas nuevas (83 → 105), incluidas las del saneamiento de rutas.
 
+### Documentación
+
+- Los ejemplos de gráficas de los `.md` eran **inventados**: valores elididos con
+  `…`, columnas alineadas a mano y, sobre todo, ilustraban la función con las
+  sumas corruptas que el propio README declara inservibles. Sustituidos por
+  salida capturada de la fuente, con la llamada que la reproduce al lado y
+  verificada fila a fila contra la ejecución real. El caso de las sumas
+  imposibles se queda, pero como lo que es: el ejemplo de una gráfica que delata
+  un problema del dato, no la demostración de la función.
+
 ### Corregido
 
 - **`a_numero` leía mil veces de más los números grandes con tres decimales.**

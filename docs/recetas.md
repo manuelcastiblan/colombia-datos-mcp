@@ -193,14 +193,32 @@ Tres cosas que conviene saber:
 Las agregaciones traen barras proporcionales a la métrica:
 
 ```
-co_secop_agregar(agrupar_por="modalidad", metrica="valor", limite=8)
+co_secop_agregar(agrupar_por="modalidad", metrica="contratos", limite=6)
 ```
 
+```markdown
+| modalidad | contratos | valor total | gráfica |
+|---|---|---|---|
+| Contratación directa | 4.544.193 | $3.931.378.721.213.195.485.184 | ████████████████ |
+| Contratación régimen especial | 796.794 | $277.323.984.716.490.637.312 | ██▊ |
+| Mínima cuantía | 330.244 | $85.835.936.664.481.520 | █▏ |
+| Contratación Directa (con ofertas) | 77.176 | $873.112.811.754.116.349.952 | ▎ |
+| Selección Abreviada de Menor Cuantía | 60.014 | $1.347.211.323.950.801.408 | ▎ |
+| Selección abreviada subasta inversa | 52.877 | $70.054.914.734.920.672 | ▏ |
+```
+
+La lectura salta a la vista: la contratación directa son **4,5 de los 5,9
+millones** de contratos de SECOP II, tres cuartas partes del total.
+
 Comparten escala, así que un grupo que llene la barra mientras el resto queda en
-`▏` no es un defecto de dibujo: es que ese grupo domina el total por uno o dos
-órdenes de magnitud. **Cuando eso pase con `metrica="valor"`, sospecha de los
-datos antes que de la realidad** — así se descubrieron los 3.452 contratos con
-valores imposibles que valen el 99,98 % de la suma de SECOP.
+`▏` no es un defecto de dibujo: ese grupo domina por uno o dos órdenes de
+magnitud. **Cuando eso pase con `metrica="valor"`, sospecha de los datos antes
+que de la realidad** — así se descubrieron los 3.452 contratos con valores
+imposibles que valen el 99,98 % de la suma de SECOP.
+
+Fíjate en la tabla de arriba: la columna `valor total` ya lo enseña sin barras.
+«Mínima cuantía» tiene 330.244 contratos y suma menos que «Contratación Directa
+(con ofertas)», que tiene 77.176. No es que sean más caros: es el ruido.
 
 Se apagan con `grafica=false`, y no aparecen si pides `formato="csv"`.
 

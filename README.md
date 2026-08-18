@@ -200,21 +200,50 @@ pandas usa `encoding="utf-8-sig"`.
 ## Gráficas
 
 Las agregaciones traen una columna de barras proporcionales a la métrica, para
-comparar los grupos sin salir de la terminal:
+comparar los grupos sin salir de la terminal. Municipios por departamento:
 
 ```
-| departamento               | contratos | valor total  | gráfica          |
-|----------------------------|-----------|--------------|------------------|
-| Antioquia                  |   563.810 | $4.712.182…  | ████████████████ |
-| Distrito Capital de Bogotá | 2.002.976 | $216.174…    | ▊                |
+co_datos_agregar(dataset_id="gdxc-w37w", agrupar_por="dpto", limite=6)
 ```
 
-Todas comparten escala, que es lo que las hace comparables; un valor no numérico
+```markdown
+| dpto | total | gráfica |
+|---|---|---|
+| ANTIOQUIA | 125 | ████████████████ |
+| BOYACÁ | 123 | ███████████████▊ |
+| CUNDINAMARCA | 116 | ██████████████▉ |
+| SANTANDER | 87 | ███████████▏ |
+| NARIÑO | 64 | ████████▎ |
+| TOLIMA | 47 | ██████ |
+```
+
+Todas comparten escala —eso es lo que las hace comparables— y usan bloques de un
+octavo, así que 87 y 64 se distinguen sin leer los números. Un valor no numérico
 deja la celda vacía en vez de dibujar una barra de cero. Se apagan con
 `grafica=false` y no aparecen si pides `formato="csv"` o `"json"`.
 
-Fue justamente una de estas barras la que delató los valores imposibles de la
-regla 5: un solo departamento llenaba la escala y dejaba a los demás en nada.
+### Cuando la gráfica delata el dato
+
+Las mismas barras sobre `metrica="valor"` en SECOP dan esto:
+
+```
+co_secop_agregar(agrupar_por="departamento", metrica="valor", limite=3)
+```
+
+```markdown
+| departamento | contratos | valor total | gráfica |
+|---|---|---|---|
+| Antioquia | 563.810 | $4.712.182.461.396.660.781.056 | ████████████████ |
+| Distrito Capital de Bogotá | 2.002.976 | $216.174.625.284.825.972.736 | ▊ |
+| Arauca | 25.550 | $48.653.538.638.823.145.472 | ▏ |
+```
+
+Bogotá tiene **cuatro veces más contratos** que Antioquia y una barra veinte
+veces menor. Eso no es un fallo de dibujo: es la regla 5 hecha visible. Fue así
+como aparecieron los 3.452 contratos con valores imposibles, y por eso ahora la
+respuesta trae el aviso con las cifras del filtro.
+
+Una gráfica que no cuadra con lo que sabes del mundo es información, no ruido.
 
 ## Cómo se comparan los nombres
 
