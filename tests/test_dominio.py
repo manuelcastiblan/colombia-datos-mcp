@@ -1,0 +1,220 @@
+"""Pruebas del adaptador y las herramientas, con la red simulada."""
+
+import pytest
+
+from colombia_datos_mcp.adapters import socrata
+from colombia_datos_mcp.core.cache import Cache
+from colombia_datos_mcp.core.errors import ErrorNoEncontrado, ErrorValidacion
+from colombia_datos_mcp.domain import catalogo, geo, secop
+
+from .fixtures import ADICIONES, CATALOGO, CENTROS_POBLADOS, CONTRATOS, MUNICIPIOS
+
+
+class RedFalsa:
+    """Sustituye a ClienteHTTP. Registra las llamadas para poder auditarlas."""
+
+    def __init__(self, respuestas):
+        self.respuestas = respuestas
+        self.llamadas = []
+
+    async def get_json(self, url, params=None, headers=None):
+        self.llamadas.append((url, dict(params or {})))
+        for patron, valor in self.respuestas.items():
+            if patron in url:
+                return valor(params or {}) if callable(valor) else valor
+        raise AssertionError(f"URL no simulada: {url}")
+
+
+@pytest.fixture(autouse=True)
+def cache_limpia(monkeypatch, tmp_path):
+    """Cada prueba arranca con caché vacía y aislada del disco real."""
+    import colombia_datos_mcp.core.cache as mod
+    fresca = Cache(dir_disco=tmp_path / "cache")
+    monkeypatch.setattr(mod, "cache", fresca)
+    monkeypatch.setattr(socrata, "cache", fresca)
+    return fresca
+
+
+def _instala(monkeypatch, respuestas):
+    red = RedFalsa(respuestas)
+    monkeypatch.setattr(socrata, "_http", red)
+    return red
+
+
+def _filas_de_contratos(params):
+    seleccionar = params.get("$select", "")
+    if "count(*)" in seleccionar and "nombre_entidad" not in seleccionar:
+        return [{"total": "3"}]
+    if "$group" in params or "nombre_entidad," in seleccionar:
+        return [{"nombre_entidad": "INSTITUTO NACIONAL DE VIAS", "nit_entidad": "800215807",
+                 "total": "3", "valor": "37500000", "contratos": "3"}]
+    return CONTRATOS
+
+
+# --------------------------------------------------------------- catálogo --
+async def test_buscar_datasets_inyecta_search_context(monkeypatch):
+    red = _instala(monkeypatch, {"api/catalog/v1": CATALOGO})
+    salida = await catalogo.buscar_datasets(consulta="SECOP")
+    _, params = red.llamadas[0]
+    assert params["search_context"] == "www.datos.gov.co"  # sin esto, filtros dan 0
+    assert params["only"] == "dataset"
+    assert params["provenance"] == "official"
+    assert "jbjy-vk9h" in salida["texto"]
+
+
+async def test_buscar_datasets_traduce_la_sigla_a_atribucion_exacta(monkeypatch):
+    red = _instala(monkeypatch, {"api/catalog/v1": CATALOGO})
+    await catalogo.buscar_datasets(entidad="DANE")
+    _, params = red.llamadas[0]
+    assert params["attribution"].startswith("Departamento Administrativo Nacional")
+
+
+async def test_describir_dataset_expone_nombre_legible(monkeypatch):
+    _instala(monkeypatch, {"api/catalog/v1": CATALOGO})
+    salida = await catalogo.describir_dataset("jbjy-vk9h")
+    # El slug truncado sin su nombre legible es inutilizable para el modelo.
+    assert "valor_pendiente_de" in salida["texto"]
+    assert "Valor Pendiente de Amortizacion" in salida["texto"]
+
+
+async def test_describir_dataset_inexistente(monkeypatch):
+    _instala(monkeypatch, {"api/catalog/v1": {"resultSetSize": 0, "results": []}})
+    with pytest.raises(ErrorNoEncontrado):
+        await catalogo.describir_dataset("xxxx-yyyy")
+
+
+async def test_allowlist_rechaza_columna_inventada(monkeypatch):
+    _instala(monkeypatch, {"api/catalog/v1": CATALOGO})
+    with pytest.raises(ErrorValidacion) as exc:
+        await catalogo.consultar("jbjy-vk9h", donde="columna_que_no_existe = '1'")
+    assert "columna_que_no_existe" in str(exc.value)
+    assert "nombre_entidad" in exc.value.sugerencia  # lista los campos válidos
+
+
+async def test_conteo_no_descarga_filas(monkeypatch):
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    salida = await catalogo.consultar("jbjy-vk9h", detalle="conteo")
+    assert "3" in salida["texto"]
+    consultas = [p for u, p in red.llamadas if "resource" in u]
+    assert all("count(*)" in p.get("$select", "") for p in consultas)
+
+
+# ------------------------------------------------------------------ SECOP --
+async def test_buscar_contratos_filtra_sin_acentos(monkeypatch):
+    red = _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    await secop.buscar_contratos(departamento="Antioquía")
+    donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
+    assert "upper(departamento) like '%ANTIOQUIA%'" in donde
+
+
+async def test_buscar_contratos_escapa_comillas(monkeypatch):
+    red = _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    await secop.buscar_contratos(entidad="O'Brien")
+    donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
+    assert "O''BRIEN" in donde
+
+
+async def test_buscar_contratos_limpia_el_nit(monkeypatch):
+    red = _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    await secop.buscar_contratos(nit_entidad="800.215.807-1")
+    donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
+    assert "nit_entidad = '8002158071'" in donde
+
+
+async def test_resumen_formatea_moneda_y_recorta(monkeypatch):
+    _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    salida = await secop.buscar_contratos(departamento="Antioquia")
+    assert "$12.500.000" in salida["texto"]
+    assert "2025-05-02" in salida["texto"]
+    assert "unidad de análisis" in salida["texto"].lower()
+
+
+async def test_detalle_contrato_compone_y_conserva_url_publica(monkeypatch):
+    _instala(monkeypatch, {
+        "/resource/jbjy-vk9h.json": lambda p: CONTRATOS,
+        "/resource/cb9c-h8sn.json": lambda p: ADICIONES,
+    })
+    salida = await secop.detalle_contrato("CO1.PCCNTR.1234567")
+    assert "Modificaciones registradas (1)" in salida["texto"]
+    assert "community.secop.gov.co" in salida["texto"]   # verificación humana
+    assert "Prórroga" in salida["texto"]
+
+
+async def test_detalle_contrato_inexistente_no_finge(monkeypatch):
+    _instala(monkeypatch, {
+        "/resource/jbjy-vk9h.json": lambda p: [],
+        "/resource/cb9c-h8sn.json": lambda p: [],
+    })
+    with pytest.raises(ErrorNoEncontrado):
+        await secop.detalle_contrato("CO1.PCCNTR.0")
+
+
+async def test_perfil_proveedor_sin_contratos_distingue_de_fallo(monkeypatch):
+    _instala(monkeypatch, {"/resource/jbjy-vk9h.json": lambda p: [{"total": "0"}]
+                           if "count(*)" in p.get("$select", "") else []})
+    salida = await secop.perfil_proveedor("900999999")
+    texto = " ".join(salida["estructurado"]["_meta"].get("advertencias", []))
+    assert "no es un fallo de la fuente" in texto.lower()
+
+
+async def test_perfil_proveedor_exige_digitos(monkeypatch):
+    _instala(monkeypatch, {})
+    with pytest.raises(ErrorValidacion):
+        await secop.perfil_proveedor("no-es-un-nit")
+
+
+async def test_agregar_rechaza_dimension_desconocida(monkeypatch):
+    _instala(monkeypatch, {})
+    with pytest.raises(ErrorValidacion):
+        await secop.agregar(agrupar_por="color_favorito")
+
+
+async def test_agregar_devuelve_grupos_no_filas(monkeypatch):
+    _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    salida = await secop.agregar(agrupar_por="entidad", desde="2025-01-01")
+    assert salida["estructurado"]["_meta"]["orden"] == "valor DESC"
+    assert "deflactar" in " ".join(salida["estructurado"]["_meta"]["advertencias"])
+
+
+# -------------------------------------------------------------------- geo --
+async def test_divipola_normaliza_coordenadas_incluido_medellin(monkeypatch):
+    _instala(monkeypatch, {"/resource/gdxc-w37w.json":
+                           lambda p: [{"total": "2"}] if "count(*)" in p.get("$select", "")
+                           else MUNICIPIOS})
+    salida = await geo.divipola(consulta="Medellin")
+    fila = salida["estructurado"]["datos"][0]
+    assert fila["lon"] == pytest.approx(-75.581775)
+    assert fila["cod_mpio"] == "05001"  # texto, con cero a la izquierda
+
+
+async def test_divipola_centros_poblados(monkeypatch):
+    _instala(monkeypatch, {"/resource/xaxy-8nri.json":
+                           lambda p: [{"total": "3"}] if "count(*)" in p.get("$select", "")
+                           else CENTROS_POBLADOS})
+    salida = await geo.divipola(nivel="centro_poblado", consulta="santa elena")
+    medellin = [f for f in salida["estructurado"]["datos"] if f["cod_cp"] == "05001000"][0]
+    assert medellin["lon"] == pytest.approx(-75.581775)  # el registro envenenado, ya limpio
+
+
+async def test_divipola_nivel_invalido(monkeypatch):
+    _instala(monkeypatch, {})
+    with pytest.raises(ErrorValidacion):
+        await geo.divipola(nivel="galaxia")
+
+
+# ------------------------------------------------------------------ caché --
+async def test_cache_deduplica_peticiones_identicas(monkeypatch):
+    red = _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    await socrata.consultar("jbjy-vk9h", donde="departamento = 'X'")
+    await socrata.consultar("jbjy-vk9h", donde="departamento = 'X'")
+    assert len(red.llamadas) == 1  # la segunda salió de caché
+
+
+async def test_paginacion_fuerza_orden_estable(monkeypatch):
+    red = _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    await socrata.consultar("jbjy-vk9h", offset=100)
+    _, params = red.llamadas[0]
+    assert params["$order"] == ":id"  # sin esto se pierden o duplican filas
