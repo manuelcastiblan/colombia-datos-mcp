@@ -23,3 +23,6 @@ packages = ["src/colombia_datos_mcp"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# La suite de contrato golpea la API viva: se pide a propósito con -m contrato.
+addopts = "-m 'not contrato'"
+markers = ["contrato: comprueba supuestos contra la API viva (requiere red)"]

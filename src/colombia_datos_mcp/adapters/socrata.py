@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import urllib.parse
 
+from ..core import texto
 from ..core.cache import TTL_DATOS, TTL_METADATOS, cache
 from ..core.errors import ErrorValidacion
 from ..core.http import ClienteHTTP
@@ -155,6 +156,100 @@ def escapa(valor: str) -> str:
     return str(valor).replace("'", "''")
 
 
+async def valores_distintos(dataset_id: str, campo: str, limite: int = 5000) -> list[str]:
+    """Valores canónicos de una columna categórica, cacheados como metadatos.
+
+    Es la pieza que permite filtrar por nombre sin perder los acentos: el
+    término del usuario se resuelve contra estos literales y el filtro sale con
+    `in (...)`. Cuesta una consulta agrupada —medida en 6,8 s sobre las 5,9 M
+    filas de contratos— que se cachea 24 h en disco, así que se paga una vez.
+    """
+
+    async def _traer():
+        filas = await _http.get_json(
+            f"{BASE_DATOS}/resource/{dataset_id}.json",
+            params={"$select": f"distinct {campo}", "$limit": limite},
+            headers=_cabeceras(),
+        )
+        return [f.get(campo) for f in (filas or []) if f.get(campo) not in (None, "")]
+
+    return await cache.obtener_o_calcular(
+        ("distintos", dataset_id, campo), _traer, ttl=TTL_METADATOS, en_disco=True
+    )
+
+
+def filtro_en(campo: str, valores) -> str:
+    """`campo in ('Atlántico')` con los literales exactos de la fuente."""
+    return f"{campo} in ({', '.join(chr(39) + escapa(v) + chr(39) for v in valores)})"
+
+
+# Se compara siempre en mayúsculas, así que basta con las formas mayúsculas.
+_TILDES = (("Á", "A"), ("É", "E"), ("Í", "I"), ("Ó", "O"), ("Ú", "U"),
+           ("Ü", "U"), ("Ñ", "N"))
+
+
+def expr_sin_acentos(campo: str) -> str:
+    """Expresión SoQL que pliega los acentos de `campo` EN EL SERVIDOR.
+
+    SoQL sí soporta `replace()` —anidarlo siete veces cuesta unos 20 s sobre
+    las 5,9 M filas de contratos— y es la única forma exacta de comparar contra
+    una columna acentuada cuyo dominio no se puede enumerar.
+    """
+    expr = f"upper({campo})"
+    for acentuada, base in _TILDES:
+        expr = f"replace({expr}, '{acentuada}', '{base}')"
+    return expr
+
+
+def filtro_texto_libre(campo: str, termino: str) -> str:
+    """Filtro para campos de dominio abierto (nombre de entidad o proveedor).
+
+    Para dominios cerrados usa `filtro_categorico`: resolver contra los
+    valores canónicos compara por igualdad y es 4-8 veces más rápido.
+    """
+    t = escapa(texto.sanea_like(termino))
+    if not t:
+        return ""
+    return f"{expr_sin_acentos(campo)} like '%{t}%'"
+
+
+async def filtro_categorico(dataset_id: str, campo: str, termino: str):
+    """Resuelve un término contra el dominio enumerable de `campo`.
+
+    Devuelve `(filtro_soql, valores_resueltos, truncado)`. Con cero
+    coincidencias devuelve `(None, [], False)`: el llamador debe decir que el
+    término no existe en la fuente en vez de lanzar un filtro que casa nada,
+    que es indistinguible de "no hay datos".
+    """
+    try:
+        dominio = await valores_distintos(dataset_id, campo)
+    except ErrorValidacion:
+        # El campo no admite `distinct` (o no existe): degradamos a texto libre
+        # en vez de tumbar la consulta entera.
+        return filtro_texto_libre(campo, termino), [], False
+    casan = texto.coincidencias(termino, dominio)
+    if not casan:
+        return None, [], False
+    truncado = len(casan) > texto.MAX_VALORES_EN
+    if truncado:
+        casan = casan[: texto.MAX_VALORES_EN]
+    return filtro_en(campo, casan), casan, truncado
+
+
+# Funciones que colapsan filas. Sobre ellas no se puede ordenar por `:id`
+# —Socrata responde "Column ':id' is not in group by"— y además no hay nada
+# que paginar, así que forzar el orden estable ahí no tendría sentido.
+_AGREGADOS = ("count(", "sum(", "avg(", "min(", "max(", "median(",
+              "stddev_pop(", "stddev_samp(", "var_pop(", "var_samp(", "distinct")
+
+
+def es_agregada(seleccionar: str | None) -> bool:
+    if not seleccionar:
+        return False
+    compacto = str(seleccionar).lower().replace(" ", "")
+    return any(f in compacto for f in _AGREGADOS)
+
+
 async def consultar(
     dataset_id: str,
     seleccionar: str | None = None,
@@ -166,8 +261,15 @@ async def consultar(
     offset: int = 0,
     ttl: int = TTL_DATOS,
 ) -> dict:
-    """Ejecuta SoQL. `$order` se fuerza si hay paginación (§6.3)."""
-    if agrupar is None and offset and not ordenar:
+    """Ejecuta SoQL. `$order` se fuerza siempre que la consulta sea paginable.
+
+    Antes solo se forzaba cuando `offset` era distinto de cero, y eso rompía
+    justo lo que pretendía arreglar: la página 1 salía con el orden natural de
+    la fuente y la página 2 con `:id`, dos órdenes distintos, de modo que al
+    paginar se perdían y duplicaban filas igual. Si la primera página no tiene
+    orden estable, la segunda no puede tenerlo.
+    """
+    if agrupar is None and not ordenar and not es_agregada(seleccionar):
         ordenar = ":id"  # sin orden estable se pierden o duplican filas
     params = {
         "$select": seleccionar,
@@ -186,7 +288,8 @@ async def consultar(
         lambda: _http.get_json(url, params=params, headers=_cabeceras()),
         ttl=ttl,
     )
-    return {"filas": filas or [], "consulta": url_reproducible(url, params)}
+    return {"filas": filas or [], "consulta": url_reproducible(url, params),
+            "orden": ordenar}
 
 
 async def contar(dataset_id: str, donde: str | None = None) -> int:

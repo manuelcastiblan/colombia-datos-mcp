@@ -41,6 +41,9 @@ CÓMO TRABAJAR AQUÍ
    ("05", "08"). Tratarlos como enteros rompe todos los joins.
 9. Los montos son nominales y sin deflactar. No compares valores entre años
    distintos sin advertirlo.
+10. Escribe los nombres como quieras, con tilde o sin ella: el servidor los
+   resuelve contra los valores reales de la fuente. Si un término no existe
+   allí, te lo dice explícitamente en vez de devolver una tabla vacía.
 
 CÓMO LEER LAS RESPUESTAS
 

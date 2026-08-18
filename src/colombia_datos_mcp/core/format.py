@@ -7,7 +7,6 @@ forma es parte del contrato.
 from __future__ import annotations
 
 import re
-import unicodedata
 from datetime import datetime
 
 _MOJIBAKE = {
@@ -26,10 +25,21 @@ def limpia_texto(valor) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
-def sin_acentos(valor: str) -> str:
-    """Para comparar contra datos con acentos destruidos en origen."""
-    s = unicodedata.normalize("NFKD", limpia_texto(valor))
-    return "".join(c for c in s if not unicodedata.combining(c)).upper()
+# El nombre del campo decide el formato. El orden importa: "valor total" es
+# dinero, pero "total" a secas es el alias que Socrata da a `count(*)`, y
+# formatearlo como pesos convertía "125 municipios" en "$125".
+_MONETARIOS = ("valor", "precio", "cuantia", "saldo", "monto", "pagado", "presupuesto")
+_CONTEOS = ("total", "conteo", "count", "contratos", "cantidad", "numero", "registros")
+
+
+def es_monetario(campo: str) -> bool:
+    return any(p in campo.lower() for p in _MONETARIOS)
+
+
+def es_conteo(campo: str) -> bool:
+    """Solo si no es monetario: `valor_total` es dinero, `total` es un conteo."""
+    n = campo.lower()
+    return not es_monetario(n) and any(p in n for p in _CONTEOS)
 
 
 def moneda(valor) -> str:

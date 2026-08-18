@@ -111,6 +111,11 @@ class Cache:
         except Exception as exc:
             if not futuro.done():
                 futuro.set_exception(exc)
+                # Si nadie llegó a esperar este futuro, asyncio escupiría
+                # "Future exception was never retrieved" al recolectarlo, y ese
+                # ruido en stderr contamina el transporte stdio del servidor.
+                # Consumir la excepción la marca como recuperada.
+                futuro.add_done_callback(lambda f: f.exception())
             raise
         finally:
             self._en_vuelo.pop(clave, None)

@@ -59,9 +59,11 @@ def test_fecha_floating_timestamp():
     assert fmt.fecha("24/03/2026") == "2026-03-24"
 
 
-def test_sin_acentos_para_comparar_con_mojibake():
-    assert fmt.sin_acentos("Ejecución") == "EJECUCION"
-    assert fmt.sin_acentos("Bogotá D.C.") == "BOGOTA D.C."
+def test_limpia_texto_repara_el_mojibake_de_origen():
+    # El plegado de acentos vive en `core.texto`: tenerlo también aquí, con un
+    # nombre que invitaba a construir `like` con él, fue el origen del defecto.
+    assert fmt.limpia_texto("Ejecución") == "Ejecución"
+    assert fmt.limpia_texto("  doble   espacio ") == "doble espacio"
 
 
 def test_tabla_vacia_no_es_tabla_vacia():
@@ -118,3 +120,83 @@ def test_sobre_marca_truncado_y_dice_que_hacer():
     s.render(lambda f: fmt.tabla_markdown(f), presupuesto=300)
     assert s.truncado is True
     assert any("conteo" in a for a in s.advertencias)
+
+
+# ------------------------------------------------- formato moneda/conteo --
+def test_el_nombre_del_campo_decide_moneda_o_conteo():
+    assert fmt.es_monetario("valor_del_contrato")
+    assert fmt.es_monetario("cuantia_proceso")
+    # "valor total" es dinero; "total" a secas es el alias de count(*).
+    assert fmt.es_monetario("valor_total_esperado")
+    assert not fmt.es_conteo("valor_total_esperado")
+    assert fmt.es_conteo("total")
+    assert fmt.es_conteo("contratos")
+    assert not fmt.es_monetario("total")
+
+
+# ------------------------------------------------------------------ HTTP --
+def test_retry_after_se_lee_cuando_la_fuente_lo_da():
+    import httpx
+
+    from colombia_datos_mcp.core.http import _retry_after
+
+    def resp(cabeceras):
+        return httpx.Response(429, headers=cabeceras)
+
+    assert _retry_after(resp({"Retry-After": "12"})) == 12.0
+    assert _retry_after(resp({})) is None
+    # La forma con fecha HTTP no se adivina: mejor el backoff propio.
+    assert _retry_after(resp({"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"})) is None
+
+
+async def test_no_se_espera_despues_del_ultimo_intento(monkeypatch):
+    """Dormir tras el intento final solo retrasaba el error sin cambiarlo."""
+    import httpx
+
+    from colombia_datos_mcp.core import http as mod
+
+    esperas = []
+
+    async def falso_sleep(s):
+        esperas.append(s)
+
+    monkeypatch.setattr(mod.asyncio, "sleep", falso_sleep)
+    monkeypatch.setattr(mod, "MAX_REINTENTOS", 3)
+
+    class ClienteQueFalla:
+        is_closed = False
+
+        async def get(self, url, params=None, headers=None):
+            return httpx.Response(503, text="caida")
+
+    cliente = mod.ClienteHTTP()
+    monkeypatch.setattr(cliente, "_asegura_cliente", lambda: _async(ClienteQueFalla()))
+
+    with pytest.raises(Exception):
+        await cliente.get_json("https://ejemplo.co/x")
+    # 3 intentos => a lo sumo 2 esperas entre ellos, nunca 3.
+    assert len([e for e in esperas if e]) <= 2
+
+
+async def _async(valor):
+    return valor
+
+
+# ----------------------------------------------------------------- caché --
+async def test_el_fallo_cacheado_no_deja_una_excepcion_sin_recoger(tmp_path):
+    """Un futuro con excepción que nadie espera ensucia stderr con
+    'Future exception was never retrieved', y en stdio eso corrompe el canal."""
+    import asyncio
+
+    from colombia_datos_mcp.core.cache import Cache
+
+    c = Cache(dir_disco=tmp_path / "cache")
+
+    async def revienta():
+        raise RuntimeError("la fuente falló")
+
+    with pytest.raises(RuntimeError):
+        await c.obtener_o_calcular(("k",), revienta)
+
+    await asyncio.sleep(0)
+    assert not c._en_vuelo  # el registro en vuelo se limpia siempre

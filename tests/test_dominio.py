@@ -6,6 +6,7 @@ from colombia_datos_mcp.adapters import socrata
 from colombia_datos_mcp.core.cache import Cache
 from colombia_datos_mcp.core.errors import ErrorNoEncontrado, ErrorValidacion
 from colombia_datos_mcp.domain import catalogo, geo, secop
+from colombia_datos_mcp.registry import datasets as reg
 
 from .fixtures import ADICIONES, CATALOGO, CENTROS_POBLADOS, CONTRATOS, MUNICIPIOS
 
@@ -41,8 +42,19 @@ def _instala(monkeypatch, respuestas):
     return red
 
 
+# Dominios categóricos tal como los devuelve la fuente: CON acentos. Es el
+# hecho que rompía los filtros antes de resolver contra los valores canónicos.
+DOMINIOS = {
+    "departamento": ["Antioquia", "Atlántico", "Distrito Capital de Bogotá", "Chocó"],
+    "modalidad_de_contratacion": ["Contratación directa", "Mínima cuantía"],
+}
+
+
 def _filas_de_contratos(params):
     seleccionar = params.get("$select", "")
+    if seleccionar.startswith("distinct "):
+        campo = seleccionar.split(" ", 1)[1].strip()
+        return [{campo: v} for v in DOMINIOS.get(campo, [])]
     if "count(*)" in seleccionar and "nombre_entidad" not in seleccionar:
         return [{"total": "3"}]
     if "$group" in params or "nombre_entidad," in seleccionar:
@@ -103,18 +115,47 @@ async def test_conteo_no_descarga_filas(monkeypatch):
 
 
 # ------------------------------------------------------------------ SECOP --
-async def test_buscar_contratos_filtra_sin_acentos(monkeypatch):
+async def test_filtro_categorico_resuelve_contra_el_valor_canonico(monkeypatch):
     red = _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
     await secop.buscar_contratos(departamento="Antioquía")
     donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
-    assert "upper(departamento) like '%ANTIOQUIA%'" in donde
+    # Se compara por igualdad contra el literal exacto, no con un `like` sobre
+    # el término plegado: eso devolvía cero para todo valor con tilde.
+    assert donde == "departamento in ('Antioquia')"
+
+
+async def test_filtro_categorico_alcanza_los_valores_con_tilde(monkeypatch):
+    red = _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    await secop.buscar_contratos(departamento="atlantico")
+    donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
+    assert donde == "departamento in ('Atlántico')"
+
+
+async def test_termino_categorico_inexistente_no_consulta_y_lo_dice(monkeypatch):
+    red = _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    salida = await secop.buscar_contratos(departamento="Narnia")
+    # Cero honesto: se dice que el término no existe en la fuente…
+    assert "no corresponde a ningún valor" in salida["texto"]
+    assert "no es un fallo de la fuente" in salida["texto"].lower()
+    # …y no se gasta una consulta de datos que devolvería cero igual.
+    assert not [p for _, p in red.llamadas if "$where" in p]
+
+
+async def test_entidad_es_texto_libre_y_tolera_la_tilde(monkeypatch):
+    red = _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    await secop.buscar_contratos(entidad="gobernacion")
+    donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
+    # El dominio es abierto: no se puede enumerar, así que el plegado de los
+    # acentos se hace en el servidor sobre la columna.
+    assert "replace(" in donde and "'Ó', 'O'" in donde
+    assert donde.endswith("like '%GOBERNACION%'")
 
 
 async def test_buscar_contratos_escapa_comillas(monkeypatch):
     red = _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
     await secop.buscar_contratos(entidad="O'Brien")
     donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
-    assert "O''BRIEN" in donde
+    assert "O''BRIEN" in donde  # comilla simple escapada, no inyectable
 
 
 async def test_buscar_contratos_limpia_el_nit(monkeypatch):
@@ -218,3 +259,118 @@ async def test_paginacion_fuerza_orden_estable(monkeypatch):
     await socrata.consultar("jbjy-vk9h", offset=100)
     _, params = red.llamadas[0]
     assert params["$order"] == ":id"  # sin esto se pierden o duplican filas
+
+
+# ------------------------------------------- regresiones de agregación ----
+async def test_agregar_ordena_por_el_alias_real_de_la_metrica(monkeypatch):
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    await catalogo.agregar("jbjy-vk9h", "nombre_entidad",
+                           metricas="sum(valor_del_contrato) as valor")
+    orden = [p["$order"] for _, p in red.llamadas if "$order" in p][0]
+    # Estaba cableado a "total DESC": con cualquier métrica que no se llamara
+    # `total`, Socrata respondía 400 «No such column: total».
+    assert orden == "valor DESC"
+
+
+async def test_agregar_por_defecto_sigue_ordenando_por_total(monkeypatch):
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    await catalogo.agregar("jbjy-vk9h", "nombre_entidad")
+    assert [p["$order"] for _, p in red.llamadas if "$order" in p][0] == "total DESC"
+
+
+async def test_el_conteo_no_se_formatea_como_pesos(monkeypatch):
+    _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    salida = await catalogo.agregar("jbjy-vk9h", "nombre_entidad")
+    # `count(*) as total` es un conteo. Mostrarlo como "$3" convertía
+    # "3 contratos" en "3 pesos".
+    assert "| $3 |" not in salida["texto"]   # el conteo, como número
+    assert "| 3 |" in salida["texto"]
+    assert "$37.500.000" in salida["texto"]   # el importe, como moneda
+
+
+async def test_allowlist_admite_palabras_reservadas_de_soql(monkeypatch):
+    _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    # `distinct` no es una columna: rechazarlo era un [VALIDACION] falso.
+    salida = await catalogo.consultar("jbjy-vk9h", seleccionar="distinct nombre_entidad")
+    assert salida["texto"]
+
+
+# ----------------------------------------------- validación de entradas ---
+async def test_valor_min_acepta_separadores_colombianos(monkeypatch):
+    red = _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    await secop.buscar_contratos(valor_min="1.000.000")
+    donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
+    assert "valor_del_contrato >= 1000000.0" in donde
+
+
+async def test_valor_min_no_numerico_da_error_tipado(monkeypatch):
+    _instala(monkeypatch, {"/resource/jbjy-vk9h.json": _filas_de_contratos})
+    # Antes escapaba un ValueError crudo, sin código ni sugerencia accionable.
+    with pytest.raises(ErrorValidacion) as exc:
+        await secop.buscar_contratos(valor_min="mucho dinero")
+    assert exc.value.sugerencia
+
+
+# ---------------------------------------------------------- paginación ---
+async def test_la_primera_pagina_ya_lleva_orden_estable(monkeypatch):
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    await catalogo.consultar("jbjy-vk9h")
+    datos = [p for u, p in red.llamadas if "resource" in u and "count(*)" not in p.get("$select", "")]
+    # Sin orden en la página 1 y `:id` en la 2 se pierden y duplican filas al
+    # paginar, que es justo lo que el orden forzado pretendía evitar.
+    assert all(p.get("$order") for p in datos)
+
+
+async def test_el_conteo_no_lleva_orden(monkeypatch):
+    """`count(*)` colapsa filas: Socrata rechaza `$order=:id` sobre un agregado
+    con «Column ':id' is not in group by». Forzar el orden estable sin excluir
+    las agregadas tumbaba TODAS las herramientas, porque todas cuentan primero.
+    """
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    await catalogo.consultar("jbjy-vk9h", detalle="conteo")
+    agregadas = [p for _, p in red.llamadas if "count(*)" in p.get("$select", "")]
+    assert agregadas and all("$order" not in p for p in agregadas)
+
+
+async def test_distinct_tampoco_lleva_orden(monkeypatch):
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    await catalogo.consultar("jbjy-vk9h", seleccionar="distinct nombre_entidad")
+    dist = [p for _, p in red.llamadas if p.get("$select", "").startswith("distinct")]
+    assert dist and all("$order" not in p for p in dist)
+
+
+async def test_un_alias_caduco_reintenta_con_lo_que_escribio_el_usuario(monkeypatch):
+    """Un alias curado que ya no casa nada no debe convertirse en cero filas."""
+    monkeypatch.setitem(reg.ALIAS_ENTIDADES, "INVIAS", "NOMBRE QUE YA NO EXISTE")
+
+    def respuesta(params):
+        donde = params.get("$where", "")
+        if "NOMBRE QUE YA NO EXISTE" in donde:
+            return []                      # el alias caducó
+        return [{"nombre_entidad": "INVIAS", "nit_entidad": "800215807", "total": "42"}]
+
+    _instala(monkeypatch, {"/resource/jbjy-vk9h.json": respuesta})
+    salida = await secop.resolver_entidad("invias")
+    assert "INVIAS" in salida["texto"]
+    assert "caduco" in salida["texto"]

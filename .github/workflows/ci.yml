@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # La suite de contrato a diario: su fallo avisa de que el Estado cambió el
+    # esquema, no de que el servidor se rompiera. 06:20 UTC = 01:20 en Bogotá.
+    - cron: "20 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  pruebas:
+    name: Pruebas sin red (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  contrato:
+    name: Contrato contra la API viva
+    # Solo en la corrida programada o a mano: no se golpea datos.gov.co en
+    # cada push, y un fallo suyo no debe bloquear un PR — no es culpa del PR.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: pytest -m contrato
+        env:
+          # Opcional: sin él Socrata limita por IP, y la IP de Actions es
+          # compartida. Configúralo como secret si el job se vuelve inestable.
+          SOCRATA_APP_TOKEN: ${{ secrets.SOCRATA_APP_TOKEN }}
+        run: pytest -m contrato -q

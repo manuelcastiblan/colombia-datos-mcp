@@ -193,17 +193,30 @@ ATRIBUCIONES = {
 }
 
 # Los nombres en SECOP no son los coloquiales.
+# Alias coloquial -> fragmento que SÍ aparece en `nombre_entidad` de
+# jbjy-vk9h (SECOP II - Contratos). Verificado contra la fuente el 18-ago-2026:
+# la suite de contrato lo revalida a diario, porque un alias caduco convierte
+# una búsqueda válida en cero filas.
+#
+# Ojo con la tentación de escribir el nombre "correcto" de la entidad: varias
+# se registran con su sigla y nada más. INVIAS y UNGRD figuran literalmente
+# así, y expandirlas a su razón social daba cero.
 ALIAS_ENTIDADES = {
-    "RTVC": "RADIO TELEVISION NACIONAL DE COLOMBIA.",
     "DANE": "DEPARTAMENTO ADMINISTRATIVO NACIONAL DE ESTADISTICA",
     "IGAC": "INSTITUTO GEOGRAFICO AGUSTIN CODAZZI",
     "ICBF": "INSTITUTO COLOMBIANO DE BIENESTAR FAMILIAR",
     "SENA": "SERVICIO NACIONAL DE APRENDIZAJE",
-    "INVIAS": "INSTITUTO NACIONAL DE VIAS",
+    "INVIAS": "INVIAS",
     "DIAN": "DIRECCION DE IMPUESTOS Y ADUANAS NACIONALES",
     "ANLA": "AUTORIDAD NACIONAL DE LICENCIAS AMBIENTALES",
-    "UNGRD": "UNIDAD NACIONAL PARA LA GESTION DEL RIESGO DE DESASTRES",
+    "UNGRD": "UNGRD",
 }
+
+# RTVC no está en el dataset de contratos con ningún nombre: solo aparece en
+# rpmr-utcd (SECOP Integrado), como "RADIO TELEVISION NACIONAL DE COLOMBIA."
+# —con punto final— y como "RTVC - RADIO TELEVISIÓN NACIONAL DE COLOMBIA".
+# Ponerlo como alias de contratos garantizaba cero, así que se documenta aquí.
+SOLO_EN_INTEGRADO = {"RTVC": "RADIO TELEVISION NACIONAL DE COLOMBIA."}
 
 LICENCIA_POR_DEFECTO = "CC BY-SA 4.0 (verificar por dataset)"
 

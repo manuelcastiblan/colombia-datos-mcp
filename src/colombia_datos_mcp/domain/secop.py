@@ -20,45 +20,129 @@ def _fuente(ds: reg.Dataset) -> Fuente:
 
 
 def _filtro_texto(campo: str, valor: str) -> str:
-    """Los acentos vienen destruidos en origen: comparar sin acentos y en
-    mayúsculas es lo único que funciona de forma fiable."""
-    return f"upper({campo}) like '%{socrata.escapa(fmt.sin_acentos(valor))}%'"
+    """Filtro para campos de TEXTO LIBRE (nombres de entidad o proveedor).
+
+    Antes plegaba los acentos del término y comparaba con `like`, dando por
+    hecho que la fuente los traía destruidos. Eso solo es cierto en los campos
+    descriptivos; `nombre_entidad` es "GOBERNACIÓN DE BOLÍVAR//", así que el
+    filtro plegado devolvía cero. Ver `core.texto`.
+    """
+    return socrata.filtro_texto_libre(campo, valor)
 
 
 def _solo_digitos(valor: str) -> str:
     return re.sub(r"\D", "", str(valor or ""))
 
 
-def _construye_where(ds: reg.Dataset, **filtros) -> str | None:
+def _numero(valor, etiqueta: str) -> float:
+    """Acepta 1000000, "1.000.000" y "$1.000.000".
+
+    Antes era un `float()` pelado: un umbral escrito como en Colombia reventaba
+    con un ValueError crudo, sin código ni sugerencia.
+    """
+    if isinstance(valor, (int, float)):
+        return float(valor)
+    crudo = re.sub(r"[^\d,.\-]", "", str(valor or ""))
+    if not crudo:
+        raise ErrorValidacion(
+            f"{etiqueta} debe ser un número; llegó {valor!r}.",
+            "Escríbelo en dígitos, con o sin separadores: 1000000 o 1.000.000.",
+        )
+    # Convención colombiana: el punto separa miles y la coma es decimal.
+    # No se puede aplicar aquí la regla de `core.coords` ("el primer separador
+    # es el decimal"): allí funciona porque la parte entera de una longitud
+    # tiene dos dígitos, y aquí 1.000.000 son un millón, no uno con milésimas.
+    comas, puntos = crudo.count(","), crudo.count(".")
+    if comas and puntos:
+        # Mezcla de ambos: manda el último, el otro es separador de miles.
+        corte = max(crudo.rfind(","), crudo.rfind("."))
+    elif comas + puntos == 1:
+        corte = max(crudo.rfind(","), crudo.rfind("."))
+        # Un solo separador con tres dígitos detrás son miles: "1.000" es mil.
+        if len(crudo) - corte - 1 == 3:
+            corte = -1
+    else:
+        corte = -1  # varios separadores iguales: todos son de miles
+    if corte == -1:
+        normalizado = re.sub(r"[,.]", "", crudo)
+    else:
+        normalizado = re.sub(r"[,.]", "", crudo[:corte]) + "." + crudo[corte + 1:]
+    try:
+        return float(normalizado)
+    except ValueError:
+        raise ErrorValidacion(
+            f"{etiqueta} no se pudo leer como número: {valor!r}.",
+            "Escríbelo en dígitos, con o sin separadores: 1000000 o 1.000.000.",
+        ) from None
+
+
+# Campos de dominio cerrado: se resuelven contra los valores canónicos de la
+# fuente. Los demás van por texto libre.
+CATEGORICOS = ("departamento", "modalidad")
+
+
+async def _construye_where(ds: reg.Dataset, **filtros):
+    """Construye el `$where`.
+
+    Devuelve `(donde, avisos, imposible)`. `imposible` es True cuando un
+    término categórico no corresponde a ningún valor real de la fuente: en ese
+    caso el llamador devuelve cero SIN consultar y lo dice, porque un cero
+    silencioso es indistinguible de "no hay datos".
+    """
     c = ds.campos_clave
-    partes = []
+    partes, avisos = [], []
+
+    for clave in CATEGORICOS:
+        if not filtros.get(clave) or not c.get(clave):
+            continue
+        campo = c[clave]
+        filtro, valores, truncado = await socrata.filtro_categorico(ds.id, campo, filtros[clave])
+        if filtro is None:
+            avisos.append(
+                f"«{filtros[clave]}» no corresponde a ningún valor de `{campo}` en la "
+                "fuente, así que no hay nada que devolver. No es un fallo de la fuente."
+            )
+            return None, avisos, True
+        if len(valores) > 1:
+            muestra = ", ".join(valores[:8]) + ("…" if len(valores) > 8 else "")
+            avisos.append(f"«{filtros[clave]}» resolvió a {len(valores)} valor(es): {muestra}")
+        if truncado:
+            avisos.append(
+                f"El término «{filtros[clave]}» casa con demasiados valores de `{campo}`; "
+                "se usaron los primeros. Afina el término."
+            )
+        partes.append(filtro)
+
     if filtros.get("entidad") and c.get("entidad"):
         partes.append(_filtro_texto(c["entidad"], filtros["entidad"]))
     if filtros.get("nit_entidad") and c.get("nit_entidad"):
-        nit = _solo_digitos(filtros["nit_entidad"])
-        partes.append(f"{c['nit_entidad']} = '{nit}'")
+        partes.append(f"{c['nit_entidad']} = '{_solo_digitos(filtros['nit_entidad'])}'")
     if filtros.get("proveedor") and c.get("proveedor"):
         partes.append(_filtro_texto(c["proveedor"], filtros["proveedor"]))
     if filtros.get("documento_proveedor") and c.get("doc_proveedor"):
-        doc = _solo_digitos(filtros["documento_proveedor"])
-        partes.append(f"{c['doc_proveedor']} = '{doc}'")
-    if filtros.get("departamento") and c.get("departamento"):
-        partes.append(_filtro_texto(c["departamento"], filtros["departamento"]))
-    if filtros.get("modalidad") and c.get("modalidad"):
-        partes.append(_filtro_texto(c["modalidad"], filtros["modalidad"]))
+        partes.append(f"{c['doc_proveedor']} = '{_solo_digitos(filtros['documento_proveedor'])}'")
     if filtros.get("desde") and c.get("fecha"):
         partes.append(f"{c['fecha']} >= '{socrata.escapa(filtros['desde'])}'")
     if filtros.get("hasta") and c.get("fecha"):
         partes.append(f"{c['fecha']} <= '{socrata.escapa(filtros['hasta'])}'")
     if filtros.get("valor_min") and c.get("valor"):
-        partes.append(f"{c['valor']} >= {float(filtros['valor_min'])}")
-    return " AND ".join(partes) if partes else None
+        partes.append(f"{c['valor']} >= {_numero(filtros['valor_min'], 'valor_min')}")
+
+    return (" AND ".join(partes) if partes else None), avisos, False
 
 
 async def _buscar(clave: str, detalle="resumen", limite=20, offset=0, **filtros):
     ds = reg.SECOP[clave]
     nivel = Detalle(detalle)
-    donde = _construye_where(ds, **filtros)
+    donde, avisos, imposible = await _construye_where(ds, **filtros)
+
+    if imposible:
+        # El término no existe en la fuente: cero es la respuesta correcta, y
+        # se dice por qué en vez de gastar una consulta que devolvería cero.
+        sobre = Sobre(datos=[], total_coincidencias=0, detalle=nivel, fuente=_fuente(ds))
+        for a in avisos:
+            sobre.advertir(a)
+        return sobre.render(lambda _f: "_Sin coincidencias._")
 
     total = await socrata.contar(ds.id, donde=donde)
     if nivel is Detalle.CONTEO:
@@ -66,6 +150,8 @@ async def _buscar(clave: str, detalle="resumen", limite=20, offset=0, **filtros)
                       consulta=socrata.url_reproducible(
                           f"{socrata.BASE_DATOS}/resource/{ds.id}.json",
                           {"$select": "count(*)", "$where": donde}))
+        for a in avisos:
+            sobre.advertir(a)
         return sobre.render(lambda _f: f"**{fmt.numero(total)}** {ds.unidad}(s) coinciden.")
 
     orden = f"{ds.campos_clave.get('valor')} DESC" if ds.campos_clave.get("valor") else ":id"
@@ -76,6 +162,8 @@ async def _buscar(clave: str, detalle="resumen", limite=20, offset=0, **filtros)
 
     sobre = Sobre(datos=filas, total_coincidencias=total, offset=offset, orden=orden,
                   detalle=nivel, consulta=r["consulta"], fuente=_fuente(ds))
+    for a in avisos:
+        sobre.advertir(a)
     sobre.advertir(f"Unidad de análisis: {ds.unidad}. No sumes filas de datasets distintos.")
     if not donde:
         sobre.advertir("Sin filtros: estás viendo los registros de mayor valor del dataset completo.")
@@ -103,8 +191,10 @@ def _valor(campo: str, valor):
     n = campo.lower()
     if isinstance(valor, dict):
         valor = valor.get("url") or str(valor)
-    if any(p in n for p in ("valor", "precio", "total", "cuantia", "saldo")):
+    if fmt.es_monetario(n):
         return fmt.moneda(valor)
+    if fmt.es_conteo(n):
+        return fmt.numero(valor)
     if "fecha" in n:
         return fmt.fecha(valor)
     if "objeto" in n or "descripcion" in n or "procedimiento" in n:
@@ -257,14 +347,24 @@ async def resolver_entidad(nombre: str, limite=10):
     termino = alias or consulta
 
     contratos = reg.SECOP["contratos"]
-    r = await socrata.consultar(
-        contratos.id,
-        seleccionar="nombre_entidad, nit_entidad, count(*) as total",
-        donde=_filtro_texto("nombre_entidad", termino),
-        agrupar="nombre_entidad, nit_entidad",
-        ordenar="total DESC",
-        limite=min(int(limite), 30),
-    )
+
+    async def _busca(t):
+        return await socrata.consultar(
+            contratos.id,
+            seleccionar="nombre_entidad, nit_entidad, count(*) as total",
+            donde=_filtro_texto("nombre_entidad", t),
+            agrupar="nombre_entidad, nit_entidad",
+            ordenar="total DESC",
+            limite=min(int(limite), 30),
+        )
+
+    r = await _busca(termino)
+    # La tabla de alias se cura a mano y caduca: si el alias no encuentra nada,
+    # se reintenta con lo que escribió el usuario antes de decir que no existe.
+    # Varias entidades se registran con su sigla y nada más.
+    alias_fallido = bool(alias) and not r["filas"]
+    if alias_fallido:
+        r = await _busca(consulta)
     filas = [
         {"nombre canónico": fmt.recorta(f.get("nombre_entidad"), 65),
          "NIT": f.get("nit_entidad"),
@@ -273,8 +373,19 @@ async def resolver_entidad(nombre: str, limite=10):
     ]
     sobre = Sobre(datos=filas, total_coincidencias=len(filas), orden="total DESC",
                   consulta=r["consulta"], fuente=_fuente(contratos))
-    if alias:
+    if alias and not alias_fallido:
         sobre.advertir(f"«{consulta}» se resolvió por alias curado a «{alias}».")
+    elif alias_fallido:
+        sobre.advertir(
+            f"El alias curado «{alias}» no encontró nada; se buscó «{consulta}» "
+            "literalmente. El alias está caduco: repórtalo."
+        )
+    if consulta.upper() in reg.SOLO_EN_INTEGRADO:
+        sobre.advertir(
+            f"«{consulta}» no aparece en SECOP II - Contratos con ningún nombre. "
+            f"En SECOP Integrado (rpmr-utcd) figura como "
+            f"«{reg.SOLO_EN_INTEGRADO[consulta.upper()]}»."
+        )
     if not filas:
         sobre.advertir(
             "Sin coincidencias. Los nombres en SECOP no son los coloquiales "

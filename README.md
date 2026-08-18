@@ -55,22 +55,39 @@ Más tres *resources*: `co://secop/datasets`, `co://secop/joins`, `co://atribuci
 - El facet `attribution` solo acepta la cadena literal completa. `attribution=DANE` da cero; hay que usar `Departamento Administrativo Nacional de Estadísticas - DANE, Bogotá D.C.` — con "Estadísticas" en plural, que no es el nombre real de la entidad.
 - `$order` es obligatorio al paginar o se pierden o duplican filas.
 - Los números llegan como string; los códigos DIVIPOLA son texto con ceros a la izquierda.
-- Los acentos vienen destruidos en origen (`EJECUCIoN`): los filtros se construyen con `upper()` sin acentos.
+- Los acentos vienen destruidos en origen **solo en el texto libre** (`descripcion` trae `EJECUCIoN`). Las columnas **categóricas los conservan**: `departamento` es `Atlántico`, `nom_mpio` es `MEDELLÍN`. Plegar el término y comparar con `like` devolvía cero en silencio para 392 de 1.122 municipios, 12 de 33 departamentos y ~2,8 M de contratos. Ver *Cómo se comparan los nombres*.
 - **Coordenadas:** en `xaxy-8nri` exactamente un registro de 8.161 —Medellín— trae separador de miles (`-75,581,775`), y `float(s.replace(",", "."))` **lanza `ValueError`** sobre él. `core/coords.py` aplica "la primera coma es el decimal" y valida contra la caja envolvente del país.
 - Las "modificaciones contractuales" se llaman **Adiciones**; buscar "modificaciones" devuelve cero.
+
+## Cómo se comparan los nombres
+
+SoQL no tiene `unaccent()` y su `like` distingue acentos, así que la estrategia
+se elige por la cardinalidad del campo:
+
+| Caso | Estrategia | Por qué |
+|---|---|---|
+| Dominio enumerable (`departamento`, `modalidad`, municipios) | Se traen los valores canónicos (cacheados 24 h), se resuelve el término en Python y se filtra con `in ('Atlántico')` | Exacto y compara por igualdad: 1,7 s frente a 7-20 s |
+| Texto libre (`nombre_entidad`, `proveedor_adjudicado`) | El plegado se hace **en el servidor**, con `replace()` anidado sobre la columna | No hay lista que enumerar; exacto y de coste constante en la longitud del término |
+
+Un término categórico que no corresponde a ningún valor real **no se consulta**:
+se devuelve cero diciendo que el término no existe en la fuente. Un cero
+silencioso es indistinguible de «no hay datos».
 
 ## Pruebas
 
 ```bash
 pip install -e ".[dev]"
-pytest            # 54 pruebas, sin red
+pytest              # 80 pruebas, sin red
+pytest -m contrato  # 11 pruebas contra la API viva (~80 s)
 ```
 
-Las fixtures son respuestas **reales** capturadas de la API el 18-ago-2026, con sus defectos intactos. Falta añadir la suite de contrato contra la API viva en CI diario: su fallo es la señal de que el Estado cambió el esquema.
+Las fixtures son respuestas **reales** capturadas de la API el 18-ago-2026, con sus defectos intactos.
+
+La suite de contrato comprueba los supuestos sobre los que está construido el código —que DIVIPOLA y SECOP siguen acentuando, que SoQL sigue aceptando `replace()` anidado, que el registro envenenado de Medellín sigue ahí, que los IDs del registro no rotaron—. Corre a diario en CI y **su fallo no es un bug del servidor: es la señal de que el Estado cambió el esquema.**
 
 ## Estado y siguiente paso
 
-Implementado: núcleo (sobre, presupuesto, caché de dos niveles, HTTP con autolímite y circuit breaker, errores, coordenadas), adaptador Socrata, y los módulos de catálogo, SECOP y DIVIPOLA.
+Implementado: núcleo (sobre, presupuesto, caché de dos niveles, HTTP con autolímite y circuit breaker, errores, coordenadas), adaptador Socrata, comparación de nombres tolerante a acentos, y los módulos de catálogo, SECOP y DIVIPOLA. CI con pruebas sin red en Python 3.11-3.13 y la suite de contrato programada a diario.
 
 Pendiente, en orden: adaptador SDMX para Banco de la República, adaptador ArcGIS (IGAC/DANE MGN) con descubrimiento dinámico del corte vigente, el motor de privacidad, y solo después los módulos de seguridad y DDHH.
 

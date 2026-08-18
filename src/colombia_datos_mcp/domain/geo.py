@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..adapters import socrata
 from ..core import format as fmt
+from ..core import texto
 from ..core.budget import Detalle
 from ..core.coords import normaliza_par
 from ..core.envelope import Fuente, Sobre
@@ -30,6 +31,21 @@ async def divipola(consulta=None, codigo=None, nivel="municipio",
     return await _municipios(consulta, codigo, nivel, con_coordenadas, limite, offset)
 
 
+def _sin_coincidencias(ds, consulta, campo, offset):
+    """Cero honesto: el término no existe en la fuente, y se dice.
+
+    Devolver esto sin consultar evita el peor resultado posible, que es una
+    tabla vacía indistinguible de "la fuente no tiene datos".
+    """
+    sobre = Sobre(datos=[], total_coincidencias=0, offset=offset,
+                  fuente=Fuente(id=ds.id, nombre=ds.nombre, licencia=_LIC))
+    sobre.advertir(
+        f"«{consulta}» no corresponde a ningún valor de `{campo}` en DIVIPOLA. "
+        "La fuente responde bien; revisa la grafía o busca por código."
+    )
+    return sobre.render(lambda _f: "_Sin coincidencias._")
+
+
 async def _municipios(consulta, codigo, nivel, con_coordenadas, limite, offset):
     ds = reg.DIVIPOLA_MUNICIPIOS
     partes = []
@@ -37,10 +53,16 @@ async def _municipios(consulta, codigo, nivel, con_coordenadas, limite, offset):
         c = str(codigo).strip()
         campo = "cod_dpto" if nivel == "departamento" or len(c) <= 2 else "cod_mpio"
         partes.append(f"{campo} = '{socrata.escapa(c)}'")
+    avisos = []
     if consulta:
-        termino = socrata.escapa(fmt.sin_acentos(consulta))
         campo = "dpto" if nivel == "departamento" else "nom_mpio"
-        partes.append(f"upper({campo}) like '%{termino}%'")
+        filtro, valores, truncado = await socrata.filtro_categorico(ds.id, campo, consulta)
+        if filtro is None:
+            return _sin_coincidencias(ds, consulta, campo, offset)
+        if truncado:
+            avisos.append(f"«{consulta}» casa con más de {texto.MAX_VALORES_EN} nombres; "
+                          "se usaron los primeros. Afina el término.")
+        partes.append(filtro)
     donde = " AND ".join(partes) if partes else None
 
     total = await socrata.contar(ds.id, donde=donde)
@@ -69,6 +91,8 @@ async def _municipios(consulta, codigo, nivel, con_coordenadas, limite, offset):
                   consulta=r["consulta"],
                   fuente=Fuente(id=ds.id, nombre=ds.nombre, licencia=_LIC,
                                 atribucion="DIVIPOLA (republicación); origen DANE"))
+    for a in avisos:
+        sobre.advertir(a)
     sobre.advertir(
         "Los códigos DIVIPOLA son texto con ceros a la izquierda: consérvalos como string."
     )
@@ -87,8 +111,11 @@ async def _centros(consulta, codigo, con_coordenadas, limite, offset):
         campo = "codigo_centro_poblado" if len(c) > 5 else "codigo_municipio"
         partes.append(f"{campo} = '{socrata.escapa(c)}'")
     if consulta:
-        termino = socrata.escapa(fmt.sin_acentos(consulta))
-        partes.append(f"upper(nombre_centro_poblado) like '%{termino}%'")
+        filtro, _valores, _trunc = await socrata.filtro_categorico(
+            ds.id, "nombre_centro_poblado", consulta)
+        if filtro is None:
+            return _sin_coincidencias(ds, consulta, "nombre_centro_poblado", offset)
+        partes.append(filtro)
     donde = " AND ".join(partes) if partes else None
 
     total = await socrata.contar(ds.id, donde=donde)
