@@ -248,8 +248,9 @@ valores entre años distintos sin ajustar.
 
 Y advierte, con las cifras del filtro que hayas pedido, cuántos contratos
 superan el billón de pesos y qué parte de la suma representan. Sobre el dataset
-completo son 3.452 registros que valen el **99,98 %** del total: errores de
-digitación que hacen inservible cualquier suma que los incluya.
+completo son 3.452 registros que aportan el **99,99998 %** del total: errores de
+digitación que hacen inservible cualquier suma que los incluya. Sin ellos, los
+5.955.101 contratos restantes suman $997,5 billones.
 
 ---
 

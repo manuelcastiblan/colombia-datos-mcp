@@ -142,12 +142,14 @@ estado. En un caso real que motivó esta nota, el borrador era $93.192.634 de un
 total de $547.285.071: un **17 %** de la cifra que se habría citado.
 
 **5. Desconfía de cualquier suma de `valor_del_contrato`.** SECOP contiene
-**3.452 contratos por encima del billón de pesos** —hay uno de 881 billones para
-una institución universitaria—, que son errores de digitación y arrastran
-cualquier total en el que caigan. Medido sobre el dataset completo: esos 3.452
-registros son el **99,98 %** de la suma de los 5,9 M de contratos. Las
-herramientas de agregación ahora lo advierten con las cifras del filtro que
-hayas pedido, pero la decisión de excluirlos es tuya.
+**3.452 contratos por encima del billón de pesos**. El mayor son 881,8
+*trillones* —unas 560.000 veces el PIB de Colombia— para una institución
+universitaria: errores de digitación que arrastran cualquier total en el que
+caigan. Medido sobre el dataset completo: esos 3.452
+registros aportan el **99,99998 %** de la suma de los 5,96 M de contratos. Los
+otros 5.955.101 contratos —los reales— suman $997,5 billones entre todos, que
+es la cifra utilizable. Las herramientas de agregación ahora lo advierten con
+los números del filtro que hayas pedido, pero la decisión de excluirlos es tuya.
 
 **6. Los montos son nominales y sin deflactar.** Comparar $575.132 de 2018 con
 $93 millones de 2026 no dice nada por sí solo.

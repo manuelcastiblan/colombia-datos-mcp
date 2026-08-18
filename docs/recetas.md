@@ -232,7 +232,7 @@ Comparten escala, así que un grupo que llene la barra mientras el resto queda e
 `▏` no es un defecto de dibujo: ese grupo domina por uno o dos órdenes de
 magnitud. **Cuando eso pase con `metrica="valor"`, sospecha de los datos antes
 que de la realidad** — así se descubrieron los 3.452 contratos con valores
-imposibles que valen el 99,98 % de la suma de SECOP.
+imposibles que aportan el 99,99998 % de la suma de SECOP.
 
 Fíjate en la tabla de arriba: la columna `valor total` ya lo enseña sin barras.
 «Mínima cuantía» tiene 330.244 contratos y suma menos que «Contratación Directa

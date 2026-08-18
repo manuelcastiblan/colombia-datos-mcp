@@ -23,9 +23,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 - **Barras en las agregaciones**, proporcionales a la métrica y a escala
   compartida. Cero dependencias. Se apagan con `grafica=false`.
 - **Aviso de valores imposibles.** SECOP tiene 3.452 contratos por encima del
-  billón de pesos —uno de 881 billones para una institución universitaria— que
-  son errores de digitación y valen el **99,98 %** de la suma de los 5,9 M de
-  contratos. `co_secop_agregar` ahora cuenta cuántos caen en el filtro y qué
+  billón de pesos —el mayor son 881,8 trillones, unas 560.000 veces el PIB del
+  país— que
+  son errores de digitación y aportan el **99,99998 %** de la suma de los 5,96 M
+  de contratos. `co_secop_agregar` ahora cuenta cuántos caen en el filtro y qué
   parte de la suma representan. Lo destapó una de las barras nuevas: un solo
   departamento llenaba la escala.
 - 22 pruebas nuevas (83 → 105), incluidas las del saneamiento de rutas.
