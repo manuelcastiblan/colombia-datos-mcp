@@ -2,7 +2,7 @@
 
 Servidor MCP para datos públicos de Colombia: catálogo nacional de
 `datos.gov.co`, contratación pública (SECOP), criminalidad (MinDefensa) y
-división territorial (DIVIPOLA). 16 herramientas, sin credenciales.
+división territorial (DIVIPOLA). 18 herramientas, sin credenciales.
 
 Esta es la **fase F0 + la mitad Socrata de F1** del diseño: núcleo completo,
 adaptador de Socrata y los módulos de catálogo, SECOP, DIVIPOLA y crimen.
@@ -102,6 +102,8 @@ es la resolución de nombres funcionando — ver
 | `co_datos_describir_dataset` | Esquema en vivo: campo técnico + nombre legible + tipo + descripción |
 | `co_datos_consultar` | SoQL con allow-list de columnas; `detalle` = conteo / resumen / completo |
 | `co_datos_agregar` | Agrupa del lado del servidor |
+| `co_datos_serie` | Serie temporal sobre cualquier dataset; avisa si el último periodo está incompleto |
+| `co_datos_perfilar` | Retrato de una columna: nulos, magnitudes y concentración |
 | `co_secop_buscar_contratos` | Contratos de SECOP II |
 | `co_secop_buscar_procesos` | Procesos de contratación |
 | `co_secop_detalle_contrato` | Vista compuesta: contrato + adiciones + URL pública |
@@ -188,7 +190,37 @@ un total por nombre; si sale más de una cédula, son varias personas.
 que consultar también `rpmr-utcd` (SECOP Integrado). Un «cero contratos» puede
 significar «no está en SECOP II», no «no contrató nunca».
 
-### Criminalidad
+### Antes de fiarte de una columna
+
+```
+co_datos_perfilar(dataset_id="jbjy-vk9h", campo="valor_del_contrato")
+```
+
+```markdown
+- Rango: 0 a 881.804.150.601.557.082.112
+- Los 10 valores mayores aportan el 95,5 % de la suma.
+
+| Por encima de | Filas |
+|---|---|
+| 1.000.000.000 | 101.292 |
+| 1.000.000.000.000 | 3.452 |
+| 1.000.000.000.000.000.000 | 41 |
+
+> ATENCIÓN: 10 filas de 5.958.553 aportan el 95,5 % de la suma. Una suma así
+> no describe al conjunto: revisa si son valores reales o errores de digitación.
+```
+
+Ese reparto por orden de magnitud es lo que delata una segunda población dentro
+de una columna. Descubrirlo a mano costó una investigación entera; ahora cuesta
+una llamada.
+
+Y `co_datos_serie` cubre el otro error clásico: **avisa cuando el último periodo
+está incompleto**, que es lo que convierte «2026» en una caída del 30 % que no
+existe. No da falsa alarma si el periodo sí está cerrado, y **rechaza las
+columnas de fecha que en realidad son texto** —las cinco del Plan Anual de
+Adquisiciones— donde agrupar falla y `between` miente.
+
+## Criminalidad
 
 **9. Son casos registrados, no delitos cometidos.** Una subida en extorsión, en
 delitos sexuales o en violencia intrafamiliar puede ser **más denuncia y no más
@@ -300,6 +332,36 @@ como aparecieron los 3.452 contratos con valores imposibles, y por eso ahora la
 respuesta trae el aviso con las cifras del filtro.
 
 Una gráfica que no cuadra con lo que sabes del mundo es información, no ruido.
+
+## Antes de fiarte de una columna
+
+```
+co_datos_perfilar(dataset_id="jbjy-vk9h", campo="valor_del_contrato")
+```
+
+```markdown
+- Rango: 0 a 881.804.150.601.557.082.112
+- Los 10 valores mayores aportan el 95,5 % de la suma.
+
+| Por encima de | Filas |
+|---|---|
+| 1.000.000.000 | 101.292 |
+| 1.000.000.000.000 | 3.452 |
+| 1.000.000.000.000.000.000 | 41 |
+
+> ATENCIÓN: 10 filas de 5.958.553 aportan el 95,5 % de la suma. Una suma así
+> no describe al conjunto: revisa si son valores reales o errores de digitación.
+```
+
+Ese reparto por orden de magnitud es lo que delata una segunda población dentro
+de una columna. Descubrirlo a mano costó una investigación entera; ahora cuesta
+una llamada.
+
+Y `co_datos_serie` cubre el otro error clásico: **avisa cuando el último periodo
+está incompleto**, que es lo que convierte «2026» en una caída del 30 % que no
+existe. No da falsa alarma si el periodo sí está cerrado, y **rechaza las
+columnas de fecha que en realidad son texto** —las cinco del Plan Anual de
+Adquisiciones— donde agrupar falla y `between` miente.
 
 ## Criminalidad
 
@@ -481,7 +543,7 @@ pip install -e ".[dev]"
 ```
 
 ```bash
-pytest              # 123 pruebas, sin red
+pytest              # 135 pruebas, sin red
 ```
 
 ```bash
@@ -504,7 +566,7 @@ esquema.**
 
 | Documento | Para qué |
 |---|---|
-| [docs/herramientas.md](docs/herramientas.md) | Las 16 herramientas: parámetros, valores por defecto y topes. |
+| [docs/herramientas.md](docs/herramientas.md) | Las 18 herramientas: parámetros, valores por defecto y topes. |
 | [docs/recetas.md](docs/recetas.md) | Secuencias que funcionan, con las trampas de cada una y cómo leer el sobre. |
 | [docs/fuentes.md](docs/fuentes.md) | Los 34 datasets: unidad de análisis, campos clave, joins y atribuciones. |
 | [docs/arquitectura.md](docs/arquitectura.md) | Cómo está construido, y qué **no** hace todavía. |
@@ -520,10 +582,7 @@ comparación de nombres tolerante a acentos, extracción estructurada con
 exportación a disco, y los módulos de catálogo, SECOP, DIVIPOLA y criminalidad.
 CI con las pruebas sin red en Python 3.11-3.13 y el contrato programado a diario.
 
-Pendiente, en orden: una herramienta genérica de series temporales y otra de
-perfilado de calidad del dato —las dos nacieron de errores concretos: comparar
-un año incompleto con años cerrados, y descubrir a mano los valores imposibles
-de SECOP—; adaptador SDMX para Banco de la República, adaptador ArcGIS
+Pendiente, en orden: adaptador SDMX para Banco de la República, adaptador ArcGIS
 (IGAC / MGN del DANE) con descubrimiento dinámico del corte vigente, el motor de
 privacidad, y solo después los módulos de seguridad y DDHH.
 

@@ -6,8 +6,8 @@ SECOP**.
 ```mermaid
 flowchart TD
     cliente["Cliente MCP"]
-    server["server.py<br/>16 herramientas · 3 recursos · playbook<br/>traduce los errores tipados y arma el ToolResult"]
-    dominio["domain/ · catalogo · secop · geo · crimen · exportar<br/>construye filtros, proyecta columnas, arma el sobre"]
+    server["server.py<br/>18 herramientas · 3 recursos · playbook<br/>traduce los errores tipados y arma el ToolResult"]
+    dominio["domain/ · catalogo · secop · geo · crimen · analisis · exportar<br/>construye filtros, proyecta columnas, arma el sobre"]
     adaptador["adapters/socrata.py<br/>Discovery API + SODA · URL reproducible"]
     fuente[("datos.gov.co")]
     registro["registry/<br/>unidad de análisis · campos clave · alias · atribuciones"]
@@ -33,6 +33,7 @@ dominio nunca llama a `httpx` y el adaptador nunca sabe qué es un contrato.
 | `core/format.py` | Markdown, moneda es-CO, fechas, mojibake. |
 | `core/texto.py` | Plegado y comparación de nombres contra fuentes acentuadas. |
 | `registry/datasets.py` | IDs, unidad de análisis, campos clave, alias, atribuciones. |
+| `domain/analisis.py` | Series temporales y perfilado de calidad, para cualquier dataset. |
 | `domain/crimen.py` | 23 datasets de MinDefensa: series, municipios y comparación entre años. |
 | `domain/exportar.py` | La única operación que escribe: descarga paginada a disco. |
 

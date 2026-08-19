@@ -16,7 +16,7 @@ from fastmcp.tools.tool import ToolResult
 from . import __version__
 from .adapters import socrata
 from .core.errors import CoDatosError
-from .domain import catalogo, crimen, exportar, geo, secop
+from .domain import analisis, catalogo, crimen, exportar, geo, secop
 from .registry import datasets as reg
 
 PLAYBOOK = """
@@ -141,6 +141,39 @@ async def co_datos_agregar(dataset_id: str, agrupar_por: str,
     return await _ejecuta(catalogo.agregar(
         dataset_id, agrupar_por, metricas=metricas, donde=donde or None,
         teniendo=teniendo or None, limite=limite, formato=formato, grafica=grafica))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_datos_serie(dataset_id: str, campo_fecha: str,
+                         metrica: str = "count(*) as casos", periodo: str = "anio",
+                         desde: str = "", hasta: str = "", donde: str = "",
+                         formato: str = "tabla", grafica: bool = True) -> ToolResult:
+    """Serie temporal sobre cualquier dataset: agrupa por año, mes o día.
+
+    Evita escribir `date_extract_y(...)` a mano, y sobre todo **avisa cuando el
+    último periodo está incompleto**: comparar un año que llega hasta julio con
+    años cerrados produce caídas que no existen.
+
+    Rechaza las columnas de fecha que en realidad son texto, como las del Plan
+    Anual de Adquisiciones: ahí agrupar por periodo falla y `between` miente.
+    """
+    return await _ejecuta(analisis.serie(
+        dataset_id, campo_fecha, metrica=metrica, periodo=periodo,
+        desde=desde or None, hasta=hasta or None, donde=donde or None,
+        formato=formato, grafica=grafica))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_datos_perfilar(dataset_id: str, campo: str, donde: str = "") -> ToolResult:
+    """Retrato de una columna antes de fiarte de ella.
+
+    Nulos, rango, reparto por orden de magnitud y **concentración**: si unos
+    pocos valores dominan la suma, lo dice. Es la comprobación que hace visible
+    en una llamada que nueve contratos aportan el 94 % del valor de SECOP II.
+
+    Úsala antes de citar cualquier agregado de una columna que no conozcas.
+    """
+    return await _ejecuta(analisis.perfilar(dataset_id, campo, donde=donde or None))
 
 
 # ---------------------------------------------------------------- SECOP ----

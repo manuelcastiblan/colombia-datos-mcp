@@ -1,6 +1,6 @@
 # Referencia de herramientas
 
-16 herramientas contra `datos.gov.co`, todas de solo lectura salvo
+18 herramientas contra `datos.gov.co`, todas de solo lectura salvo
 `co_datos_exportar`, la única que escribe.
 
 Los parámetros y sus valores por defecto salen del esquema que el servidor
@@ -130,6 +130,57 @@ La barra se calcula sobre el valor **crudo** del primer alias, antes de darle
 formato: si se midiera sobre `$1.234` ya formateado, el separador de miles
 falsearía la escala. Los bloques son de un octavo, así que 87 y 64 se
 distinguen sin leer los números.
+
+### `co_datos_serie`
+
+Serie temporal sobre cualquier dataset.
+
+| Parámetro | Tipo | Defecto | Notas |
+|---|---|---|---|
+| `dataset_id` | string | obligatorio | |
+| `campo_fecha` | string | obligatorio | Debe ser de tipo `Calendar date`. |
+| `metrica` | string | `"count(*) as casos"` | El nombre de la columna sale del alias. |
+| `periodo` | string | `"anio"` | `anio`, `mes` o `dia`. |
+| `desde` / `hasta` | string | `""` | `YYYY-MM-DD`. |
+| `donde` | string | `""` | `$where` adicional. |
+| `formato` | string | `"tabla"` | |
+| `grafica` | bool | `true` | |
+
+**Avisa cuando el último periodo está incompleto.** Consulta
+`max(campo_fecha)` y compara: si la serie anual termina en un año cuyos datos
+cortan en agosto, lo dice con la fecha exacta. Es lo que convierte «2026» en
+una caída del 30 % que no existe. Y **no da falsa alarma**: si el último mes
+cerró el día 31, se limita a informar del alcance.
+
+**Rechaza las columnas de fecha que son texto.** En el Plan Anual de
+Adquisiciones (`9sue-ezhx`) las cinco columnas de fecha son `Text`: agrupar por
+periodo falla y `between` da resultados silenciosamente falsos. El error dice el
+tipo real y remite al esquema.
+
+### `co_datos_perfilar`
+
+Retrato de una columna antes de fiarte de ella.
+
+| Parámetro | Tipo | Defecto | Notas |
+|---|---|---|---|
+| `dataset_id` | string | obligatorio | |
+| `campo` | string | obligatorio | |
+| `donde` | string | `""` | Perfila solo el subconjunto que te importa. |
+
+Devuelve, según el tipo de la columna:
+
+- **Numérica** — rango, suma, media, **reparto por orden de magnitud** y qué
+  parte de la suma aportan los diez valores mayores.
+- **Fecha** — rango, y aviso si el último periodo está sin cerrar.
+- **Texto** — los diez valores más frecuentes.
+
+Siempre: filas totales, filas con valor y **nulas**. Socrata omite los campos
+nulos en vez de mandarlos vacíos, así que esas filas ni siquiera traen la clave.
+
+La comprobación que la justifica es la **concentración**: si unos pocos valores
+dominan la suma, lo advierte. Sobre `valor_del_contrato` de SECOP II devuelve
+que **diez filas de 5.958.553 aportan el 95,5 %** — el hallazgo que costó una
+investigación entera, en una llamada.
 
 ---
 

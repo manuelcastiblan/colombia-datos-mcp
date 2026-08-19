@@ -270,6 +270,39 @@ Se apagan con `grafica=false`, y no aparecen si pides `formato="csv"`.
 
 ---
 
+## Antes de fiarte de una columna que no conoces
+
+```
+co_datos_perfilar(dataset_id="<id>", campo="<columna>")
+```
+
+Dice cuántas filas la traen vacía, en qué rango se mueve, **cómo se reparte por
+orden de magnitud** y qué parte de la suma aportan los diez valores mayores.
+
+Ese último número es el que importa. Sobre `valor_del_contrato` de SECOP II sale
+**95,5 %**: diez filas de casi seis millones. Una suma así no describe al
+conjunto, y descubrirlo a mano costó una investigación entera.
+
+Hazlo **antes** de citar cualquier agregado de una columna que no conozcas, no
+después.
+
+## Series sin escribir SoQL
+
+```
+co_datos_serie(dataset_id="jbjy-vk9h", campo_fecha="fecha_de_firma",
+               periodo="anio", desde="2023-01-01")
+```
+
+Evita el `date_extract_y(...)` a mano, y sobre todo **avisa cuando el último
+periodo está incompleto**. Es el error más fácil de cometer con datos abiertos:
+una serie anual cuyo último año llega hasta agosto parece una caída del 30 %.
+
+No salta si el periodo sí está cerrado —un aviso que salta siempre deja de
+leerse— y rechaza las columnas de fecha que en realidad son texto, como las
+cinco del Plan Anual de Adquisiciones.
+
+---
+
 ## Criminalidad: mira la serie antes del porcentaje
 
 Es la receta más importante del módulo, porque el error es muy fácil de cometer.

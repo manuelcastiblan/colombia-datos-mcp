@@ -2,6 +2,27 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.5.0] — 2026-08-18
+
+### Añadido
+
+- **`co_datos_serie`** — serie temporal sobre cualquier dataset, por año, mes o
+  día. Evita escribir `date_extract_y(...)` a mano, cosa que en una sola sesión
+  hizo falta seis veces. Y hace lo que ninguna consulta hace sola: **avisa
+  cuando el último periodo está incompleto**, comparando con `max(campo_fecha)`.
+  Es el error que produjo una cifra equivocada en esta misma sesión —una serie
+  anual cuyo último año llegaba hasta agosto parecía una caída del 30 %—. No
+  salta si el periodo sí está cerrado: un aviso que salta siempre deja de leerse.
+  Y rechaza las columnas de fecha que en realidad son `text`, como las cinco del
+  Plan Anual de Adquisiciones, donde agrupar falla y `between` miente.
+- **`co_datos_perfilar`** — retrato de una columna antes de fiarse de ella:
+  nulas, rango, **reparto por orden de magnitud** y, sobre todo,
+  **concentración**. Sobre `valor_del_contrato` de SECOP II responde que diez
+  filas de 5.958.553 aportan el **95,5 %** de la suma. Ese hallazgo costó una
+  investigación entera; ahora cuesta una llamada.
+- 12 pruebas sin red (123 → 135), incluida la de que el aviso de periodo
+  incompleto **no** salte cuando el periodo está cerrado.
+
 ## [0.4.0] — 2026-08-18
 
 ### Añadido

@@ -31,6 +31,7 @@ async def test_inventario_de_herramientas():
         "co_secop_resolver_entidad", "co_secop_agregar",
         "co_geo_divipola", "co_geo_cotejar_coordenadas", "co_datos_exportar",
         "co_crimen_serie", "co_crimen_por_municipio", "co_crimen_comparar",
+        "co_datos_serie", "co_datos_perfilar",
     }
     # Exportar es la ÚNICA que escribe, y no puede anunciarse como solo lectura:
     # el cliente decide con esa anotación si pedir confirmación al usuario.
