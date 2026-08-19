@@ -25,8 +25,21 @@ def _red(params):
     if "max(fecha_hecho)" in sel:
         return [{"h": "2026-07-31T00:00:00.000"}]
     if "date_extract_y" in sel:
-        return [{"periodo": "2017", "casos": "195"}, {"periodo": "2025", "casos": "701"},
-                {"a": "2017", "casos": "195"}, {"a": "2025", "casos": "701"}]
+        # `serie` pide el alias `periodo` y `comparar` el alias `a`. Antes se
+        # devolvían las dos formas juntas, así que `serie` recibía además tres
+        # filas SIN clave `periodo`: su última fila quedaba vacía y tapaba
+        # cualquier comprobación sobre el último año.
+        clave = "periodo" if " as periodo" in sel else "a"
+        # 2026 lleva el valor más bajo a propósito: los datos cortan el 31 de
+        # julio, así que si alguien lo cuela en el mínimo, la prueba lo caza.
+        anios = [("2017", "195"), ("2025", "701"), ("2026", "120")]
+        # Y se respeta el `hasta`: una fuente falsa que ignora el filtro no
+        # permite comprobar qué pasa cuando la serie SÍ acaba en año cerrado.
+        import re
+        tope = re.search(r"fecha_hecho < '(\d{4})-", params.get("$where", "") or "")
+        if tope:
+            anios = [(a, c) for a, c in anios if a < tope.group(1)]
+        return [{clave: a, "casos": c} for a, c in anios]
     return [{"municipio": "CUCUTA", "departamento": "NORTE DE SANTANDER",
              "cod_muni": "54001", "casos": "273"}]
 
@@ -83,7 +96,37 @@ async def test_la_serie_avisa_del_corte_de_datos(monkeypatch):
     _instala(monkeypatch)
     salida = await crimen.serie("homicidio")
     assert "2026-07-31" in salida["texto"]
-    assert "incompleto" in salida["texto"]
+    assert "INCOMPLETO" in salida["texto"]
+
+
+async def test_no_avisa_de_incompleto_si_la_serie_acaba_en_un_ano_cerrado(monkeypatch):
+    """La falsa alarma es cara: repetida, enseña a ignorar el aviso, y entonces
+    no sirve el día que es verdad. Antes se avisaba siempre que existiera fecha
+    de corte, aunque lo mostrado terminara en un año cerrado."""
+    _instala(monkeypatch)
+    salida = await crimen.serie("homicidio", hasta=2025)
+    texto = salida["texto"]
+    assert "2026-07-31" in texto                     # el alcance sí se declara
+    assert "INCOMPLETO" not in texto, "falsa alarma: 2025 está cerrado"
+
+
+async def test_el_minimo_de_la_serie_no_incluye_el_ano_a_medias(monkeypatch):
+    """El aviso que existe para no elegir mal el año base ofrecía como «mínimo
+    de la serie» un año que corta en julio."""
+    _instala(monkeypatch)
+    texto = (await crimen.serie("homicidio"))["texto"]
+    assert "Mínimo: 195" in texto, "el mínimo debe salir del último año CERRADO"
+    assert "Mínimo: 120" not in texto, "2026 está a medias y no puede ser el mínimo"
+    assert "2026" in texto                           # pero la fila sigue ahí
+
+
+async def test_comparar_avisa_si_uno_de_los_dos_anos_no_ha_cerrado(monkeypatch):
+    """`co_crimen_comparar(2017, 2026)` devolvía una caída sin una sola
+    advertencia: es el error fundacional del proyecto dentro de la propia
+    función de comparar."""
+    _instala(monkeypatch)
+    texto = (await crimen.comparar(2017, 2026, delitos="homicidio"))["texto"]
+    assert "ATENCIÓN" in texto and "2026" in texto and "cortan el" in texto
 
 
 async def test_la_serie_recuerda_el_maximo_y_el_minimo(monkeypatch):

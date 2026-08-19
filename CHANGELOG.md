@@ -2,6 +2,54 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.12.0] — 2026-08-19
+
+El error fundacional del proyecto —comparar un periodo a medias con periodos
+cerrados— seguía vivo en tres sitios del propio módulo que existe para evitarlo.
+Salió citando cifras para un artículo, no revisando código.
+
+### Corregido
+
+**El aviso del año base ofrecía como mínimo un año sin cerrar.**
+`co_crimen_serie` calculaba el máximo y el mínimo sobre TODA la serie, incluido
+el último periodo. Para homicidio anunciaba «Mínimo: 8.195», que es 2026 cortado
+el 31 de julio; el mínimo real de los años cerrados es 11.957, de 2017. La
+advertencia que existe para no elegir mal el año base estaba proponiendo el peor
+año posible. Ahora los extremos se calculan solo sobre periodos cerrados y el
+aviso declara cuál excluyó.
+
+**`co_crimen_comparar` no avisaba en absoluto.** Comparar 2017 con 2026 devolvía
+una caída del 31 % en homicidios, sin una sola advertencia, porque 2026 va hasta
+julio. Es exactamente el error que motivó la herramienta, dentro de la función
+de comparar. Ahora detecta si alguno de los dos años sigue abierto y lo dice
+—agrupando por año, porque cada dataset de MinDefensa corta por su cuenta: el de
+secuestro el 30 de julio y el de homicidio el 31—.
+
+**Y la falsa alarma opuesta.** `co_crimen_serie` y `co_crimen_por_municipio`
+afirmaban «el último año está incompleto» siempre que existiera fecha de corte,
+aunque lo pedido terminara en un año cerrado: `serie(hasta=2025)` avisaba de una
+incompletitud que no había. Una falsa alarma repetida enseña a ignorar el aviso,
+y entonces no sirve el día que es verdad.
+
+### Añadido
+
+- **`domain/periodos.py`**, con la detección compartida. `analisis.py` tenía una
+  versión propia y aproximada —daba por cerrado cualquier mes acabado en 28-31,
+  y abril no tiene 31 días—; ahora se calcula con el calendario y la usan los
+  dos módulos.
+
+### Pruebas
+
+- `tests/test_documentacion.py`: la documentación también se rompe en silencio.
+  Una tabla con una fila de más columnas que su cabecera no da error, se
+  renderiza torcida y nadie lo nota. Recorre los 9 documentos comprobando el
+  cuadre de columnas y que ninguna tabla quede dentro de un ítem de lista.
+- El fixture de criminalidad devolvía en la misma respuesta las filas de `serie`
+  (alias `periodo`) y las de `comparar` (alias `a`), así que `serie` recibía tres
+  filas sin clave `periodo`: su última fila quedaba vacía y **tapaba cualquier
+  comprobación sobre el último año**. Ahora responde según el alias pedido y
+  respeta el filtro de fechas.
+
 ## [0.11.0] — 2026-08-19
 
 Cierra el patrón de las dos auditorías por el otro extremo: hasta ahora el error

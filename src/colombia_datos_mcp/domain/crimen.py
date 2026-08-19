@@ -22,6 +22,7 @@ pero **no son la misma cosa**, y ahí está el trabajo de este módulo:
 from __future__ import annotations
 
 from . import agregacion
+from . import periodos
 from ..adapters import socrata
 from ..core import format as fmt
 from ..core import texto
@@ -71,16 +72,25 @@ def _fuente(ds: reg.Dataset) -> Fuente:
     return Fuente(id=ds.id, nombre=ds.nombre, licencia=_LIC, atribucion=_ATRIB)
 
 
-def _avisos_dataset(sobre: Sobre, ds: reg.Dataset, corte: str | None) -> None:
+def _avisos_dataset(sobre: Sobre, ds: reg.Dataset, corte: str | None,
+                    incompleto: bool = False) -> None:
+    """`incompleto` debe decir si lo que se está MOSTRANDO alcanza el periodo sin
+    cerrar. Antes se avisaba siempre que hubiera fecha de corte, aunque la serie
+    pedida terminara en un año cerrado: una falsa alarma repetida enseña a
+    ignorar el aviso, y entonces no sirve el día que es verdad."""
     sobre.advertir(f"Unidad de análisis: {ds.unidad}. Se suma `cantidad`, no filas.")
     sobre.advertir(AVISO_REGISTRO)
     for n in ds.notas:
         sobre.advertir(n)
-    if corte:
+    if not corte:
+        return
+    if incompleto:
         sobre.advertir(
-            f"Los datos de este dataset cortan el {corte}: el último año está "
-            "incompleto y no es comparable con años cerrados."
+            f"ATENCIÓN: los datos cortan el {corte}, así que el último periodo "
+            "está INCOMPLETO y no es comparable con periodos cerrados."
         )
+    else:
+        sobre.advertir(f"Los datos de este dataset llegan hasta {corte}.")
 
 
 async def serie(delito: str, desde: int | None = None, hasta: int | None = None,
@@ -119,12 +129,20 @@ async def serie(delito: str, desde: int | None = None, hasta: int | None = None,
                   fuente=_fuente(ds))
     await agregacion.anota_total(sobre, r["filas"], TOPE, dataset_id=ds.id,
                                  seleccionar=SELECT, agrupar=expr, donde=donde)
-    _avisos_dataset(sobre, ds, corte)
-    if crudos and len(crudos) > 1:
+    # El máximo y el mínimo se calculan SOLO sobre periodos cerrados: incluir el
+    # último a medias ofrecía como «mínimo de la serie» un año que corta en
+    # julio, dentro del aviso que existe para no elegir mal el año base.
+    cerrados = periodos.comparables(filas, corte, agrupar_por)
+    parcial = len(cerrados) < len(filas)
+    _avisos_dataset(sobre, ds, corte, incompleto=parcial)
+    valores = crudos[:len(cerrados)]
+    if len(valores) > 1:
+        excluido = (f" Excluye «{filas[-1]['periodo']}», que aún no ha cerrado."
+                    if parcial else "")
         sobre.advertir(
-            f"Máximo de la serie: {fmt.numero(max(crudos))}. Mínimo: "
-            f"{fmt.numero(min(crudos))}. Elegir uno u otro como base cambia "
-            "por completo el porcentaje que salga."
+            f"Máximo de la serie: {fmt.numero(max(valores))}. Mínimo: "
+            f"{fmt.numero(min(valores))}.{excluido} Elegir uno u otro como base "
+            "cambia por completo el porcentaje que salga."
         )
     return sobre.render(lambda f: fmt.tabla_markdown(f), formato=formato)
 
@@ -175,7 +193,8 @@ async def por_municipio(delito: str, anio: int, limite: int = 20,
                                  seleccionar=SELECT, agrupar=AGRUPAR, donde=donde)
     for a in avisos:
         sobre.advertir(a)
-    _avisos_dataset(sobre, ds, corte)
+    _avisos_dataset(sobre, ds, corte,
+                    incompleto=periodos.incompleto(anio, corte, "anio"))
     sobre.advertir(
         "Conteos absolutos, no tasas: la fuente no publica población municipal, "
         "así que esta lista se parece mucho a una lista de municipios grandes. "
@@ -192,9 +211,13 @@ async def comparar(anio_a: int, anio_b: int, delitos: str = "", formato: str = "
             f"Demasiados delitos ({len(claves)}): son dos consultas por cada uno.",
             "Pide como mucho 12, o deja `delitos` vacío para la selección corta.",
         )
-    filas, incompletos = [], []
+    filas, incompletos, sin_cerrar = [], [], set()
     for clave in claves:
         ds = _ds(clave)
+        corte_ds = await _corte(ds)
+        for anio in (anio_a, anio_b):
+            if periodos.incompleto(anio, corte_ds, "anio"):
+                sin_cerrar.add((int(anio), corte_ds))
         r = await socrata.consultar(
             ds.id, seleccionar="date_extract_y(fecha_hecho) as a, sum(cantidad) as casos",
             donde=f"fecha_hecho >= '{min(anio_a, anio_b)}-01-01' AND "
@@ -222,6 +245,25 @@ async def comparar(anio_a: int, anio_b: int, delitos: str = "", formato: str = "
         "una cifra; contra otro año, otra distinta, y ambas son ciertas. Mira la "
         "serie completa con co_crimen_serie antes de citar un porcentaje."
     )
+    if sin_cerrar:
+        # Cada dataset de MinDefensa corta por su cuenta —secuestro el 30 de
+        # julio, homicidio el 31—, así que el mismo año aparecía repetido con
+        # una fecha distinta cada vez. Se agrupa por año y se da el rango.
+        por_anio: dict[int, set[str]] = {}
+        for anio, corte_ds in sin_cerrar:
+            por_anio.setdefault(anio, set()).add(corte_ds)
+        partes_aviso = []
+        for anio in sorted(por_anio):
+            fechas = sorted(por_anio[anio])
+            cuando = (f"el {fechas[0]}" if len(fechas) == 1
+                      else f"entre el {fechas[0]} y el {fechas[-1]}, según el delito")
+            partes_aviso.append(f"{anio} (los datos cortan {cuando})")
+        detalle = "; ".join(partes_aviso)
+        sobre.advertir(
+            f"ATENCIÓN: {detalle}. Comparar un año a medias con uno cerrado "
+            "produce caídas que no existen; este porcentaje no es utilizable "
+            "tal cual."
+        )
     if incompletos:
         sobre.advertir(
             "Sin datos en alguno de los dos años, quedan fuera: "

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 
 from . import agregacion
+from . import periodos
 from ..adapters import socrata
 from ..core import format as fmt
 from ..core.envelope import Fuente, Sobre
@@ -115,11 +116,18 @@ async def serie(dataset_id: str, campo_fecha: str, metrica: str = "count(*) as c
     await agregacion.anota_total(sobre, r["filas"], TOPE, dataset_id=dataset_id,
                                  seleccionar=SELECT, agrupar=expr, donde=filtro)
     _avisa_periodo_incompleto(sobre, filas, corte, periodo)
-    if len(crudos) > 1:
+    # Solo periodos cerrados: ofrecer como «mínimo de la serie» un año que corta
+    # en julio es exactamente el error contra el que avisa la línea de arriba.
+    cerrados = periodos.comparables(filas, corte, periodo)
+    valores = crudos[:len(cerrados)]
+    if len(valores) > 1:
+        excluido = (f" Excluye «{filas[-1]['periodo']}», que aún no ha cerrado."
+                    if len(cerrados) < len(filas) else "")
         sobre.advertir(
-            f"Máximo de la serie: {fmt.numero(max(crudos))} · mínimo: "
-            f"{fmt.numero(min(crudos))}. El periodo que tomes como base cambia "
-            "cualquier porcentaje que calcules, y a veces le cambia el signo."
+            f"Máximo de la serie: {fmt.numero(max(valores))} · mínimo: "
+            f"{fmt.numero(min(valores))}.{excluido} El periodo que tomes como "
+            "base cambia cualquier porcentaje que calcules, y a veces le cambia "
+            "el signo."
         )
     return sobre.render(lambda f: fmt.tabla_markdown(f), formato=formato)
 
@@ -139,10 +147,9 @@ def _avisa_periodo_incompleto(sobre: Sobre, filas: list, corte: str, periodo: st
     if not (corte and filas):
         return
     ultimo = filas[-1]["periodo"]
-    cerrado = {"anio": corte.endswith("-12-31"),
-               "mes": corte[8:10] in ("28", "29", "30", "31"),
-               "dia": True}[periodo]
-    if ultimo == corte[:len(ultimo)] and not cerrado:
+    # La detección vive en `periodos`: aquí estaba duplicada y era aproximada
+    # —daba por cerrado cualquier mes acabado en 28-31, y abril no tiene 31—.
+    if periodos.incompleto(ultimo, corte, periodo):
         sobre.advertir(
             f"ATENCIÓN: los datos cortan el {corte}, así que «{ultimo}» está "
             "INCOMPLETO. Compararlo con periodos cerrados produce caídas que no "

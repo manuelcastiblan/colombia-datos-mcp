@@ -535,3 +535,35 @@ async def test_contar_grupos_no_tumba_una_respuesta_que_ya_tiene_datos(monkeypat
     assert meta.get("total_coincidencias") is None
     assert len(salida["estructurado"]["datos"]) == 3      # los datos sobreviven
     assert "desconocido" in " ".join(meta["advertencias"]).lower()
+
+
+# ------------------------- periodos sin cerrar (0.12.0) --------------------
+def test_cerrado_usa_el_calendario_no_una_lista_de_dias_plausibles():
+    """La versión anterior daba por cerrado cualquier mes acabado en 28-31.
+    Abril no tiene 31 días, y febrero cierra el 28 o el 29 según el año."""
+    from colombia_datos_mcp.domain import periodos
+    assert periodos.cerrado("2026-04-30", "mes") is True      # abril cierra el 30
+    assert periodos.cerrado("2026-04-29", "mes") is False
+    assert periodos.cerrado("2024-02-29", "mes") is True      # bisiesto
+    assert periodos.cerrado("2026-02-28", "mes") is True
+    assert periodos.cerrado("2026-12-31", "anio") is True
+    assert periodos.cerrado("2026-07-31", "anio") is False    # julio no cierra el año
+    assert periodos.cerrado("2026-07-15", "dia") is True      # un día siempre cierra
+
+
+def test_incompleto_solo_marca_el_periodo_donde_cortan_los_datos():
+    from colombia_datos_mcp.domain import periodos
+    assert periodos.incompleto("2026", "2026-07-31", "anio") is True
+    assert periodos.incompleto("2025", "2026-07-31", "anio") is False   # ya cerró
+    assert periodos.incompleto("2026", "2026-12-31", "anio") is False   # cerró entero
+    assert periodos.incompleto("", "2026-07-31", "anio") is False
+    assert periodos.incompleto("2026", None, "anio") is False
+
+
+def test_comparables_quita_el_ultimo_solo_si_no_cerro():
+    from colombia_datos_mcp.domain import periodos
+    serie = [{"periodo": "2024"}, {"periodo": "2025"}, {"periodo": "2026"}]
+    assert len(periodos.comparables(serie, "2026-07-31", "anio")) == 2
+    assert len(periodos.comparables(serie, "2026-12-31", "anio")) == 3
+    assert len(periodos.comparables(serie, None, "anio")) == 3
+    assert periodos.comparables([], "2026-07-31", "anio") == []
