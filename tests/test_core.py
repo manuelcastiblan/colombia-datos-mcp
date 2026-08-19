@@ -213,3 +213,19 @@ def test_las_columnas_salen_de_todas_las_filas_no_solo_de_la_primera():
     tabla = fmt.tabla_markdown(filas)
     assert "fecha" in tabla.splitlines()[0]
     assert "2025-01-31" in tabla
+
+
+def test_sin_conteo_no_se_advierte_de_estar_viendo_una_parte():
+    """`datos` no siempre son filas: en co_geo_limites es un FeatureCollection y
+    en la exportación la ficha del fichero. Decir «viendo 1 de 2 coincidencias»
+    sobre eso es falso, y arrastra el aviso de no sacar conclusiones."""
+    s = Sobre(datos=[{"coleccion": "entera"}], total_coincidencias=2,
+              mostrar_conteo=False)
+    salida = s.render(lambda _f: "cuerpo")
+    assert "Viendo" not in salida["texto"]
+    assert salida["estructurado"]["_meta"].get("siguiente_offset") is None
+
+
+def test_con_conteo_el_aviso_sigue_saliendo():
+    s = Sobre(datos=[{"a": 1}], total_coincidencias=20)
+    assert "Viendo 1 de 20" in s.render(lambda _f: "cuerpo")["texto"]

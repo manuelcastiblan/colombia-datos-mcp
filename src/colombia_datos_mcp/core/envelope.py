@@ -60,7 +60,7 @@ class Sobre:
             "total_coincidencias": self.total_coincidencias,
             "devueltos": self.devueltos,
             "offset": self.offset,
-            "siguiente_offset": self.siguiente_offset,
+            "siguiente_offset": self.siguiente_offset if self.mostrar_conteo else None,
             "orden": self.orden,
             "detalle": self.detalle.value,
             "truncado": self.truncado,
@@ -101,7 +101,8 @@ class Sobre:
                 "usa detalle='conteo' para contar sin traer filas, o pagina con "
                 f"offset={self.siguiente_offset}."
             )
-        if self.total_coincidencias is not None and self.devueltos < self.total_coincidencias:
+        if (self.mostrar_conteo and self.total_coincidencias is not None
+                and self.devueltos < self.total_coincidencias):
             self.advertir(
                 f"Viendo {self.devueltos} de {self.total_coincidencias} coincidencias. "
                 "Cualquier conclusión cuantitativa debe usar una herramienta de agregación, "

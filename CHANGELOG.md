@@ -2,6 +2,18 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.6.1] — 2026-08-18
+
+### Corregido
+
+- **El sobre decía «Viendo 1 de 2 coincidencias» en respuestas cuyos `datos` no
+  son filas.** En `co_geo_limites` los datos son un FeatureCollection y en la
+  exportación la ficha del fichero, así que `devueltos` contaba el envoltorio y
+  no su contenido: la geometría de San Andrés y Providencia salía con las dos
+  islas dentro y el sobre afirmando que faltaba una, arrastrando además el aviso
+  de no sacar conclusiones cuantitativas. Ahora ese aviso y `siguiente_offset`
+  respetan `mostrar_conteo`, igual que ya hacía el pie.
+
 ## [0.6.0] — 2026-08-18
 
 ### Añadido
