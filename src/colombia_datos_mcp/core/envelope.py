@@ -11,11 +11,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import format as fmt
-from .budget import Detalle, PRESUPUESTO_POR_DEFECTO, ajusta_filas, estima_tokens
+from .budget import Detalle, PRESUPUESTO_POR_DEFECTO, ajusta_filas
 
 
-# Los dos avisos que se añaden DESPUÉS de recortar. Son constantes para poder
-# reservar su coste antes de decidir cuántas filas caben, sin duplicar el texto.
+# Los dos avisos que dependen de cuánto se recorte. Van aquí para que el texto
+# medido y el texto enviado sean literalmente el mismo objeto.
 PLANTILLA_RECORTE = (
     "Respuesta recortada por presupuesto de tokens. Refina con filtros, usa "
     "detalle='conteo' para contar sin traer filas, o pagina con offset={offset}."
@@ -107,34 +107,38 @@ class Sobre:
             def cuerpo(filas, _serializa=serializa, _f=formato):
                 return f"```{_f}\n{_serializa(filas)}\n```"
 
-        # El pie —procedencia, URL reproducible y advertencias— es parte de la
-        # respuesta y no se descontaba: una tabla de 200 filas se pasaba 196
-        # tokens, y el exceso crece con cada advertencia y con lo larga que sea
-        # la URL (las de plegado de acentos rondan los 700 caracteres).
-        #
-        # Y no basta con reservar el pie actual: recortar AÑADE avisos, así que
-        # hay que reservar también los que solo existirán si se recorta. Si no,
-        # el propio aviso de recorte empuja la respuesta por encima del
-        # presupuesto que ese recorte acababa de imponer.
-        reserva = estima_tokens(
-            self._pie()
-            + PLANTILLA_RECORTE.format(offset=self.siguiente_offset)
-            + PLANTILLA_PARCIAL.format(devueltos=self.devueltos,
-                                       total=self.total_coincidencias,
-                                       detalle=self.aviso_parcial)
-        )
-        disponible = max(presupuesto - reserva, presupuesto // 4)
-        filas, texto, recortado = ajusta_filas(self.datos, cuerpo, disponible)
-        if recortado:
+        todas = list(self.datos)
+        base = list(self.advertencias)
+
+        def respuesta(filas):
+            """El texto REAL que se enviaría con ese recorte: cuerpo, pie,
+            procedencia y avisos incluidos.
+
+            Antes se medía solo el cuerpo y se estimaba el resto, con dos
+            fallos encadenados: el pie no se descontaba —200 filas se pasaban
+            196 tokens— y, al reservarlo, recortar AÑADE avisos, así que el
+            propio aviso de recorte empujaba la respuesta por encima del
+            presupuesto que ese recorte acababa de imponer. Midiendo lo que se
+            manda, en vez de una parte y un cálculo, el problema no existe: no
+            hay reserva que se pueda quedar corta.
+            """
             self.datos = filas
-            self.truncado = True
-            self.advertir(PLANTILLA_RECORTE.format(offset=self.siguiente_offset))
-        if (self.mostrar_conteo and self.total_coincidencias is not None
-                and self.devueltos < self.total_coincidencias):
-            self.advertir(PLANTILLA_PARCIAL.format(
-                devueltos=self.devueltos, total=self.total_coincidencias,
-                detalle=self.aviso_parcial))
-        return {"texto": texto + "\n\n" + self._pie(), "estructurado": {"datos": self.datos, "_meta": self.meta()}}
+            self.advertencias = list(base)
+            self.truncado = len(filas) < len(todas)
+            if self.truncado:
+                self.advertir(PLANTILLA_RECORTE.format(offset=self.siguiente_offset))
+            if (self.mostrar_conteo and self.total_coincidencias is not None
+                    and self.devueltos < self.total_coincidencias):
+                self.advertir(PLANTILLA_PARCIAL.format(
+                    devueltos=self.devueltos, total=self.total_coincidencias,
+                    detalle=self.aviso_parcial))
+            return cuerpo(filas) + "\n\n" + self._pie()
+
+        # `ajusta_filas` deja siempre el estado en la selección que devuelve,
+        # así que `self.datos` y las advertencias quedan coherentes con `texto`.
+        _filas, texto, _recortado = ajusta_filas(todas, respuesta, presupuesto)
+        return {"texto": texto,
+                "estructurado": {"datos": self.datos, "_meta": self.meta()}}
 
     def _pie(self) -> str:
         lineas = []

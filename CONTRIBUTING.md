@@ -12,9 +12,26 @@ pytest
 | Núcleo | `tests/test_core.py` | No | Sobre, presupuesto, coordenadas, HTTP, caché, formato. |
 | Texto | `tests/test_texto.py` | No | Plegado y comparación de nombres, con las mediciones que justifican la estrategia. |
 | Dominio y servidor | `tests/test_dominio.py`, `tests/test_servidor.py` | No | Filtros, proyecciones y herramientas, con la red simulada por `RedFalsa`. |
+| Invariantes | `tests/test_invariantes.py` | No | Lo que **toda** herramienta debe cumplir, recorriéndolas todas. |
 | Contrato | `tests/test_contrato.py` | **Sí** | Los supuestos sobre la fuente viva. Se pide con `pytest -m contrato`. |
 
 `pytest` a secas excluye la suite de contrato (`addopts = "-m 'not contrato'"`).
+
+### Si añades una herramienta, tendrás que clasificarla
+
+`test_invariantes.py` falla mientras tu herramienta nueva no esté en `CASOS` o
+en `EXENTAS`. No es burocracia: el defecto más repetido de este servidor
+—declarar `total_coincidencias = len(filas)` sobre un resultado ya recortado por
+`$limit`— llegó a **seis** herramientas porque cada una decidía por su cuenta y
+nada preguntaba. Se arregló en una y siguió vivo en cinco.
+
+* **`CASOS`**: tu herramienta devuelve filas traídas con `$limit`. Añade unos
+  argumentos mínimos y la prueba comprobará que, con una fuente que llena el
+  límite y no deja contar los grupos, tu respuesta **no se declara completa**.
+  Para cumplirlo, usa `domain/agregacion.anota_total()`; no calcules el total a
+  mano.
+* **`EXENTAS`**: no aplica. Escribe el motivo, que se lee. «Se me olvidó» y «no
+  aplica» son indistinguibles desde fuera si el hueco está vacío.
 
 ### Qué significa que falle el contrato
 

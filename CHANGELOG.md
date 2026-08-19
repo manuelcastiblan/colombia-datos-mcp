@@ -2,6 +2,39 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.10.0] — 2026-08-19
+
+Dos auditorías seguidas encontraron el mismo patrón: los defectos de este
+servidor no son de cálculo, son **respuestas que afirman más de lo que
+comprobaron**. Esta versión no arregla otro caso; ataca las dos razones por las
+que se repetía.
+
+### Cambiado
+
+- **El presupuesto de tokens se mide, ya no se estima.** 0.9.0 reservaba el
+  coste del pie con aritmética, y la propia prueba lo pilló corto: recortar
+  añade avisos, así que el aviso de recorte empujaba la respuesta por encima
+  del presupuesto que ese recorte acababa de imponer. Ahora la función que se
+  mide **es** la que se envía —cuerpo, pie, procedencia y avisos incluidos—, de
+  modo que no queda reserva que pueda quedarse corta. Desaparece el cálculo y
+  con él la clase de error.
+
+### Añadido
+
+- **`tests/test_invariantes.py`: lo que toda herramienta debe cumplir,
+  comprobado en todas a la vez.** Con una fuente simulada que siempre llena el
+  `$limit` y nunca deja contar los grupos, ninguna respuesta puede declarar
+  `total == devueltos`: o el total consta, o sale desconocido y se advierte.
+
+  Y lo que de verdad cierra el patrón: **la prueba falla mientras una
+  herramienta nueva no esté clasificada** en `CASOS` o en `EXENTAS` —con su
+  motivo escrito—. Las seis instancias del error no se escribieron a la vez, se
+  fueron añadiendo una a una sin que nada preguntara. Ahora pregunta.
+
+  Verificado retirando la llamada al helper en `co_crimen_por_municipio`, que
+  es exactamente como se escribiría una herramienta nueva descuidada: la prueba
+  falla y dice qué hacer.
+
 ## [0.9.0] — 2026-08-19
 
 Segunda auditoría. La primera cosa que revisó fue el código de 0.8.0, y ahí
