@@ -151,6 +151,70 @@ contratos.
 códigos son **texto con ceros a la izquierda** (`05`, `08`). Tratarlos como
 enteros rompe todos los joins.
 
+## Criminalidad · MinDefensa
+
+23 datasets con esquema idéntico: `cod_muni`, `cod_depto`, `municipio`,
+`departamento`, `fecha_hecho` y `cantidad`. Verificados contra la API el
+18-ago-2026. Todos vienen **ya agregados**: sin nombres, edades ni direcciones.
+
+| Clave | ID | Desde | Casos acumulados | Una fila cuenta… |
+|---|---|---|---|---|
+| `abigeato` | `p88b-5ac7` | 2003 | 49.973 | una cabeza de ganado hurtada |
+| `afectacion_fuerza_publica` | `8rpn-wpty` | 2010 | 25.355 | un miembro de la fuerza pública afectado |
+| `delitos_ambientales` | `9zck-qfvc` | 2003 | 85.904 | un delito ambiental |
+| `delitos_informaticos` | `4v6r-wu98` | 2006 | 514.987 | un delito informático |
+| `delitos_sexuales` | `bz43-8ahq` | 2003 | 445.829 | una víctima de delito sexual |
+| `extorsion` | `q2ib-t9am` | 2003 | 130.150 | un caso de extorsión |
+| `homicidio` | `m8fd-ahd9` | 2003 | 343.680 | una víctima de homicidio |
+| `homicidio_transito` | `uav5-b85g` | 2003 | 127.172 | una víctima en accidente de tránsito |
+| `hurto_comercio` | `7i2x-h5vp` | 2003 | 614.669 | un hurto a comercio |
+| `hurto_financieras` | `i7h7-wmjc` | 2003 | 2.529 | un hurto a entidad financiera |
+| `hurto_personas` | `4rxi-8m8d` | 2003 | 3.751.174 | un hurto a persona |
+| `hurto_residencias` | `7mn7-vzqp` | 2003 | 614.669 | un hurto a residencia |
+| `hurto_vehiculos` | `csb4-y6v2` | 2003 | 804.192 | un hurto de vehículo |
+| `invasion_tierras` | `kvjj-d2ay` | 2003 | 16.003 | un caso de invasión de tierras |
+| `lesiones` | `jr6v-i33g` | 2003 | 1.900.780 | una víctima de lesiones personales |
+| `lesiones_transito` | `ntej-qq7v` | 2003 | 874.723 | una víctima lesionada en accidente |
+| `pirateria_terrestre` | `sutf-7dyz` | 2003 | 10.486 | un caso de piratería terrestre |
+| `secuestro` | `d7zw-hpf4` | 2003 | 10.766 | una víctima de secuestro |
+| `terrorismo` | `yi5j-5fe9` | 2003 | 15.563 | un hecho terrorista |
+| `trata_personas` | `95c7-mm6s` | 2003 | 6.195 | una víctima de trata |
+| `violencia_intrafamiliar` | `gepp-dxcs` | 2003 | 1.619.948 | un caso de violencia intrafamiliar |
+| `voladura_oleoductos` | `ec2r-4byk` | 2007 | 1.372 | una voladura de oleoducto |
+| `voladura_puentes` | `m98b-cdys` | 2003 | 1.348 | una voladura de puente o vía |
+
+`cod_muni` es la clave DIVIPOLA, así que el cruce con geometría o con cualquier
+otra fuente territorial es **por código**, sin pasar por el nombre.
+
+### Los 14 datasets que quedan fuera, y por qué
+
+MinDefensa publica **37** con este mismo esquema. Los otros 14 son operativos
+del Estado —incautaciones, erradicación, aspersión, minas intervenidas, capturas
+por minería ilegal, destrucción de infraestructura— y **no comparten unidad**:
+
+- En `ERRADICACIÓN` (`p72f-qcvk`) la `cantidad` son **hectáreas**: la columna
+  `unidad` vale `HECTAREA` en las 145.958 filas.
+- En `INCAUTACIONES DE COCAÍNA` (`26zg-9p9r`) la columna `unidad` trae valores
+  como `0.002` y `0.003`: son cantidades, no unidades.
+- En `MINAS INTERVENIDAS` (`gr35-i7pm`) el `unidad_de_medida` es nulo en las
+  15.827 filas.
+
+Sumar eso junto a homicidios sería sumar kilos con personas, así que el registro
+no los expone. Una prueba de contrato vigila que la unidad de `ERRADICACIÓN`
+siga siendo hectáreas: si algún día se unificara, podrían entrar.
+
+### Dos trampas del dato
+
+**`HURTO A COMERCIO` y `HURTO A RESIDENCIAS` son el mismo dataset.** 613.637
+filas y 614.669 casos en ambos, idénticos año por año. Uno de los dos títulos
+está mal en la fuente y no hay forma de saber cuál desde los datos. **Nunca los
+sumes**: duplicarías la cifra de hurtos. Ambos llevan la nota en el registro y
+hay contrato que lo comprueba.
+
+**`cantidad` no siempre vale uno.** Un hecho puede tener varias víctimas:
+homicidio tiene 342.971 filas y 343.680 víctimas; violencia intrafamiliar,
+665.687 filas y 1.619.948 casos. Se suma `cantidad`, nunca se cuentan filas.
+
 ## Cadenas de atribución
 
 El facet `attribution` de la Discovery API solo acepta el literal completo:

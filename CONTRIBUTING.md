@@ -60,6 +60,13 @@ las fixtures tenían los acentos bien puestos.
 3. Añade la prueba de contrato que compruebe que sigue existiendo y que sus
    campos clave no desaparecieron.
 
+Si el dataset pertenece a una familia —como los 37 de MinDefensa que comparten
+esquema— **verifica que la unidad sea la misma antes de meterlos juntos**. Ahí
+`ERRADICACIÓN` cuenta hectáreas y `HOMICIDIO` cuenta víctimas: el esquema
+idéntico no garantiza que se puedan sumar. Y comprueba que no sean duplicados:
+`HURTO A COMERCIO` y `HURTO A RESIDENCIAS` resultaron ser el mismo dato con dos
+nombres.
+
 ## Añadir un filtro de texto
 
 Decide primero si el campo tiene **dominio cerrado**:

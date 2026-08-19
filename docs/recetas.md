@@ -270,6 +270,79 @@ Se apagan con `grafica=false`, y no aparecen si pides `formato="csv"`.
 
 ---
 
+## Criminalidad: mira la serie antes del porcentaje
+
+Es la receta más importante del módulo, porque el error es muy fácil de cometer.
+
+```
+co_crimen_comparar(anio_a=2017, anio_b=2025, delitos="secuestro,extorsion,homicidio")
+```
+
+```markdown
+| delito | 2017 | 2025 | cambio |
+|---|---|---|---|
+| Secuestro | 195 | 701 | +259 % |
+| Extorsion | 5.532 | 13.417 | +143 % |
+| Homicidio | 11.957 | 14.038 | +17 % |
+```
+
+**+259 % en secuestro** parece una catástrofe. Ahora mira de dónde viene:
+
+```
+co_crimen_serie(delito="secuestro", desde=2003, hasta=2006)
+```
+
+```markdown
+| periodo | casos | gráfica |
+|---|---|---|
+| 2003 | 2.121 | ████████████████ |
+| 2004 | 1.440 | ██████████▉ |
+| 2005 | 800 | ██████ |
+| 2006 | 687 | █████▏ |
+```
+
+2.121 casos en 2003, 195 en 2017, 701 en 2025. Contra 2017 subió 259 %; contra
+2003 **bajó 67 %**. Las dos cifras son ciertas y describen la misma serie.
+
+Por eso `co_crimen_serie` devuelve el máximo y el mínimo junto a los datos: para
+que no se pueda citar un porcentaje sin ver contra qué se mide. **Un porcentaje
+sin su serie es técnicamente cierto y sustancialmente engañoso.**
+
+### Dónde ocurre un delito
+
+```
+co_crimen_por_municipio(delito="extorsion", anio=2025, limite=4)
+```
+
+```markdown
+| municipio | departamento | cod_mpio | casos | gráfica |
+|---|---|---|---|---|
+| BOGOTA D.C. | BOGOTA D.C. | 11001 | 2.228 | ████████████████ |
+| MEDELLIN | ANTIOQUIA | 05001 | 972 | ███████ |
+| BARRANQUILLA | ATLANTICO | 08001 | 729 | █████▎ |
+| CALI | VALLE DEL CAUCA | 76001 | 435 | ███▏ |
+```
+
+Fíjate en `cod_mpio`: es la clave DIVIPOLA, y sirve para cruzar con geometría o
+con cualquier otra fuente territorial **por código**, sin pasar por el nombre —
+que es donde se pierden Cali, Cartagena y Cúcuta.
+
+Y fíjate en lo que la lista **no** dice: son conteos absolutos, no tasas. La
+fuente no publica proyecciones municipales de población, así que este ranking se
+parece mucho a un ranking de municipios grandes. Acota con `departamento` si lo
+que buscas es el reparto dentro de una región.
+
+### Tres trampas que el módulo ya absorbe
+
+- **Casos registrados ≠ delitos cometidos.** Una subida en extorsión o violencia
+  intrafamiliar puede ser más denuncia. El homicidio es el menos sensible a eso.
+- **`HURTO A COMERCIO` y `HURTO A RESIDENCIAS` son el mismo dato.** Sumarlos
+  duplica la cifra. Ambos llevan la advertencia.
+- **Cada dataset corta por su cuenta**, en general a finales de julio de 2026. El
+  último año está incompleto y compararlo con años cerrados inventa caídas.
+
+---
+
 ## Leer el sobre
 
 Todas las respuestas terminan igual:

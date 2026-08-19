@@ -5,7 +5,7 @@ Servidor MCP para datos públicos de Colombia: catálogo nacional de
 división territorial (DIVIPOLA). 16 herramientas, sin credenciales.
 
 Esta es la **fase F0 + la mitad Socrata de F1** del diseño: núcleo completo,
-adaptador de Socrata y los módulos de catálogo, SECOP y DIVIPOLA.
+adaptador de Socrata y los módulos de catálogo, SECOP, DIVIPOLA y crimen.
 
 > **Si vas a citar una cifra de aquí, lee
 > [Antes de citar una cifra](#antes-de-citar-una-cifra).** Estos datos tienen
@@ -468,9 +468,9 @@ esquema.**
 
 | Documento | Para qué |
 |---|---|
-| [docs/herramientas.md](docs/herramientas.md) | Las 12 herramientas: parámetros, valores por defecto y topes. |
+| [docs/herramientas.md](docs/herramientas.md) | Las 16 herramientas: parámetros, valores por defecto y topes. |
 | [docs/recetas.md](docs/recetas.md) | Secuencias que funcionan, con las trampas de cada una y cómo leer el sobre. |
-| [docs/fuentes.md](docs/fuentes.md) | Los 11 datasets: unidad de análisis, campos clave, joins y atribuciones. |
+| [docs/fuentes.md](docs/fuentes.md) | Los 34 datasets: unidad de análisis, campos clave, joins y atribuciones. |
 | [docs/arquitectura.md](docs/arquitectura.md) | Cómo está construido, y qué **no** hace todavía. |
 | [docs/operacion.md](docs/operacion.md) | Diagnóstico: caché, throttling, timeouts, y por qué el servidor no recoge tus cambios. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Las capas de prueba y cómo añadir un dataset o un filtro. |
@@ -480,11 +480,14 @@ esquema.**
 
 Implementado: núcleo (sobre, presupuesto, caché de dos niveles, HTTP con
 autolímite y circuit breaker, errores tipados, coordenadas), adaptador Socrata,
-comparación de nombres tolerante a acentos, y los módulos de catálogo, SECOP y
-DIVIPOLA. CI con las pruebas sin red en Python 3.11-3.13 y el contrato programado
-a diario.
+comparación de nombres tolerante a acentos, extracción estructurada con
+exportación a disco, y los módulos de catálogo, SECOP, DIVIPOLA y criminalidad.
+CI con las pruebas sin red en Python 3.11-3.13 y el contrato programado a diario.
 
-Pendiente, en orden: adaptador SDMX para Banco de la República, adaptador ArcGIS
+Pendiente, en orden: una herramienta genérica de series temporales y otra de
+perfilado de calidad del dato —las dos nacieron de errores concretos: comparar
+un año incompleto con años cerrados, y descubrir a mano los valores imposibles
+de SECOP—; adaptador SDMX para Banco de la República, adaptador ArcGIS
 (IGAC / MGN del DANE) con descubrimiento dinámico del corte vigente, el motor de
 privacidad, y solo después los módulos de seguridad y DDHH.
 

@@ -1,6 +1,6 @@
 # Referencia de herramientas
 
-13 herramientas contra `datos.gov.co`, todas de solo lectura salvo
+16 herramientas contra `datos.gov.co`, todas de solo lectura salvo
 `co_datos_exportar`, la única que escribe.
 
 Los parámetros y sus valores por defecto salen del esquema que el servidor
@@ -298,6 +298,82 @@ Una discrepancia grande **no implica que una fuente esté mal**: las áreas no
 municipalizadas y los municipios con cabecera trasladada aparecen aquí de forma
 legítima. Es un hallazgo sobre la calidad del dato oficial, no un error del
 servidor.
+
+---
+
+## Criminalidad
+
+23 datasets de **MinDefensa** con esquema común (`cod_muni`, `fecha_hecho`,
+`cantidad`), verificados uno a uno contra la API. `delito` acepta cualquiera de
+estas claves, con o sin acentos:
+
+`abigeato`, `afectacion_fuerza_publica`, `delitos_ambientales`,
+`delitos_informaticos`, `delitos_sexuales`, `extorsion`, `homicidio`,
+`homicidio_transito`, `hurto_comercio`, `hurto_financieras`, `hurto_personas`,
+`hurto_residencias`, `hurto_vehiculos`, `invasion_tierras`, `lesiones`,
+`lesiones_transito`, `pirateria_terrestre`, `secuestro`, `terrorismo`,
+`trata_personas`, `violencia_intrafamiliar`, `voladura_oleoductos`,
+`voladura_puentes`.
+
+Tres avisos van en **todas** las respuestas del módulo, y no son decorativos:
+
+- **Son casos registrados, no delitos cometidos.** Una subida puede ser más
+  denuncia y no más delito. El homicidio es el indicador menos sensible a eso.
+- **Se suma `cantidad`, nunca se cuentan filas.** Un hecho puede tener varias
+  víctimas: homicidio tiene 342.971 filas y 343.680 víctimas.
+- **Cada dataset corta por su cuenta.** Se consulta `max(fecha_hecho)` y se
+  avisa de que el último año está incompleto.
+
+### `co_crimen_serie`
+
+Serie temporal de un delito desde 2003.
+
+| Parámetro | Tipo | Defecto | Notas |
+|---|---|---|---|
+| `delito` | string | obligatorio | Una de las claves de arriba. |
+| `desde` / `hasta` | int | `0` | Años. `0` = sin límite. |
+| `agrupar_por` | string | `"anio"` | `anio` o `mes`. |
+| `formato` | string | `"tabla"` | `tabla`, `csv` o `json`. |
+| `grafica` | bool | `true` | Barras proporcionales. |
+
+Devuelve además el **máximo y el mínimo de la serie**. No es adorno: es lo que
+impide citar un porcentaje sin ver contra qué año se mide.
+
+### `co_crimen_por_municipio`
+
+Municipios con más casos de un delito en un año.
+
+| Parámetro | Tipo | Defecto | Notas |
+|---|---|---|---|
+| `delito` | string | obligatorio | |
+| `anio` | int | obligatorio | |
+| `limite` | int | `20` | Tope 100. |
+| `departamento` | string | `""` | Dominio cerrado: se resuelve al valor canónico. |
+| `formato` | string | `"tabla"` | |
+| `grafica` | bool | `true` | |
+
+Devuelve `cod_mpio`, la clave DIVIPOLA, para cruzar con geometría u otras
+fuentes sin pasar por el nombre.
+
+**Son conteos absolutos, no tasas.** La fuente no publica proyecciones
+municipales de población —se buscaron, incluido el facet del DANE, y no están—,
+así que la lista se parece mucho a una lista de municipios grandes.
+
+### `co_crimen_comparar`
+
+Varios delitos entre dos años, ordenados por variación.
+
+| Parámetro | Tipo | Defecto | Notas |
+|---|---|---|---|
+| `anio_a` | int | obligatorio | Año base. |
+| `anio_b` | int | obligatorio | Año contra el que se compara. |
+| `delitos` | string | `""` | Lista separada por comas; vacío compara todos. Máximo 12. |
+| `formato` | string | `"tabla"` | |
+
+**El año base decide el titular**, y el sobre lo recuerda. El secuestro subió
+259 % contra 2017 y bajó 67 % contra 2003: es la misma serie —2.121 casos en
+2003, 195 en 2017, 701 en 2025—. Mira `co_crimen_serie` antes de citar un
+porcentaje.
 
 ---
 
