@@ -138,6 +138,13 @@ si llenó el límite, se cuentan aparte anidando. Cuando la fuente no admite el
 operador anidado el total sale **desconocido** y el sobre lo advierte: es
 preferible a un número inventado que luego alguien cite.
 
+Esto vale para **toda** herramienta que agrupe, no solo para esta:
+`co_secop_agregar`, `co_secop_resolver_entidad`, `co_secop_perfil_proveedor`,
+`co_crimen_por_municipio`, `co_crimen_serie` y `co_datos_serie` comparten la
+misma función (`domain/agregacion.py`). Antes cada una afirmaba que las filas
+mostradas eran todas las que había: un `co_secop_agregar` por proveedor decía
+«5 de 5» habiendo 525.759.
+
 Con `grafica` (por defecto activa):
 
 ```
@@ -174,6 +181,11 @@ Serie temporal sobre cualquier dataset.
 | `donde` | string | `""` | `$where` adicional. |
 | `formato` | string | `"tabla"` | |
 | `grafica` | bool | `true` | |
+
+**El tope es de 2.000 periodos y con `periodo="dia"` se alcanza.** SECOP II
+tiene 3.646 días distintos con firmas, así que una serie diaria sin acotar se
+corta. El sobre lo declara —«Viendo 867 de 3.646»— pero la serie recortada no
+sirve para nada cuantitativo: acota con `desde`/`hasta` o usa `periodo="mes"`.
 
 **Avisa cuando el último periodo está incompleto.** Consulta
 `max(campo_fecha)` y compara: si la serie anual termina en un año cuyos datos

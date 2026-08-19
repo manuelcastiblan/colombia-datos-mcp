@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+
+from . import agregacion
 from ..adapters import socrata
 from ..core import format as fmt
 from ..core.budget import Detalle
@@ -119,8 +122,8 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
 
     await socrata.valida_campos(dataset_id, _campos_citados(seleccionar, donde, ordenar))
 
-    total = await socrata.contar(dataset_id, donde=donde)
     if nivel is Detalle.CONTEO:
+        total = await socrata.contar(dataset_id, donde=donde)
         sobre = Sobre(datos=[], total_coincidencias=total, detalle=nivel, fuente=fuente,
                       consulta=socrata.url_reproducible(
                           f"{socrata.BASE_DATOS}/resource/{dataset_id}.json",
@@ -128,8 +131,14 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
         return sobre.render(lambda _f: f"**{fmt.numero(total)}** filas coinciden con el filtro.")
 
     limite = min(int(limite), 200 if nivel is Detalle.RESUMEN else 20)
-    r = await socrata.consultar(dataset_id, seleccionar=seleccionar, donde=donde,
-                                ordenar=ordenar, limite=limite, offset=offset)
+    # El conteo y la página iban encadenados sin motivo: dos viajes en serie a
+    # la misma fuente, y en un dataset de millones de filas el `count(*)` no es
+    # gratis. Ahora la latencia es la del más lento, no la suma de los dos.
+    total, r = await asyncio.gather(
+        socrata.contar(dataset_id, donde=donde),
+        socrata.consultar(dataset_id, seleccionar=seleccionar, donde=donde,
+                          ordenar=ordenar, limite=limite, offset=offset),
+    )
     filas = r["filas"]
     if nivel is Detalle.RESUMEN:
         conocido = reg.por_id(dataset_id)
@@ -190,29 +199,12 @@ async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
         for fila, dibujo in zip(filas, dibujos):
             fila["gráfica"] = dibujo
 
-    # `total_coincidencias` era len(filas): la respuesta juraba «12 de 12»
-    # habiendo 2.356 grupos, que es exactamente la mentira que este sobre
-    # existe para evitar. Si la fuente devolvió menos de lo pedido, no hay más
-    # y el total es exacto y gratis; si llenó el límite, hay que contar los
-    # grupos aparte, y eso solo se puede anidando.
-    if len(r["filas"]) < limite:
-        total = len(filas)
-    elif luego:
-        total = None  # contar las filas de la 2.ª etapa exigiría una 3.ª
-    else:
-        total = await socrata.contar_grupos(dataset_id, seleccionar, agrupar_por,
-                                            donde=donde, teniendo=teniendo)
-
-    sobre = Sobre(datos=filas, total_coincidencias=total, orden=orden,
-                  consulta=r["consulta"], fuente=_fuente_de(esq, dataset_id),
-                  aviso_parcial=("Los grupos no mostrados NO están en esta tabla: "
-                                 "cualquier suma sobre estas filas es parcial. "
-                                 "Sube `limite` o afina `donde`."))
-    if total is None:
-        sobre.advertir(
-            "Total de grupos desconocido: la fuente no admitió contarlos. Puede "
-            f"haber más de los {len(filas)} mostrados; no los tomes por todos."
-        )
+    sobre = Sobre(datos=filas, orden=orden, consulta=r["consulta"],
+                  fuente=_fuente_de(esq, dataset_id))
+    # `contable=not luego`: contar las filas de una 2.ª etapa exigiría una 3.ª.
+    await agregacion.anota_total(sobre, r["filas"], limite, dataset_id=dataset_id,
+                                 seleccionar=seleccionar, agrupar=agrupar_por,
+                                 donde=donde, teniendo=teniendo, contable=not luego)
     if not donde:
         sobre.advertir(
             "Agregación sin filtro: hace full scan y en datasets grandes puede agotar "
@@ -222,35 +214,46 @@ async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
 
 
 # ------------------------------------------------------------- auxiliares --
+# Palabras que aparecen SUELTAS en SoQL. No incluye funciones: una función va
+# siempre seguida de `(`, y eso se detecta en vez de enumerarse.
+_PALABRAS_SOQL = {
+    "and", "or", "not", "is", "null", "between", "like", "in", "as", "asc", "desc",
+    "true", "false", "distinct", "case", "when", "then", "else", "end", "by",
+    "select", "where", "group", "having", "order", "limit", "offset",
+}
+
+
 def _campos_citados(*expresiones):
-    """Extrae identificadores plausibles de las expresiones SoQL del modelo."""
+    """Identificadores que tienen que existir en el esquema.
+
+    Antes se contrastaban contra una lista cableada de ~60 nombres de función y
+    todo lo que faltara se tomaba por columna, así que el validador **fallaba
+    cerrado** sobre SoQL perfectamente válido: `char_length(x)` se rechazaba
+    porque la función no estaba en la lista, y `x as entidad` porque el alias
+    tampoco. Cada rechazo falso costaba además ~900 tokens listando el esquema.
+
+    Las dos reglas de verdad no necesitan vocabulario:
+
+    * un identificador seguido de `(` es una **función**;
+    * un identificador precedido de `as` es un **alias** que se está declarando.
+
+    Ninguno de los dos es una columna, y toda función y todo alias los cumplen,
+    presentes y futuros. Lo que queda por enumerar son solo las palabras sueltas
+    del lenguaje, que sí son un conjunto cerrado.
+    """
     import re
-    # Toda palabra que falte aquí se toma por columna y produce un
-    # [VALIDACION] falso: `distinct departamento` se rechazaba como si
-    # `distinct` fuera un campo inexistente.
-    reservadas = {
-        "and", "or", "not", "is", "null", "between", "like", "in", "count", "sum",
-        "avg", "min", "max", "as", "asc", "desc", "true", "false", "upper", "lower",
-        "starts_with", "date_trunc_y", "date_trunc_ym", "date_trunc_ymd",
-        "distinct", "case", "when", "then", "else", "end", "coalesce", "nullif",
-        "abs", "round", "floor", "ceil", "length", "trim", "concat", "substring",
-        "replace", "contains", "sqrt", "pow", "exp", "ln", "log", "signum",
-        "stddev_pop", "stddev_samp", "var_pop", "var_samp", "median",
-        "count_distinct", "date_extract_y", "date_extract_m", "date_extract_d",
-        "date_extract_hh", "date_extract_mm", "date_extract_ss", "date_extract_dow",
-        "date_extract_woy", "within_circle", "within_box", "within_polygon",
-        "distance_in_meters", "simplify", "convex_hull", "extent", "num_points",
-        "asin", "acos", "atan", "sin", "cos", "tan", "to_floating_timestamp",
-        "limit", "offset", "order", "group", "having", "select", "where", "by",
-    }
     encontrados = set()
     for e in expresiones:
         if not e:
             continue
         sin_literales = re.sub(r"'[^']*'", " ", str(e))
-        for token in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", sin_literales):
-            if token.lower() not in reservadas:
+        previo = ""
+        for m in re.finditer(r"([A-Za-z_][A-Za-z0-9_]*)\s*(\()?", sin_literales):
+            token, es_funcion = m.group(1), bool(m.group(2))
+            bajo = token.lower()
+            if not (es_funcion or bajo in _PALABRAS_SOQL or previo == "as"):
                 encontrados.add(token)
+            previo = bajo
     return encontrados
 
 

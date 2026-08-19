@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 
+from . import agregacion
 from ..adapters import socrata
 from ..core import format as fmt
 from ..core.envelope import Fuente, Sobre
@@ -87,9 +88,14 @@ async def serie(dataset_id: str, campo_fecha: str, metrica: str = "count(*) as c
         partes.append(f"{campo_fecha} <= '{socrata.escapa(hasta)}'")
     filtro = " AND ".join(partes) or None
 
+    # 2.000 periodos sobran para años y meses, pero NO para días: SECOP II
+    # abarca ~4.030, así que una serie diaria se cortaba por la mitad y el
+    # sobre la daba por completa.
+    TOPE = 2000
+    SELECT = f"{expr} as periodo, {metrica}"
     r, extremos = await asyncio.gather(
-        socrata.consultar(dataset_id, seleccionar=f"{expr} as periodo, {metrica}",
-                          donde=filtro, agrupar=expr, ordenar="periodo", limite=2000),
+        socrata.consultar(dataset_id, seleccionar=SELECT, donde=filtro,
+                          agrupar=expr, ordenar="periodo", limite=TOPE),
         socrata.consultar(dataset_id, seleccionar=f"max({campo_fecha}) as h", limite=1),
     )
     corte = (extremos["filas"][0].get("h") or "")[:10] if extremos["filas"] else ""
@@ -104,8 +110,10 @@ async def serie(dataset_id: str, campo_fecha: str, metrica: str = "count(*) as c
         for fila, barra in zip(filas, fmt.barras(crudos)):
             fila["gráfica"] = barra
 
-    sobre = Sobre(datos=filas, total_coincidencias=len(filas), orden="periodo",
-                  consulta=r["consulta"], fuente=_fuente(info["esq"], dataset_id))
+    sobre = Sobre(datos=filas, orden="periodo", consulta=r["consulta"],
+                  fuente=_fuente(info["esq"], dataset_id))
+    await agregacion.anota_total(sobre, r["filas"], TOPE, dataset_id=dataset_id,
+                                 seleccionar=SELECT, agrupar=expr, donde=filtro)
     _avisa_periodo_incompleto(sobre, filas, corte, periodo)
     if len(crudos) > 1:
         sobre.advertir(

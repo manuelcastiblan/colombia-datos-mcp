@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 
+from . import agregacion
 from ..adapters import socrata
 from ..core import format as fmt
 from ..core.budget import Detalle
@@ -317,15 +318,15 @@ async def perfil_proveedor(documento: str, limite=20):
     contratos = reg.SECOP["contratos"]
     donde = f"documento_proveedor = '{doc}'"
 
+    tope = min(int(limite), 50)
+    SELECT_TOP = "nombre_entidad, count(*) as total, sum(valor_del_contrato) as valor"
     total, resumen, top = await asyncio.gather(
         socrata.contar(contratos.id, donde=donde),
         socrata.consultar(contratos.id,
                           seleccionar="count(*) as total, sum(valor_del_contrato) as valor",
                           donde=donde, limite=1),
-        socrata.consultar(contratos.id,
-                          seleccionar="nombre_entidad, count(*) as total, sum(valor_del_contrato) as valor",
-                          donde=donde, agrupar="nombre_entidad", ordenar="valor DESC",
-                          limite=min(int(limite), 50)),
+        socrata.consultar(contratos.id, seleccionar=SELECT_TOP, donde=donde,
+                          agrupar="nombre_entidad", ordenar="valor DESC", limite=tope),
     )
     if total == 0:
         sobre = Sobre(datos=[], total_coincidencias=0, fuente=_fuente(contratos),
@@ -347,8 +348,11 @@ async def perfil_proveedor(documento: str, limite=20):
         f"**Documento {doc}** · {fmt.numero(total)} contratos en SECOP II · "
         f"valor total {fmt.moneda(agregado.get('valor'))}"
     )
-    sobre = Sobre(datos=filas, total_coincidencias=len(filas), orden="valor DESC",
-                  consulta=top["consulta"], fuente=_fuente(contratos))
+    sobre = Sobre(datos=filas, orden="valor DESC", consulta=top["consulta"],
+                  fuente=_fuente(contratos))
+    await agregacion.anota_total(sobre, top["filas"], tope, dataset_id=contratos.id,
+                                 seleccionar=SELECT_TOP, agrupar="nombre_entidad",
+                                 donde=donde)
     sobre.advertir(
         "Solo SECOP II. Para contratación anterior a la plataforma consulta también "
         "rpmr-utcd (SECOP Integrado)."
@@ -367,15 +371,14 @@ async def resolver_entidad(nombre: str, limite=10):
     termino = alias or consulta
 
     contratos = reg.SECOP["contratos"]
+    tope = min(int(limite), 30)
+    SELECT = "nombre_entidad, nit_entidad, count(*) as total"
+    AGRUPAR = "nombre_entidad, nit_entidad"
 
     async def _busca(t):
         return await socrata.consultar(
-            contratos.id,
-            seleccionar="nombre_entidad, nit_entidad, count(*) as total",
-            donde=_filtro_texto("nombre_entidad", t),
-            agrupar="nombre_entidad, nit_entidad",
-            ordenar="total DESC",
-            limite=min(int(limite), 30),
+            contratos.id, seleccionar=SELECT, donde=_filtro_texto("nombre_entidad", t),
+            agrupar=AGRUPAR, ordenar="total DESC", limite=tope,
         )
 
     r = await _busca(termino)
@@ -391,8 +394,15 @@ async def resolver_entidad(nombre: str, limite=10):
          "contratos": fmt.numero(f.get("total"))}
         for f in r["filas"]
     ]
-    sobre = Sobre(datos=filas, total_coincidencias=len(filas), orden="total DESC",
-                  consulta=r["consulta"], fuente=_fuente(contratos))
+    sobre = Sobre(datos=filas, orden="total DESC", consulta=r["consulta"],
+                  fuente=_fuente(contratos))
+    # Ocultar coincidencias aquí es lo más caro de todo el servidor: es la
+    # herramienta de desambiguación, y elegir el NIT equivocado creyendo que
+    # se vieron todos contamina cada consulta posterior.
+    await agregacion.anota_total(
+        sobre, r["filas"], tope, dataset_id=contratos.id, seleccionar=SELECT,
+        agrupar=AGRUPAR,
+        donde=_filtro_texto("nombre_entidad", consulta if alias_fallido else termino))
     if alias and not alias_fallido:
         sobre.advertir(f"«{consulta}» se resolvió por alias curado a «{alias}».")
     elif alias_fallido:
@@ -453,9 +463,10 @@ async def agregar(agrupar_por="departamento", metrica="valor", donde_entidad=Non
     donde_absurdos = " AND ".join(
         [p for p in [donde, f"{UMBRAL_ABSURDO_SOQL}"] if p])
     orden = "valor DESC" if metrica == "valor" else "contratos DESC"
+    tope = min(int(limite), 50)
     r, absurdos, global_ = await asyncio.gather(
         socrata.consultar(ds.id, seleccionar=seleccionar, donde=donde,
-                          agrupar=campo, ordenar=orden, limite=min(int(limite), 50)),
+                          agrupar=campo, ordenar=orden, limite=tope),
         socrata.consultar(ds.id, seleccionar="count(*) as n, sum(valor_del_contrato) as v",
                           donde=donde_absurdos, limite=1),
         socrata.consultar(ds.id, seleccionar="sum(valor_del_contrato) as v",
@@ -472,8 +483,9 @@ async def agregar(agrupar_por="departamento", metrica="valor", donde_entidad=Non
         clave = "valor" if metrica == "valor" else "contratos"
         for fila, dibujo in zip(filas, fmt.barras([f.get(clave) for f in r["filas"]])):
             fila["gráfica"] = dibujo
-    sobre = Sobre(datos=filas, total_coincidencias=len(filas), orden=orden,
-                  consulta=r["consulta"], fuente=_fuente(ds))
+    sobre = Sobre(datos=filas, orden=orden, consulta=r["consulta"], fuente=_fuente(ds))
+    await agregacion.anota_total(sobre, r["filas"], tope, dataset_id=ds.id,
+                                 seleccionar=seleccionar, agrupar=campo, donde=donde)
     _advierte_absurdos(sobre, absurdos, global_)
     sobre.advertir("Montos nominales sin deflactar: no compares valores entre años distintos sin ajustar.")
     if not donde:

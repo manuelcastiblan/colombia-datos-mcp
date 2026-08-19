@@ -21,6 +21,7 @@ pero **no son la misma cosa**, y ahí está el trabajo de este módulo:
 
 from __future__ import annotations
 
+from . import agregacion
 from ..adapters import socrata
 from ..core import format as fmt
 from ..core import texto
@@ -100,9 +101,10 @@ async def serie(delito: str, desde: int | None = None, hasta: int | None = None,
         partes.append(f"fecha_hecho < '{int(hasta) + 1}-01-01'")
     donde = " AND ".join(partes) or None
 
-    r = await socrata.consultar(
-        ds.id, seleccionar=f"{expr} as periodo, sum(cantidad) as casos",
-        donde=donde, agrupar=expr, ordenar="periodo", limite=400)
+    TOPE = 400
+    SELECT = f"{expr} as periodo, sum(cantidad) as casos"
+    r = await socrata.consultar(ds.id, seleccionar=SELECT, donde=donde,
+                                agrupar=expr, ordenar="periodo", limite=TOPE)
     corte = await _corte(ds)
 
     crudos = [fmt.a_numero(f.get("casos")) or 0 for f in r["filas"]]
@@ -113,8 +115,10 @@ async def serie(delito: str, desde: int | None = None, hasta: int | None = None,
         for fila, barra in zip(filas, fmt.barras(crudos)):
             fila["gráfica"] = barra
 
-    sobre = Sobre(datos=filas, total_coincidencias=len(filas), orden="periodo",
-                  consulta=r["consulta"], fuente=_fuente(ds))
+    sobre = Sobre(datos=filas, orden="periodo", consulta=r["consulta"],
+                  fuente=_fuente(ds))
+    await agregacion.anota_total(sobre, r["filas"], TOPE, dataset_id=ds.id,
+                                 seleccionar=SELECT, agrupar=expr, donde=donde)
     _avisos_dataset(sobre, ds, corte)
     if crudos and len(crudos) > 1:
         sobre.advertir(
@@ -146,10 +150,12 @@ async def por_municipio(delito: str, anio: int, limite: int = 20,
         if len(valores) > 1:
             avisos.append(f"«{departamento}» resolvió a: {', '.join(valores[:6])}")
 
-    r = await socrata.consultar(
-        ds.id, seleccionar="municipio, departamento, cod_muni, sum(cantidad) as casos",
-        donde=" AND ".join(partes), agrupar="municipio, departamento, cod_muni",
-        ordenar="casos DESC", limite=min(int(limite), 100))
+    tope = min(int(limite), 100)
+    SELECT = "municipio, departamento, cod_muni, sum(cantidad) as casos"
+    AGRUPAR = "municipio, departamento, cod_muni"
+    donde = " AND ".join(partes)
+    r = await socrata.consultar(ds.id, seleccionar=SELECT, donde=donde,
+                                agrupar=AGRUPAR, ordenar="casos DESC", limite=tope)
     corte = await _corte(ds)
 
     crudos = [fmt.a_numero(f.get("casos")) or 0 for f in r["filas"]]
@@ -161,8 +167,12 @@ async def por_municipio(delito: str, anio: int, limite: int = 20,
         for fila, barra in zip(filas, fmt.barras(crudos)):
             fila["gráfica"] = barra
 
-    sobre = Sobre(datos=filas, total_coincidencias=len(filas), orden="casos DESC",
-                  consulta=r["consulta"], fuente=_fuente(ds))
+    sobre = Sobre(datos=filas, orden="casos DESC", consulta=r["consulta"],
+                  fuente=_fuente(ds))
+    # 1.122 municipios contra un tope de 100: sin esto, un «top 20» afirmaba
+    # ser la lista completa de municipios con casos.
+    await agregacion.anota_total(sobre, r["filas"], tope, dataset_id=ds.id,
+                                 seleccionar=SELECT, agrupar=AGRUPAR, donde=donde)
     for a in avisos:
         sobre.advertir(a)
     _avisos_dataset(sobre, ds, corte)

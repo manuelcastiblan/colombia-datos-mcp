@@ -466,3 +466,51 @@ async def test_luego_encadena_una_segunda_agregacion(monkeypatch):
         "jbjy-vk9h", "nombre_entidad", metricas="count(*) as n",
         teniendo="count(*) > 1", luego="count(*) as personas, sum(n) as contratos")
     assert salida["estructurado"]["datos"][0]["personas"] == "130.720"
+
+
+# ----------------------- el validador ya no rechaza SoQL válido (0.8.0) ----
+def test_campos_citados_no_confunde_funciones_con_columnas():
+    """Se contrastaba contra una lista cableada de ~60 funciones y se tomaba
+    por columna todo lo que faltara. `caseless_eq` y `date_diff_d` son SoQL
+    válido en datos.gov.co y ninguna de las dos estaba en la lista: el
+    validador fallaba CERRADO sobre consultas correctas."""
+    from colombia_datos_mcp.domain.catalogo import _campos_citados
+    assert _campos_citados("date_diff_d(fecha_de_firma, fecha_fin_liquidacion)") == {
+        "fecha_de_firma", "fecha_fin_liquidacion"}
+    assert _campos_citados("caseless_eq(sector, 'MINAS')") == {"sector"}
+
+
+def test_campos_citados_no_toma_los_alias_por_columnas():
+    """`nombre_entidad as entidad` se rechazaba porque `entidad` no existe en
+    el esquema. Claro que no: es el alias que se está declarando."""
+    from colombia_datos_mcp.domain.catalogo import _campos_citados
+    assert _campos_citados("nombre_entidad as entidad") == {"nombre_entidad"}
+    assert _campos_citados("count(*) as total") == set()
+    assert _campos_citados("sum(valor_del_contrato) as valor, departamento") == {
+        "valor_del_contrato", "departamento"}
+
+
+def test_campos_citados_ignora_literales_y_palabras_sueltas():
+    from colombia_datos_mcp.domain.catalogo import _campos_citados
+    assert _campos_citados("estado_contrato in ('Borrador', 'Cancelado')") == {
+        "estado_contrato"}
+    assert _campos_citados("valor_del_contrato DESC") == {"valor_del_contrato"}
+    assert _campos_citados("fecha_de_firma is not null") == {"fecha_de_firma"}
+
+
+async def test_resolver_entidad_no_oculta_coincidencias_en_silencio(monkeypatch):
+    """Ocultar filas aquí es lo más caro del servidor: es la herramienta de
+    desambiguación, y creer que se vieron todas hace elegir mal el NIT y
+    contaminar cada consulta posterior. Medido en vivo: 10 mostradas, 11 reales."""
+    def respuesta(params):
+        if "$query" in params:
+            return [{"grupos": "11"}]
+        return [{"nombre_entidad": f"MUNICIPIO DE SANTA {i}",
+                 "nit_entidad": f"8000{i}", "total": "10"} for i in range(10)]
+
+    _instala(monkeypatch, {"api/catalog/v1": CATALOGO,
+                           "/resource/jbjy-vk9h.json": respuesta})
+    salida = await secop.resolver_entidad("MUNICIPIO DE SANTA")
+    meta = salida["estructurado"]["_meta"]
+    assert meta["total_coincidencias"] == 11
+    assert "10 de 11" in " ".join(meta["advertencias"])

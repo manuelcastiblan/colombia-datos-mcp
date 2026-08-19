@@ -562,6 +562,12 @@ debajo, y porque cada punto costó una verificación contra la fuente viva.
   el dataset de contratos con ningún nombre, solo en SECOP Integrado.
 - Las columnas de fecha del Plan Anual de Adquisiciones (`9sue-ezhx`) son de tipo
   `text`, no `calendar_date`: no se filtran con `between`.
+- **El catálogo de funciones SoQL de datos.gov.co no es el de la documentación
+  general de Socrata.** Verificado contra la fuente: `caseless_eq` y
+  `date_diff_d` **sí** existen; `char_length`, `is_empty`, `to_number` y
+  `not_like` **no**. Por eso el servidor ya no valida contra una lista de
+  funciones —siempre estaría incompleta o de más—: deja que la fuente decida y
+  se limita a comprobar las columnas.
 - **`count(*)` no cuenta grupos.** Sobre una consulta agrupada devuelve el tamaño
   de cada grupo, no cuántos hay, y con `$having` no hay forma de saber cuántos
   sobreviven al filtro. Se resuelve encadenando etapas con el operador `|>` de

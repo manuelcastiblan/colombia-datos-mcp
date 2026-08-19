@@ -37,6 +37,7 @@ dominio nunca llama a `httpx` y el adaptador nunca sabe qué es un contrato.
 | `domain/analisis.py` | Series temporales y perfilado de calidad, para cualquier dataset. |
 | `domain/crimen.py` | 23 datasets de MinDefensa: series, municipios y comparación entre años. |
 | `domain/exportar.py` | La única operación que escribe: descarga paginada a disco. |
+| `domain/agregacion.py` | Cuántos grupos hay de verdad. Lo usan las seis herramientas que agrupan; existe porque el mismo error apareció seis veces por separado. |
 
 ---
 

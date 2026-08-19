@@ -2,6 +2,57 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.8.0] — 2026-08-19
+
+### Corregido
+
+- **El conteo falso de 0.7.0 no era un bug: eran seis.** Arreglarlo en
+  `co_datos_agregar` dejó vivo el mismo `total_coincidencias = len(filas)` en
+  todas las demás. Medido contra la fuente viva, esto es lo que afirmaban antes
+  frente a lo que hay:
+
+  | Herramienta | Decía | Hay |
+  |---|---:|---:|
+  | `co_secop_agregar` (proveedor, 2026) | 5 de 5 | **525.759** |
+  | `co_datos_serie` (día, SECOP II) | 2.000 de 2.000 | **3.646** |
+  | `co_secop_perfil_proveedor` | 5 de 5 | **1.084** |
+  | `co_crimen_por_municipio` (homicidio 2025) | 5 de 5 | **820** |
+  | `co_secop_resolver_entidad` («MUNICIPIO DE SANTA») | 10 de 10 | **11** |
+
+  El más caro es `resolver_entidad`: es la herramienta de desambiguación, así
+  que ocultar una coincidencia y jurar que se vieron todas hace elegir el NIT
+  equivocado con confianza y contamina cada consulta posterior.
+
+  El arreglo no es parchear seis copias sino **`domain/agregacion.py`**, con la
+  única función `anota_total()` que ahora usan todas. La lógica vive en un sitio
+  y el error no puede volver a aparecer sitio por sitio.
+
+- **`co_datos_serie` con `periodo="dia"` truncaba de verdad, no en teoría.** El
+  tope de 2.000 periodos sobra para años y meses, pero SECOP II abarca 3.646
+  días distintos: la serie diaria se cortaba por la mitad y se declaraba
+  completa. `co_crimen_serie` tenía el mismo tope cableado en 400.
+
+- **El validador de columnas rechazaba SoQL válido, y fallaba cerrado.**
+  `_campos_citados` contrastaba cada palabra contra una lista cableada de ~60
+  funciones y tomaba por columna todo lo que faltara, de modo que
+  `nombre_entidad as entidad` se rechazaba —«columna inexistente: entidad»—
+  igual que `caseless_eq(...)` o `date_diff_d(...)`, que son SoQL perfectamente
+  válido en datos.gov.co y no estaban en la lista. Cada rechazo falso costaba
+  además ~900 tokens listando el esquema entero.
+
+  Las dos reglas de verdad no necesitan vocabulario: un identificador seguido de
+  `(` es una función, y uno precedido de `as` es un alias. Ninguno es una
+  columna, y **toda** función y **todo** alias lo cumplen, presentes y futuros.
+  La lista baja de ~60 nombres a las 27 palabras sueltas del lenguaje, que sí
+  son un conjunto cerrado.
+
+### Cambiado
+
+- `co_datos_consultar` lanzaba el conteo y la página **en serie**: dos viajes
+  encadenados a la misma fuente, y en un dataset de millones de filas un
+  `count(*)` no es gratis. Ahora van en `asyncio.gather`, como ya hacían otros
+  siete sitios del repo, y la latencia es la del más lento en vez de la suma.
+
 ## [0.7.0] — 2026-08-19
 
 ### Corregido
