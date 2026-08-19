@@ -2,6 +2,43 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.6.0] — 2026-08-18
+
+### Añadido
+
+- **`co_geo_limites`** y el adaptador `adapters/geometria.py`: límites
+  municipales y departamentales como GeoJSON, con la clave DIVIPOLA como
+  identificador. Cierra el círculo de «DIVIPOLA es la clave de join universal»:
+  ahora el servidor puede dibujar el territorio del que habla.
+- La geometría va en el **contenido estructurado**, no en el markdown, y por
+  encima de 200 features hay que acotar o usar `guardar`, que escribe un
+  `.geojson` bajo `CO_EXPORT_DIR`. Sin ese tope, 1.122 polígonos revientan al
+  cliente.
+- `nivel="departamento"` agrupa los municipios en un MultiPolygon. **No es una
+  disolución real** —las aristas internas siguen ahí— y el sobre lo dice.
+- `CO_GEOMETRIA_URL` para cambiar la fuente sin tocar código.
+- 14 pruebas sin red (135 → 149) y 3 de contrato.
+
+### Por qué la fuente no es oficial
+
+Se buscó, y no hay endpoint utilizable:
+
+- El servicio nacional del IGAC, `atlas/politicoadministrativo`, devuelve
+  **HTTP 500 «Wait timeout»** en MapServer y en FeatureServer.
+- Su carpeta `limites` solo contiene territorios cedidos por Colombia, y de las
+  **952 capas** de `carto` ninguna es municipal ni departamental.
+- `datos.gov.co` no publica los límites como dataset: `only=map` y `only=geo`
+  devuelven cero resultados.
+
+Así que la geometría sale de una réplica pública del **Marco Geoestadístico
+Nacional 2018 del DANE**. El adaptador valida la forma antes de fiarse —que sea
+un FeatureCollection, que traiga ~1.122 municipios, que tenga `MPIO_CCNCT`— y
+falla con un mensaje claro si la réplica cambia, en vez de dibujar un mapa con
+agujeros. Cada respuesta declara la procedencia completa.
+
+Una prueba de contrato **vigila si el IGAC vuelve a responder**: el día que lo
+haga, esto debería migrar a la fuente oficial.
+
 ## [0.5.0] — 2026-08-18
 
 ### Añadido

@@ -2,7 +2,8 @@
 
 Servidor MCP para datos públicos de Colombia: catálogo nacional de
 `datos.gov.co`, contratación pública (SECOP), criminalidad (MinDefensa) y
-división territorial (DIVIPOLA). 18 herramientas, sin credenciales.
+división territorial con geometría (DIVIPOLA y MGN). 19 herramientas,
+sin credenciales.
 
 Esta es la **fase F0 + la mitad Socrata de F1** del diseño: núcleo completo,
 adaptador de Socrata y los módulos de catálogo, SECOP, DIVIPOLA y crimen.
@@ -57,6 +58,7 @@ Todas son opcionales y tienen valores conservadores.
 | `CO_TTL_METADATOS` | `86400` (24 h) | TTL de esquemas y dominios categóricos, en disco. |
 | `CO_CACHE_DIR` | `~/.cache/colombia-datos-mcp` | Dónde vive la caché L2. |
 | `CO_EXPORT_DIR` | `~/colombia-datos-export` | Único directorio donde `co_datos_exportar` puede escribir. |
+| `CO_GEOMETRIA_URL` | réplica del MGN 2018 | De dónde bajar los límites municipales. Configurable porque la fuente oficial no responde. |
 | `CO_REQ_POR_SEGUNDO` | `5` | Autolímite por host. |
 | `CO_MAX_REINTENTOS` | `4` | Intentos por petición antes de rendirse. |
 | `CO_USER_AGENT` | `colombia-datos-mcp/<versión> (+URL del repo)` | Identificación ante la fuente. |
@@ -112,6 +114,7 @@ es la resolución de nombres funcionando — ver
 | `co_secop_agregar` | Totales por departamento, entidad, modalidad, proveedor… |
 | `co_geo_divipola` | Códigos y coordenadas de departamentos, municipios y centros poblados |
 | `co_geo_cotejar_coordenadas` | Control de calidad entre las dos fuentes oficiales de coordenadas |
+| `co_geo_limites` | Límites municipales o departamentales como GeoJSON, para dibujar mapas |
 | `co_datos_exportar` | Descarga un filtro entero a CSV, JSON o Parquet en disco |
 | `co_crimen_serie` | Serie temporal de un delito desde 2003, por año o por mes |
 | `co_crimen_por_municipio` | Municipios con más casos de un delito en un año |
@@ -219,6 +222,28 @@ está incompleto**, que es lo que convierte «2026» en una caída del 30 % que 
 existe. No da falsa alarma si el periodo sí está cerrado, y **rechaza las
 columnas de fecha que en realidad son texto** —las cinco del Plan Anual de
 Adquisiciones— donde agrupar falla y `between` miente.
+
+## Dibujar un mapa
+
+```
+co_geo_limites(nivel="municipio", departamento="Chocó")
+```
+
+Devuelve los polígonos como GeoJSON en el **contenido estructurado**, no en el
+texto: un polígono no se lee en una tabla y se comería el presupuesto de tokens.
+El cuerpo trae el resumen —código, nombre y extensión de cada uno—.
+
+Filtra con `codigo` (DIVIPOLA de 2 o 5 dígitos) o `departamento`. Por encima de
+200 geometrías hay que acotar o usar `guardar`, que las escribe en disco: 1.122
+polígonos en una respuesta revientan al cliente.
+
+Con `nivel="departamento"` agrupa los municipios de cada uno en un MultiPolygon.
+**No es una disolución real** —las aristas internas siguen ahí— y el sobre lo
+advierte: relleno se ve igual, pero si trazas el borde aparecen las divisiones.
+
+Como el identificador es la clave DIVIPOLA, une por código con el resto del
+servidor sin pasar por el nombre, que es donde se pierden Cali, Cartagena y
+Cúcuta.
 
 ## Criminalidad
 
@@ -362,6 +387,28 @@ está incompleto**, que es lo que convierte «2026» en una caída del 30 % que 
 existe. No da falsa alarma si el periodo sí está cerrado, y **rechaza las
 columnas de fecha que en realidad son texto** —las cinco del Plan Anual de
 Adquisiciones— donde agrupar falla y `between` miente.
+
+## Dibujar un mapa
+
+```
+co_geo_limites(nivel="municipio", departamento="Chocó")
+```
+
+Devuelve los polígonos como GeoJSON en el **contenido estructurado**, no en el
+texto: un polígono no se lee en una tabla y se comería el presupuesto de tokens.
+El cuerpo trae el resumen —código, nombre y extensión de cada uno—.
+
+Filtra con `codigo` (DIVIPOLA de 2 o 5 dígitos) o `departamento`. Por encima de
+200 geometrías hay que acotar o usar `guardar`, que las escribe en disco: 1.122
+polígonos en una respuesta revientan al cliente.
+
+Con `nivel="departamento"` agrupa los municipios de cada uno en un MultiPolygon.
+**No es una disolución real** —las aristas internas siguen ahí— y el sobre lo
+advierte: relleno se ve igual, pero si trazas el borde aparecen las divisiones.
+
+Como el identificador es la clave DIVIPOLA, une por código con el resto del
+servidor sin pasar por el nombre, que es donde se pierden Cali, Cartagena y
+Cúcuta.
 
 ## Criminalidad
 
@@ -543,11 +590,11 @@ pip install -e ".[dev]"
 ```
 
 ```bash
-pytest              # 135 pruebas, sin red
+pytest              # 149 pruebas, sin red
 ```
 
 ```bash
-pytest -m contrato  # 17 pruebas contra la API viva (~5 min)
+pytest -m contrato  # 20 pruebas contra la API viva (~7 min)
 ```
 
 Las fixtures son respuestas **reales** capturadas de la API el 18-ago-2026, con
@@ -566,7 +613,7 @@ esquema.**
 
 | Documento | Para qué |
 |---|---|
-| [docs/herramientas.md](docs/herramientas.md) | Las 18 herramientas: parámetros, valores por defecto y topes. |
+| [docs/herramientas.md](docs/herramientas.md) | Las 19 herramientas: parámetros, valores por defecto y topes. |
 | [docs/recetas.md](docs/recetas.md) | Secuencias que funcionan, con las trampas de cada una y cómo leer el sobre. |
 | [docs/fuentes.md](docs/fuentes.md) | Los 34 datasets: unidad de análisis, campos clave, joins y atribuciones. |
 | [docs/arquitectura.md](docs/arquitectura.md) | Cómo está construido, y qué **no** hace todavía. |
@@ -582,9 +629,16 @@ comparación de nombres tolerante a acentos, extracción estructurada con
 exportación a disco, y los módulos de catálogo, SECOP, DIVIPOLA y criminalidad.
 CI con las pruebas sin red en Python 3.11-3.13 y el contrato programado a diario.
 
-Pendiente, en orden: adaptador SDMX para Banco de la República, adaptador ArcGIS
-(IGAC / MGN del DANE) con descubrimiento dinámico del corte vigente, el motor de
-privacidad, y solo después los módulos de seguridad y DDHH.
+Pendiente: adaptador SDMX para Banco de la República, y el motor de privacidad
+—que el módulo de crimen no necesita, porque MinDefensa publica ya agregado, pero
+cualquier fuente con detalle de víctima sí exigiría—.
+
+**La geometría es la pieza más frágil del servidor.** No hay endpoint oficial
+utilizable: el servicio nacional del IGAC devuelve HTTP 500 y `datos.gov.co` no
+publica los límites como dataset, así que se usa una réplica del MGN 2018 del
+DANE, configurable con `CO_GEOMETRIA_URL`. Una prueba de contrato comprueba a
+diario que la réplica siga sirviendo los 1.122 municipios con su código DIVIPOLA,
+y otra vigila si el IGAC vuelve — el día que responda, esto debería migrar.
 
 ## Licencia y atribución
 

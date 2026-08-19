@@ -295,6 +295,23 @@ async def co_datos_exportar(dataset_id: str, nombre_archivo: str, donde: str = "
         formato=formato, max_filas=max_filas))
 
 
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_geo_limites(nivel: str = "municipio", codigo: str = "",
+                         departamento: str = "", guardar: str = "") -> ToolResult:
+    """Límites municipales o departamentales como GeoJSON, para dibujar mapas.
+
+    La geometría va en el contenido estructurado, no en el texto. Filtra con
+    `codigo` (DIVIPOLA de 2 o 5 dígitos) o `departamento`; por encima de 200
+    geometrías hay que acotar o usar `guardar`, que las escribe en disco.
+
+    Procede del Marco Geoestadístico Nacional 2018 del DANE por réplica pública:
+    el servicio oficial del IGAC devuelve error 500. La respuesta lo declara.
+    """
+    return await _ejecuta(geo.limites(
+        nivel=nivel, codigo=codigo or None, departamento=departamento or None,
+        guardar=guardar or None))
+
+
 # --------------------------------------------------------------- crimen ----
 @mcp.tool(annotations=SOLO_LECTURA)
 async def co_crimen_serie(delito: str, desde: int = 0, hasta: int = 0,

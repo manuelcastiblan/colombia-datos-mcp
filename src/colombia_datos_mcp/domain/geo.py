@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from ..adapters import socrata
+import json
+
+from ..adapters import geometria, socrata
 from ..core import format as fmt
 from ..core import texto
 from ..core.budget import Detalle
@@ -197,3 +199,146 @@ async def cotejar_coordenadas(limite=15):
         "municipalizadas y los municipios con cabecera trasladada aparecen aquí legítimamente."
     )
     return sobre.render(lambda f: encabezado + "\n\n" + fmt.tabla_markdown(f))
+
+
+# -------------------------------------------------------------- límites ----
+MAX_FEATURES = 200
+
+
+async def limites(nivel: str = "municipio", codigo: str | None = None,
+                  departamento: str | None = None, guardar: str | None = None):
+    """Devuelve los límites como GeoJSON, filtrados por código o departamento.
+
+    La geometría va en el contenido estructurado, no en el markdown: un polígono
+    no se lee en una tabla, y meterlo en el texto se comería el presupuesto de
+    tokens entero. El cuerpo trae el resumen de qué salió y con qué extensión.
+    """
+    if nivel not in ("municipio", "departamento"):
+        raise ErrorValidacion(
+            "nivel debe ser 'municipio' o 'departamento'.",
+            "El detalle disponible es municipal; 'departamento' los agrupa.",
+        )
+    datos = await geometria.cargar()
+    C = geometria.CAMPOS
+    rasgos = datos["features"]
+    avisos = []
+
+    if codigo:
+        c = str(codigo).strip()
+        rasgos = [f for f in rasgos
+                  if (f["properties"][C["codigo"]] == c if len(c) > 2
+                      else f["properties"][C["cod_dpto"]] == c)]
+    if departamento:
+        objetivo = texto.plegar(departamento)
+        casan = [f for f in rasgos
+                 if objetivo in texto.plegar(f["properties"][C["departamento"]])]
+        if not casan:
+            sobre = Sobre(datos=[], mostrar_conteo=False,
+                          fuente=Fuente(id="MGN 2018", nombre="Límites municipales",
+                                        licencia=_LIC,
+                                        atribucion=geometria.PROCEDENCIA))
+            sobre.advertir(
+                f"«{departamento}» no corresponde a ningún departamento de la "
+                "geometría. No es un fallo de la fuente."
+            )
+            return sobre.render(lambda _f: "_Sin coincidencias._")
+        rasgos = casan
+
+    if nivel == "departamento":
+        rasgos = _agrupa_por_departamento(rasgos, C)
+        avisos.append(
+            "Cada departamento es un MultiPolygon con los polígonos de sus "
+            "municipios: las aristas internas siguen ahí. Relleno se ve igual, "
+            "pero si trazas el borde aparecerán las divisiones municipales."
+        )
+
+    if len(rasgos) > MAX_FEATURES and not guardar:
+        raise ErrorValidacion(
+            f"El filtro devuelve {len(rasgos)} geometrías, más de {MAX_FEATURES}.",
+            "Acota con `codigo` o `departamento`, o usa `guardar` para "
+            "escribirlas en disco en vez de traerlas en la respuesta.",
+        )
+
+    coleccion = {"type": "FeatureCollection", "features": rasgos}
+    filas = []
+    for f in rasgos[:60]:
+        pr = f["properties"]
+        x0, y0, x1, y1 = geometria.bbox(f["geometry"])
+        filas.append({
+            "codigo": pr.get(C["codigo"]) or pr.get(C["cod_dpto"]),
+            "nombre": fmt.limpia_texto(pr.get(C["municipio"])
+                                       or pr.get(C["departamento"])),
+            "departamento": fmt.limpia_texto(pr.get(C["departamento"])),
+            "lon": f"{x0:.2f} a {x1:.2f}",
+            "lat": f"{y0:.2f} a {y1:.2f}",
+        })
+
+    sobre = Sobre(datos=[], total_coincidencias=len(rasgos), mostrar_conteo=False,
+                  fuente=Fuente(id="MGN 2018", nombre="Límites municipales del DANE",
+                                licencia=_LIC, atribucion=geometria.PROCEDENCIA))
+    cuerpo = [f"**{len(rasgos)}** geometría(s) de nivel {nivel}.", ""]
+    if filas:
+        cuerpo.append(fmt.tabla_markdown(filas))
+        if len(rasgos) > len(filas):
+            cuerpo.append("")
+            cuerpo.append(f"_Se listan {len(filas)} de {len(rasgos)}; el GeoJSON "
+                          "completo va en el contenido estructurado._")
+
+    if guardar:
+        from .exportar import DIR_EXPORT, _nombre_seguro
+        nombre = _nombre_seguro(guardar, "json")[:-5] + ".geojson"
+        try:
+            DIR_EXPORT.mkdir(parents=True, exist_ok=True)
+            ruta = DIR_EXPORT / nombre
+            ruta.write_text(json.dumps(coleccion, ensure_ascii=False), encoding="utf-8")
+        except OSError as exc:
+            raise ErrorValidacion(
+                f"No se pudo escribir {nombre}: {exc}",
+                f"Comprueba permisos sobre {DIR_EXPORT}.",
+            ) from None
+        cuerpo.append("")
+        cuerpo.append(f"Guardado en `{ruta}` "
+                      f"({fmt.numero(ruta.stat().st_size)} bytes).")
+        sobre.datos = [{"ruta": str(ruta), "geometrias": len(rasgos), "nivel": nivel}]
+    else:
+        sobre.datos = [coleccion]
+
+    for a in avisos:
+        sobre.advertir(a)
+    sobre.advertir(
+        f"Procedencia: {geometria.PROCEDENCIA}. Es un corte de 2018, así que los "
+        "municipios creados después no están — por eso falta Nuevo Belén de "
+        "Bajirá."
+    )
+    sobre.advertir(
+        "El código es la clave DIVIPOLA: une por código con cualquier otra "
+        "fuente del servidor, sin pasar por el nombre."
+    )
+    return sobre.render(lambda _f: "\n".join(cuerpo))
+
+
+def _agrupa_por_departamento(rasgos, C):
+    """Un MultiPolygon por departamento.
+
+    No es una disolución real —fusionar los polígonos y borrar las aristas
+    internas necesitaría una librería de geometría—, pero para recortar,
+    rellenar o encuadrar es equivalente. El sobre lo advierte.
+    """
+    por_dpto: dict[str, dict] = {}
+    for f in rasgos:
+        pr = f["properties"]
+        cod = pr[C["cod_dpto"]]
+        d = por_dpto.setdefault(cod, {
+            "type": "Feature",
+            "properties": {C["cod_dpto"]: cod,
+                           C["departamento"]: pr[C["departamento"]],
+                           "municipios": 0},
+            "geometry": {"type": "MultiPolygon", "coordinates": []},
+        })
+        d["properties"]["municipios"] += 1
+        g = f["geometry"]
+        if g["type"] == "Polygon":
+            d["geometry"]["coordinates"].append(g["coordinates"])
+        else:
+            d["geometry"]["coordinates"].extend(g["coordinates"])
+    return sorted(por_dpto.values(), key=lambda f: f["properties"][C["cod_dpto"]])

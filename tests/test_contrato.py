@@ -185,3 +185,41 @@ async def test_los_dos_hurtos_siguen_siendo_el_mismo_dato():
                                     seleccionar="sum(cantidad) as v", limite=1)
         tot[clave] = r["filas"][0]["v"]
     assert tot["hurto_comercio"] == tot["hurto_residencias"], tot
+
+
+# ---------------------------------------------------------- geometría ----
+async def test_la_replica_de_geometria_sigue_sirviendo_el_mgn():
+    """La geometría no viene de una fuente oficial: el servicio del IGAC
+    devuelve 500. Si la réplica desaparece o cambia, esto lo detecta antes de
+    que alguien dibuje un mapa con agujeros."""
+    from colombia_datos_mcp.adapters import geometria
+
+    datos = await geometria.cargar()
+    fs = datos["features"]
+    assert len(fs) == 1122
+    assert len({f["properties"]["MPIO_CCNCT"] for f in fs}) == 1122
+    assert len({f["properties"]["DPTO_CCDGO"] for f in fs}) == 33
+
+
+async def test_la_geometria_cruza_con_divipola_por_codigo():
+    """Es la razón de ser del adaptador: unir por código, no por nombre."""
+    from colombia_datos_mcp.adapters import geometria
+
+    datos = await geometria.cargar()
+    codigos_geo = {f["properties"]["MPIO_CCNCT"] for f in datos["features"]}
+    r = await socrata.consultar(reg.DIVIPOLA_MUNICIPIOS.id,
+                                seleccionar="cod_mpio", limite=2000)
+    codigos_div = {f["cod_mpio"] for f in r["filas"]}
+    faltan = codigos_div - codigos_geo
+    # Nuevo Belén de Bajirá (27493) se creó después del corte de 2018.
+    assert len(faltan) <= 2, f"DIVIPOLA tiene códigos sin geometría: {sorted(faltan)}"
+
+
+async def test_el_servicio_oficial_del_igac_sigue_caido():
+    """Documenta por qué se usa una réplica. Si algún día responde, hay que
+    cambiar CO_GEOMETRIA_URL y quitar esta prueba."""
+    import httpx
+
+    r = httpx.get("https://mapas.igac.gov.co/server/rest/services/"
+                  "atlas/politicoadministrativo/MapServer?f=json", timeout=120)
+    assert "error" in r.json(), "el IGAC ya responde: revisar el adaptador"

@@ -1,6 +1,6 @@
 # Referencia de herramientas
 
-18 herramientas contra `datos.gov.co`, todas de solo lectura salvo
+19 herramientas contra `datos.gov.co`, todas de solo lectura salvo
 `co_datos_exportar`, la única que escribe.
 
 Los parámetros y sus valores por defecto salen del esquema que el servidor
@@ -464,6 +464,53 @@ respuesta lo dice** con las dos cifras. El contenido estructurado trae `ruta`,
 
 Con cero filas no se crea ningún fichero, y se explica que es el filtro y no un
 fallo de la fuente.
+
+### `co_geo_limites`
+
+Límites municipales o departamentales como GeoJSON, para dibujar mapas.
+
+| Parámetro | Tipo | Defecto | Notas |
+|---|---|---|---|
+| `nivel` | string | `"municipio"` | `municipio` o `departamento`. |
+| `codigo` | string | `""` | DIVIPOLA de 2 dígitos (departamento) o 5 (municipio). |
+| `departamento` | string | `""` | Nombre, con tilde o sin ella. |
+| `guardar` | string | `""` | Nombre de fichero: escribe un `.geojson` bajo `CO_EXPORT_DIR`. |
+
+**La geometría va en el contenido estructurado**, no en el markdown: un polígono
+no se lee en una tabla y llenaría el presupuesto de tokens. El cuerpo trae el
+resumen —código, nombre y extensión de cada geometría—.
+
+Por encima de **200 geometrías** hay que acotar o usar `guardar`. Sin filtro son
+1.122 polígonos, que en una respuesta revientan al cliente.
+
+Con `nivel="departamento"` agrupa los municipios de cada uno en un MultiPolygon.
+**No es una disolución real**: fusionar los polígonos y borrar las aristas
+internas necesitaría una librería de geometría. Para recortar, rellenar o
+encuadrar es equivalente; si trazas el borde verás las divisiones municipales.
+El sobre lo advierte.
+
+#### De dónde sale, y por qué importa
+
+**No hay endpoint oficial utilizable.** El servicio nacional del IGAC
+—`atlas/politicoadministrativo`— devuelve HTTP 500 «Wait timeout» tanto en
+MapServer como en FeatureServer; su carpeta `limites` solo tiene territorios
+cedidos, y de las 952 capas de `carto` ninguna es municipal. `datos.gov.co`
+tampoco los publica: buscar con `only=map` y `only=geo` devuelve cero.
+
+Así que se usa una **réplica pública del Marco Geoestadístico Nacional 2018 del
+DANE**, capa municipal política simplificada, configurable con
+`CO_GEOMETRIA_URL`. Se descarga una vez y se cachea en disco 24 h, así que
+después funciona sin red.
+
+El adaptador **valida la forma antes de fiarse**: que sea un FeatureCollection,
+que traiga ~1.122 municipios y que tenga `MPIO_CCNCT`. Si la réplica cambia,
+falla con un mensaje claro en vez de dibujar un mapa con agujeros. Y hay tres
+pruebas de contrato: una comprueba la réplica a diario, otra que los códigos
+crucen con DIVIPOLA, y otra **vigila si el IGAC vuelve a responder** — el día que
+lo haga, esto debería migrar a la fuente oficial.
+
+Es un corte de **2018**: los municipios creados después no están. Falta Nuevo
+Belén de Bajirá, que en DIVIPOLA sí existe.
 
 ---
 
