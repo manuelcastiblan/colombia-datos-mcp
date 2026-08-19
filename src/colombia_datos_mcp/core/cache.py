@@ -108,9 +108,21 @@ class Cache:
             if not futuro.done():
                 futuro.set_result(valor)
             return valor
-        except Exception as exc:
+        except BaseException as exc:
+            # `BaseException` y no `Exception`: `CancelledError` hereda de la
+            # primera, así que una cancelación del dueño se saltaba este bloque,
+            # el `finally` retiraba la clave y el futuro quedaba pendiente PARA
+            # SIEMPRE. Todo el que esperase en `shield` colgaba sin remedio y
+            # sin error. Estaba dormido porque nada cancelaba estas corrutinas;
+            # basta un `wait_for` en cualquier llamante para despertarlo.
             if not futuro.done():
-                futuro.set_exception(exc)
+                # Y no se propaga la cancelación tal cual: al que espera no lo
+                # ha cancelado nadie, así que recibe un error normal —del que
+                # puede recuperarse— en vez de morir por una cancelación ajena.
+                futuro.set_exception(
+                    RuntimeError("La petición compartida se canceló antes de terminar.")
+                    if isinstance(exc, asyncio.CancelledError) else exc
+                )
                 # Si nadie llegó a esperar este futuro, asyncio escupiría
                 # "Future exception was never retrieved" al recolectarlo, y ese
                 # ruido en stderr contamina el transporte stdio del servidor.

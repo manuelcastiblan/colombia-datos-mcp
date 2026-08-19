@@ -12,12 +12,13 @@ Hechos verificados que este cliente absorbe:
 
 from __future__ import annotations
 
+import asyncio
 import os
 import urllib.parse
 
 from ..core import texto
 from ..core.cache import TTL_DATOS, TTL_METADATOS, cache
-from ..core.errors import ErrorEsquemaCambiado, ErrorNoEncontrado, ErrorValidacion
+from ..core.errors import CoDatosError, ErrorValidacion
 from ..core.http import ClienteHTTP
 
 DOMINIO = "www.datos.gov.co"
@@ -25,6 +26,10 @@ BASE_DATOS = f"https://{DOMINIO}"
 BASE_CATALOGO = "https://api.us.socrata.com/api/catalog/v1"
 
 _http = ClienteHTTP(perfil="socrata")
+
+# Plazo propio del conteo de grupos. Es un dato de cortesia: si tarda mas
+# que esto se declara desconocido y la respuesta sale igual, con sus datos.
+TIMEOUT_CONTEO = float(os.environ.get("CO_TIMEOUT_CONTEO", "25"))
 
 
 def _cabeceras() -> dict:
@@ -360,14 +365,18 @@ async def contar_grupos(
     cuántos grupos hay: para saberlo hay que agregar sobre el resultado, y eso
     solo se puede anidando.
 
-    Devuelve None si la fuente no admite el operador. Un total desconocido se
-    puede declarar; uno inventado contamina todo lo que toque.
+    Devuelve None ante CUALQUIER fallo. El conteo es un extra sobre una
+    respuesta que ya tiene sus datos: dejar que un timeout suyo tumbe esa
+    respuesta cambia «un total equivocado» por «ninguna respuesta», que es peor.
+    Por eso también lleva su propio plazo: sin él, una fuente lenta convierte un
+    número de cortesía en el 80 % de la latencia.
     """
     consulta = arma_soql(seleccionar, donde=donde, agrupar=agrupar,
                          teniendo=teniendo, luego="count(*) AS grupos")
     try:
-        filas = (await consultar_soql(dataset_id, consulta))["filas"]
-    except (ErrorValidacion, ErrorNoEncontrado, ErrorEsquemaCambiado):
+        r = await asyncio.wait_for(consultar_soql(dataset_id, consulta), TIMEOUT_CONTEO)
+        filas = r["filas"]
+    except (CoDatosError, asyncio.TimeoutError, RuntimeError):
         return None
     if not filas or "grupos" not in filas[0]:
         return None

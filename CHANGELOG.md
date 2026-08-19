@@ -2,6 +2,51 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.9.0] — 2026-08-19
+
+Segunda auditoría. La primera cosa que revisó fue el código de 0.8.0, y ahí
+estaba el peor hallazgo.
+
+### Corregido
+
+- **El conteo de grupos podía tumbar respuestas que ya tenían sus datos.**
+  `contar_grupos` solo capturaba errores de validación, así que un `ErrorTimeout`
+  o un `ErrorFuenteCaida` suyo se propagaba y destruía la respuesta entera. El
+  conteo es un extra: cambiar «un total equivocado» por «ninguna respuesta» es
+  ir hacia atrás. Ahora degrada ante cualquier fallo y lleva **plazo propio**
+  (`CO_TIMEOUT_CONTEO`, 25 s), porque medido en el peor caso —agregar por
+  proveedor sin filtro— el conteo añade 16 s a una respuesta de 7 s, y sin tope
+  una fuente lenta convierte un número de cortesía en el 80 % de la latencia.
+
+- **La caché colgaba a quien esperaba si cancelaban al dueño de la petición.**
+  `except Exception` no atrapa `CancelledError`: la cancelación se saltaba el
+  bloque, el `finally` retiraba la clave y el futuro quedaba pendiente para
+  siempre, de modo que todos los que esperaban en `asyncio.shield` colgaban sin
+  error y sin fin. Estaba **dormido** porque nada cancelaba estas corrutinas —y
+  el plazo del conteo, arriba, lo habría despertado el mismo día—. Además, al
+  que espera ya no se le propaga una cancelación ajena, sino un error normal
+  del que puede recuperarse.
+
+- **El presupuesto de tokens ignoraba el pie de la respuesta.** Procedencia,
+  URL reproducible y advertencias son parte de lo que se manda y no se
+  descontaban: medido, `co_datos_consultar` con `limite=200` entregaba 6.196
+  tokens contra un presupuesto de 6.000. Peor aún, **recortar añade avisos**,
+  así que el propio aviso de recorte empujaba la respuesta por encima del
+  presupuesto que ese recorte acababa de imponer. Ahora se reserva el pie y los
+  dos avisos que solo existirán si se recorta. Medido después: −13, −30 y
+  −4.333 tokens de margen en los tres casos más pesados.
+
+### Revisado y descartado
+
+Se comprobaron, y **no** son defectos: la superficie de inyección de
+`arma_soql` (`donde`/`teniendo`/`luego` van crudos por diseño contra una API
+pública de solo lectura, y `escapa()` cubre los literales); el recorrido de
+rutas al exportar (`Path(nombre).name` + lista blanca + extensión forzada); el
+crecimiento de la caché en disco (51 ficheros, 1,4 MB: solo van a disco los
+metadatos, acotados por número de datasets); y la caducidad de la tabla curada
+de alias (las 20 pruebas de contrato pasan contra la API viva, y CI las corre a
+diario).
+
 ## [0.8.0] — 2026-08-19
 
 ### Corregido

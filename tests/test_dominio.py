@@ -514,3 +514,24 @@ async def test_resolver_entidad_no_oculta_coincidencias_en_silencio(monkeypatch)
     meta = salida["estructurado"]["_meta"]
     assert meta["total_coincidencias"] == 11
     assert "10 de 11" in " ".join(meta["advertencias"])
+
+
+async def test_contar_grupos_no_tumba_una_respuesta_que_ya_tiene_datos(monkeypatch):
+    """El conteo de grupos es un extra sobre una respuesta ya construida. Solo
+    se capturaban errores de validación, así que un timeout suyo cambiaba «un
+    total equivocado» por «ninguna respuesta», que es peor."""
+    from colombia_datos_mcp.core.errors import ErrorTimeout
+
+    def respuesta(params):
+        if "$query" in params:
+            raise ErrorTimeout("la fuente tardó demasiado")
+        return [{"nombre_entidad": f"E{i}", "contratos": "1"} for i in range(3)]
+
+    _instala(monkeypatch, {"api/catalog/v1": CATALOGO,
+                           "/resource/jbjy-vk9h.json": respuesta})
+    salida = await catalogo.agregar("jbjy-vk9h", "nombre_entidad",
+                                    metricas="count(*) as contratos", limite=3)
+    meta = salida["estructurado"]["_meta"]
+    assert meta.get("total_coincidencias") is None
+    assert len(salida["estructurado"]["datos"]) == 3      # los datos sobreviven
+    assert "desconocido" in " ".join(meta["advertencias"]).lower()

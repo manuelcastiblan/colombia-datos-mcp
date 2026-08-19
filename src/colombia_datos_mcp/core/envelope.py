@@ -11,7 +11,16 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import format as fmt
-from .budget import Detalle, PRESUPUESTO_POR_DEFECTO, ajusta_filas
+from .budget import Detalle, PRESUPUESTO_POR_DEFECTO, ajusta_filas, estima_tokens
+
+
+# Los dos avisos que se añaden DESPUÉS de recortar. Son constantes para poder
+# reservar su coste antes de decidir cuántas filas caben, sin duplicar el texto.
+PLANTILLA_RECORTE = (
+    "Respuesta recortada por presupuesto de tokens. Refina con filtros, usa "
+    "detalle='conteo' para contar sin traer filas, o pagina con offset={offset}."
+)
+PLANTILLA_PARCIAL = "Viendo {devueltos} de {total} coincidencias. {detalle}"
 
 
 @dataclass
@@ -98,21 +107,33 @@ class Sobre:
             def cuerpo(filas, _serializa=serializa, _f=formato):
                 return f"```{_f}\n{_serializa(filas)}\n```"
 
-        filas, texto, recortado = ajusta_filas(self.datos, cuerpo, presupuesto)
+        # El pie —procedencia, URL reproducible y advertencias— es parte de la
+        # respuesta y no se descontaba: una tabla de 200 filas se pasaba 196
+        # tokens, y el exceso crece con cada advertencia y con lo larga que sea
+        # la URL (las de plegado de acentos rondan los 700 caracteres).
+        #
+        # Y no basta con reservar el pie actual: recortar AÑADE avisos, así que
+        # hay que reservar también los que solo existirán si se recorta. Si no,
+        # el propio aviso de recorte empuja la respuesta por encima del
+        # presupuesto que ese recorte acababa de imponer.
+        reserva = estima_tokens(
+            self._pie()
+            + PLANTILLA_RECORTE.format(offset=self.siguiente_offset)
+            + PLANTILLA_PARCIAL.format(devueltos=self.devueltos,
+                                       total=self.total_coincidencias,
+                                       detalle=self.aviso_parcial)
+        )
+        disponible = max(presupuesto - reserva, presupuesto // 4)
+        filas, texto, recortado = ajusta_filas(self.datos, cuerpo, disponible)
         if recortado:
             self.datos = filas
             self.truncado = True
-            self.advertir(
-                "Respuesta recortada por presupuesto de tokens. Refina con filtros, "
-                "usa detalle='conteo' para contar sin traer filas, o pagina con "
-                f"offset={self.siguiente_offset}."
-            )
+            self.advertir(PLANTILLA_RECORTE.format(offset=self.siguiente_offset))
         if (self.mostrar_conteo and self.total_coincidencias is not None
                 and self.devueltos < self.total_coincidencias):
-            self.advertir(
-                f"Viendo {self.devueltos} de {self.total_coincidencias} coincidencias. "
-                f"{self.aviso_parcial}"
-            )
+            self.advertir(PLANTILLA_PARCIAL.format(
+                devueltos=self.devueltos, total=self.total_coincidencias,
+                detalle=self.aviso_parcial))
         return {"texto": texto + "\n\n" + self._pie(), "estructurado": {"datos": self.datos, "_meta": self.meta()}}
 
     def _pie(self) -> str:

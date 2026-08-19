@@ -253,3 +253,50 @@ def test_identificador_no_se_formatea_aunque_parezca_numero():
 def test_clave_de_grupo_numerica_se_deja_intacta():
     from colombia_datos_mcp.domain.catalogo import _formatea_valor
     assert _formatea_valor("anio", "2026", es_metrica=False) == "2026"
+
+
+# ------------------------------ el pie también consume presupuesto (0.9.0) --
+def test_el_pie_cuenta_dentro_del_presupuesto():
+    """El pie —procedencia, URL reproducible y advertencias— es parte de la
+    respuesta y no se descontaba: una tabla de 200 filas se pasaba 196 tokens,
+    y el exceso crecía con cada advertencia."""
+    from colombia_datos_mcp.core import format as fmt
+    from colombia_datos_mcp.core.budget import estima_tokens
+    from colombia_datos_mcp.core.envelope import Fuente, Sobre
+
+    sobre = Sobre(
+        datos=[{"campo": "x" * 60, "otro": "y" * 60} for _ in range(200)],
+        consulta="https://www.datos.gov.co/resource/x.json?" + "a=1&" * 200,
+        fuente=Fuente(id="x", nombre="N" * 80, licencia="CC BY-SA 4.0"),
+    )
+    for i in range(6):
+        sobre.advertir(f"Advertencia {i}: " + "z" * 200)
+    salida = sobre.render(lambda f: fmt.tabla_markdown(f), presupuesto=2000)
+    assert estima_tokens(salida["texto"]) <= 2000
+
+
+async def test_cancelar_al_dueno_no_cuelga_a_quien_espera(tmp_path):
+    """`except Exception` no atrapa `CancelledError`: si cancelaban al dueño
+    del futuro, el `finally` retiraba la clave y el futuro quedaba pendiente
+    para siempre. Quien esperaba en `shield` colgaba sin error y sin fin."""
+    import asyncio
+
+    import pytest
+
+    from colombia_datos_mcp.core.cache import Cache
+
+    c = Cache(dir_disco=tmp_path / "cache")
+    arranco = asyncio.Event()
+
+    async def lento():
+        arranco.set()
+        await asyncio.sleep(30)
+        return "nunca llega"
+
+    dueno = asyncio.create_task(c.obtener_o_calcular(("k",), lento))
+    await arranco.wait()
+    espera = asyncio.create_task(c.obtener_o_calcular(("k",), lento))
+    await asyncio.sleep(0.05)      # deja que `espera` se enganche al futuro
+    dueno.cancel()
+    with pytest.raises((RuntimeError, asyncio.CancelledError)):
+        await asyncio.wait_for(espera, timeout=2)

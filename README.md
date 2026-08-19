@@ -53,7 +53,8 @@ Todas son opcionales y tienen valores conservadores.
 | Variable | Defecto | Qué controla |
 |---|---|---|
 | `SOCRATA_APP_TOKEN` | — | Cuota propia en Socrata. Un token inválido produce `[CONFIG]`, no degradación silenciosa. |
-| `CO_PRESUPUESTO_TOKENS` | `6000` | Tamaño máximo de respuesta antes de recortar filas. |
+| `CO_PRESUPUESTO_TOKENS` | `6000` | Tamaño máximo de respuesta, **pie incluido**: la procedencia, la URL reproducible y las advertencias cuentan. |
+| `CO_TIMEOUT_CONTEO` | `25` (s) | Plazo del conteo de grupos. Si lo agota, el total sale «desconocido» y la respuesta llega igual con sus datos. |
 | `CO_TTL_DATOS` | `900` (15 min) | TTL de la caché en memoria. |
 | `CO_TTL_METADATOS` | `86400` (24 h) | TTL de esquemas y dominios categóricos, en disco. |
 | `CO_CACHE_DIR` | `~/.cache/colombia-datos-mcp` | Dónde vive la caché L2. |
