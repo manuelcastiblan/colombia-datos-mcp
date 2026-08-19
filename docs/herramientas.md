@@ -97,17 +97,46 @@ Agrupa del lado del servidor: devuelve grupos, no filas.
 | `agrupar_por` | string | obligatorio | Una o varias columnas separadas por coma. |
 | `metricas` | string | `"count(*) as total"` | El orden se deriva del **primer alias**. |
 | `donde` | string | `""` | |
-| `teniendo` | string | `""` | `$having` |
+| `teniendo` | string | `""` | `$having`: filtra **grupos** por su métrica. |
+| `luego` | string | `""` | Segunda agregación sobre el resultado de la primera (`|>`). |
 | `limite` | int | `20` | Sin tope propio. |
 | `formato` | string | `"tabla"` | `tabla`, `csv` o `json`. |
 | `grafica` | bool | `true` | Añade la columna de barras. Se ignora si `formato` no es tabla. |
 
 El orden se toma del primer `as <alias>` de `metricas`: con
 `sum(valor_del_contrato) as valor` ordena por `valor DESC`. Sin alias, ordena
-por la primera columna del agrupamiento.
+por la primera columna del agrupamiento. Con `luego`, el orden se toma del
+primer alias de `luego`: la segunda etapa no ve los alias de la primera.
 
 Sin `donde` hace *full scan* y el sobre lo advierte: en datasets grandes puede
 agotar el tiempo.
+
+#### `luego`: agregar sobre los grupos
+
+`count(*)` con `teniendo` cuenta **dentro** de cada grupo, nunca cuántos grupos
+quedan. Son dos preguntas distintas y solo la primera tenía respuesta:
+
+```python
+# «cuántos contratos tiene cada persona que repite» — una fila por persona
+agrupar_por="documento_proveedor", metricas="count(*) as n", teniendo="count(*) > 1"
+
+# «cuántas PERSONAS repiten» — una sola fila, y hace falta `luego`
+agrupar_por="documento_proveedor", metricas="count(*) as n", teniendo="count(*) > 1",
+luego="count(*) as personas, sum(n) as contratos"
+#   -> personas: 130.720   contratos: 293.546
+```
+
+La segunda etapa recibe como tabla el resultado de la primera: sus columnas son
+los **alias** de `metricas` (`n`), no los campos del dataset. Referirse ahí a
+`documento_proveedor` o a `valor_del_contrato` da un 400.
+
+#### Cuántos grupos hay en realidad
+
+`total_coincidencias` cuenta **grupos**, no las filas mostradas. Si la fuente
+devolvió menos de `limite`, no hay más y el total es exacto sin petición extra;
+si llenó el límite, se cuentan aparte anidando. Cuando la fuente no admite el
+operador anidado el total sale **desconocido** y el sobre lo advierte: es
+preferible a un número inventado que luego alguien cite.
 
 Con `grafica` (por defecto activa):
 

@@ -17,7 +17,7 @@ import urllib.parse
 
 from ..core import texto
 from ..core.cache import TTL_DATOS, TTL_METADATOS, cache
-from ..core.errors import ErrorValidacion
+from ..core.errors import ErrorEsquemaCambiado, ErrorNoEncontrado, ErrorValidacion
 from ..core.http import ClienteHTTP
 
 DOMINIO = "www.datos.gov.co"
@@ -297,6 +297,84 @@ async def contar(dataset_id: str, donde: str | None = None) -> int:
     r = await consultar(dataset_id, seleccionar="count(*) as total", donde=donde, limite=1)
     filas = r["filas"]
     return int(filas[0]["total"]) if filas and "total" in filas[0] else 0
+
+
+# ------------------------------------------------------- consulta anidada --
+def arma_soql(
+    seleccionar: str,
+    donde: str | None = None,
+    agrupar: str | None = None,
+    teniendo: str | None = None,
+    ordenar: str | None = None,
+    limite: int | None = None,
+    offset: int = 0,
+    luego: str | None = None,
+) -> str:
+    """Compone SoQL como texto, que es lo único que admite el operador `|>`.
+
+    Los parámetros sueltos (`$select`, `$group`, `$having`) describen UNA
+    consulta; encadenar etapas exige `$query`.
+    """
+    partes = [f"SELECT {seleccionar}"]
+    if donde:
+        partes.append(f"WHERE {donde}")
+    if agrupar:
+        partes.append(f"GROUP BY {agrupar}")
+    if teniendo:
+        partes.append(f"HAVING {teniendo}")
+    if luego:
+        # La etapa siguiente ve como tabla el resultado de la anterior: sus
+        # columnas son los ALIAS de la etapa previa, no los campos del dataset.
+        partes.append(f"|> SELECT {luego}")
+    if ordenar:
+        partes.append(f"ORDER BY {ordenar}")
+    if limite is not None:
+        partes.append(f"LIMIT {limite}")
+    if offset:
+        partes.append(f"OFFSET {offset}")
+    return " ".join(partes)
+
+
+async def consultar_soql(dataset_id: str, consulta: str, ttl: int = TTL_DATOS) -> dict:
+    """Ejecuta SoQL completo por `$query`. Vía única para subconsultas anidadas."""
+    params = {"$query": consulta}
+    url = f"{BASE_DATOS}/resource/{dataset_id}.json"
+    filas = await cache.obtener_o_calcular(
+        ("soql", dataset_id, consulta),
+        lambda: _http.get_json(url, params=params, headers=_cabeceras()),
+        ttl=ttl,
+    )
+    return {"filas": filas or [], "consulta": url_reproducible(url, params)}
+
+
+async def contar_grupos(
+    dataset_id: str,
+    seleccionar: str,
+    agrupar: str,
+    donde: str | None = None,
+    teniendo: str | None = None,
+) -> int | None:
+    """Cuenta GRUPOS, no filas.
+
+    `count(*)` sobre una consulta agrupada devuelve el tamaño de cada grupo, no
+    cuántos grupos hay: para saberlo hay que agregar sobre el resultado, y eso
+    solo se puede anidando.
+
+    Devuelve None si la fuente no admite el operador. Un total desconocido se
+    puede declarar; uno inventado contamina todo lo que toque.
+    """
+    consulta = arma_soql(seleccionar, donde=donde, agrupar=agrupar,
+                         teniendo=teniendo, luego="count(*) AS grupos")
+    try:
+        filas = (await consultar_soql(dataset_id, consulta))["filas"]
+    except (ErrorValidacion, ErrorNoEncontrado, ErrorEsquemaCambiado):
+        return None
+    if not filas or "grupos" not in filas[0]:
+        return None
+    try:
+        return int(filas[0]["grupos"])
+    except (TypeError, ValueError):
+        return None
 
 
 async def cerrar() -> None:

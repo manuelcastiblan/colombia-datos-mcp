@@ -229,3 +229,27 @@ def test_sin_conteo_no_se_advierte_de_estar_viendo_una_parte():
 def test_con_conteo_el_aviso_sigue_saliendo():
     s = Sobre(datos=[{"a": 1}], total_coincidencias=20)
     assert "Viendo 1 de 20" in s.render(lambda _f: "cuerpo")["texto"]
+
+
+# ------------------------- métricas de alias libre vs identificadores (0.7.0)
+def test_metrica_con_alias_libre_se_formatea_como_cifra():
+    """El alias lo elige quien consulta —`personas`, `municipios`, `pares`— y
+    ningún vocabulario cerrado lo va a adivinar. En una agregación, lo que no
+    es clave de grupo es métrica."""
+    from colombia_datos_mcp.domain.catalogo import _formatea_valor
+    assert _formatea_valor("personas", "130720", es_metrica=True) == "130.720"
+    assert _formatea_valor("pares", "89745", es_metrica=True) == "89.745"
+
+
+def test_identificador_no_se_formatea_aunque_parezca_numero():
+    """Un DIVIPOLA es texto: «05001» -> «5.001» pierde el cero inicial y con
+    él todos los cruces territoriales."""
+    from colombia_datos_mcp.domain.catalogo import _formatea_valor
+    assert _formatea_valor("cod_mpio", "05001", es_metrica=True) == "05001"
+    assert _formatea_valor("documento_proveedor", "5888679", es_metrica=True) == "5888679"
+    assert _formatea_valor("nit_entidad", "899999061", es_metrica=True) == "899999061"
+
+
+def test_clave_de_grupo_numerica_se_deja_intacta():
+    from colombia_datos_mcp.domain.catalogo import _formatea_valor
+    assert _formatea_valor("anio", "2026", es_metrica=False) == "2026"

@@ -33,10 +33,25 @@ def limpia_texto(valor) -> str:
 # formatearlo como pesos convertía "125 municipios" en "$125".
 _MONETARIOS = ("valor", "precio", "cuantia", "saldo", "monto", "pagado", "presupuesto")
 _CONTEOS = ("total", "conteo", "count", "contratos", "cantidad", "numero", "registros")
+# Códigos que PARECEN números y no lo son. Formatear un DIVIPOLA como cifra le
+# mete puntos de miles y le come el cero inicial: "05001" -> "5.001", y con eso
+# se rompe todo join territorial.
+_IDENTIFICADORES = ("documento", "nit", "codigo", "cod_", "cedula", "cédula",
+                    "divipola", "id_entidad", "_id", "id_proceso", "proveedor")
 
 
 def es_monetario(campo: str) -> bool:
     return any(p in campo.lower() for p in _MONETARIOS)
+
+
+def es_identificador(campo: str) -> bool:
+    return any(p in campo.lower() for p in _IDENTIFICADORES)
+
+
+def es_entero(valor) -> bool:
+    """Entero puro en texto. Ni decimales ni notación científica."""
+    s = str(valor).strip().lstrip("-")
+    return bool(s) and s.isdigit()
 
 
 def es_conteo(campo: str) -> bool:

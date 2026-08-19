@@ -145,9 +145,16 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
 
 
 async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
-                  donde=None, teniendo=None, limite=20, formato="tabla",
-                  grafica=True):
-    """Agregación del lado del servidor: 20 grupos en vez de 10.000 filas."""
+                  donde=None, teniendo=None, luego=None, limite=20,
+                  formato="tabla", grafica=True):
+    """Agregación del lado del servidor: 20 grupos en vez de 10.000 filas.
+
+    `luego` encadena una segunda etapa sobre el resultado de la primera
+    (operador `|>` de SoQL). Es la única forma de agregar SOBRE los grupos:
+    «cuántas personas tienen más de un contrato» no es un `count(*)` con
+    `having` —eso cuenta contratos por persona—, sino un `count(*)` sobre la
+    tabla que ese `having` deja.
+    """
     if not agrupar_por:
         raise ErrorValidacion(
             "agrupar_por es obligatorio.",
@@ -157,21 +164,55 @@ async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
 
     esq = await socrata.esquema(dataset_id)
     seleccionar = f"{agrupar_por}, {metricas}"
-    orden = _orden_de_metrica(metricas, agrupar_por)
-    r = await socrata.consultar(
-        dataset_id, seleccionar=seleccionar, donde=donde, agrupar=agrupar_por,
-        teniendo=teniendo, ordenar=orden, limite=limite,
-    )
-    filas = [{k: _formatea_valor(k, v) for k, v in f.items()} for f in r["filas"]]
+    if luego:
+        # La segunda etapa solo ve los alias de la primera, así que ordenar por
+        # la métrica interna sería un 400 seguro.
+        alias_final = _alias_metrica(luego)
+        orden = f"{alias_final} DESC" if alias_final else None
+        consulta = socrata.arma_soql(seleccionar, donde=donde, agrupar=agrupar_por,
+                                     teniendo=teniendo, luego=luego, ordenar=orden,
+                                     limite=limite)
+        r = await socrata.consultar_soql(dataset_id, consulta)
+    else:
+        orden = _orden_de_metrica(metricas, agrupar_por)
+        r = await socrata.consultar(
+            dataset_id, seleccionar=seleccionar, donde=donde, agrupar=agrupar_por,
+            teniendo=teniendo, ordenar=orden, limite=limite,
+        )
+    claves = {c.strip().lower() for c in agrupar_por.split(",")}
+    filas = [{k: _formatea_valor(k, v, es_metrica=k.lower() not in claves)
+              for k, v in f.items()} for f in r["filas"]]
     # La gráfica se calcula sobre los valores CRUDOS: los ya formateados llevan
     # separadores de miles y símbolo de moneda.
-    alias = _alias_metrica(metricas)
+    alias = _alias_metrica(luego or metricas)
     if grafica and formato == "tabla" and alias:
         dibujos = fmt.barras([f.get(alias) for f in r["filas"]])
         for fila, dibujo in zip(filas, dibujos):
             fila["gráfica"] = dibujo
-    sobre = Sobre(datos=filas, total_coincidencias=len(filas), orden=orden,
-                  consulta=r["consulta"], fuente=_fuente_de(esq, dataset_id))
+
+    # `total_coincidencias` era len(filas): la respuesta juraba «12 de 12»
+    # habiendo 2.356 grupos, que es exactamente la mentira que este sobre
+    # existe para evitar. Si la fuente devolvió menos de lo pedido, no hay más
+    # y el total es exacto y gratis; si llenó el límite, hay que contar los
+    # grupos aparte, y eso solo se puede anidando.
+    if len(r["filas"]) < limite:
+        total = len(filas)
+    elif luego:
+        total = None  # contar las filas de la 2.ª etapa exigiría una 3.ª
+    else:
+        total = await socrata.contar_grupos(dataset_id, seleccionar, agrupar_por,
+                                            donde=donde, teniendo=teniendo)
+
+    sobre = Sobre(datos=filas, total_coincidencias=total, orden=orden,
+                  consulta=r["consulta"], fuente=_fuente_de(esq, dataset_id),
+                  aviso_parcial=("Los grupos no mostrados NO están en esta tabla: "
+                                 "cualquier suma sobre estas filas es parcial. "
+                                 "Sube `limite` o afina `donde`."))
+    if total is None:
+        sobre.advertir(
+            "Total de grupos desconocido: la fuente no admitió contarlos. Puede "
+            f"haber más de los {len(filas)} mostrados; no los tomes por todos."
+        )
     if not donde:
         sobre.advertir(
             "Agregación sin filtro: hace full scan y en datasets grandes puede agotar "
@@ -247,14 +288,21 @@ def _proyecta(filas, columnas):
     return proyectadas
 
 
-def _formatea_valor(campo: str, valor):
+def _formatea_valor(campo: str, valor, es_metrica: bool = False):
     nombre = campo.lower()
     if isinstance(valor, dict):
         valor = valor.get("url") or valor.get("description") or str(valor)
+    if fmt.es_identificador(nombre):
+        return fmt.recorta(valor, 70)
     if fmt.es_monetario(nombre):
         return fmt.moneda(valor)
     if fmt.es_conteo(nombre):
         return fmt.numero(valor)
     if "fecha" in nombre:
         return fmt.fecha(valor)
+    # En una agregación, toda columna que no sea clave de grupo es una métrica.
+    # El alias lo elige quien consulta —`personas`, `entidades`, `municipios`—
+    # y ningún vocabulario cerrado va a adivinarlo: mejor la regla estructural.
+    if es_metrica and fmt.es_entero(valor):
+        return fmt.numero(valor)
     return fmt.recorta(valor, 70)

@@ -2,6 +2,50 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.7.0] — 2026-08-19
+
+### Corregido
+
+- **`co_datos_agregar` llamaba «total» a lo que cabía en la tabla.**
+  `total_coincidencias` era `len(filas)`, de modo que una consulta recortada a
+  12 grupos afirmaba «12 de 12» habiendo 2.881 entidades. Es el peor error
+  posible en este servidor: no devolver de más, sino **parecer completo justo
+  cuando no lo está**, que es lo único que el sobre existe para impedir. Ahora,
+  si la fuente devuelve menos filas que el límite, no hay más y el total es
+  exacto sin coste; si llena el límite, los grupos se cuentan con una
+  subconsulta anidada; y si la fuente no admite anidar, el total se declara
+  **desconocido** con su advertencia, en vez de inventarse uno.
+- El aviso de respuesta parcial recomendaba «usa una herramienta de agregación,
+  no estas filas» **dentro de la propia herramienta de agregación**. `Sobre`
+  admite ahora `aviso_parcial`, y la agregación dice lo que corresponde: los
+  grupos ocultos no se recuperan agregando otra vez, sino subiendo `limite` o
+  afinando `donde`.
+- **Las métricas con alias libre salían sin formato.** El formateo dependía de
+  un vocabulario fijo (`total`, `contratos`, `cantidad`…), así que en una misma
+  fila convivían `contratos: 293.546` y `personas: 130720`. El alias lo elige
+  quien consulta y ninguna lista cerrada lo va a adivinar; la regla pasa a ser
+  estructural: en una agregación, toda columna que no sea clave de grupo es una
+  métrica.
+- **Identificadores blindados frente a ese mismo cambio.** `documento`, `nit`,
+  `cod_*` y `divipola` nunca se formatean como cifra: `"05001"` convertido en
+  `"5.001"` pierde el cero inicial y rompe todos los cruces territoriales.
+
+### Añadido
+
+- **Operador anidado de SoQL (`|>`), vía el parámetro `luego` de
+  `co_datos_agregar`.** Encadena una segunda agregación sobre el resultado de
+  la primera, cuyas columnas son los alias de la etapa anterior. Cierra una
+  pregunta que antes no tenía respuesta posible: `count(*)` con `having` cuenta
+  **dentro** de cada grupo, nunca cuántos grupos quedan. «Cuántas personas
+  tienen más de un contrato» exige agregar sobre los grupos:
+
+      agrupar_por="documento_proveedor", metricas="count(*) as n",
+      teniendo="count(*) > 1", luego="count(*) as personas, sum(n) as contratos"
+
+- `socrata.arma_soql()` compone SoQL como texto —único modo de expresar `|>`,
+  que `$select`/`$group` sueltos no admiten—, `consultar_soql()` lo ejecuta por
+  `$query` y `contar_grupos()` lo usa para el conteo honesto de arriba.
+
 ## [0.6.1] — 2026-08-18
 
 ### Corregido

@@ -136,7 +136,9 @@ para cualquier dato; las demás son de su fuente.
 
 **1. Comprueba `devueltos` contra `total`.** Si el sobre dice «20 filas de 4.312
 coincidencias», sumar esas 20 no da el total de nada. Usa una herramienta de
-agregación. El servidor te lo advierte, pero no puede impedírtelo.
+agregación. El servidor te lo advierte, pero no puede impedírtelo. En una
+agregación el `total` cuenta **grupos**, y si sale `desconocido` es literal: la
+fuente no dejó contarlos, así que puede haber más de los que ves.
 
 **2. Cuenta antes de traer.** `detalle="conteo"` cuesta ~200 tokens y te dice si
 el filtro está bien antes de gastar miles en filas.
@@ -560,6 +562,18 @@ debajo, y porque cada punto costó una verificación contra la fuente viva.
   el dataset de contratos con ningún nombre, solo en SECOP Integrado.
 - Las columnas de fecha del Plan Anual de Adquisiciones (`9sue-ezhx`) son de tipo
   `text`, no `calendar_date`: no se filtran con `between`.
+- **`count(*)` no cuenta grupos.** Sobre una consulta agrupada devuelve el tamaño
+  de cada grupo, no cuántos hay, y con `$having` no hay forma de saber cuántos
+  sobreviven al filtro. Se resuelve encadenando etapas con el operador `|>` de
+  SoQL, que exige `$query` porque `$select`/`$group` sueltos no lo admiten. Es
+  el parámetro `luego` de `co_datos_agregar`.
+- **Un NIT no es una entidad, es un organismo con chequera.** En SECOP, `899999061`
+  cubre las **34 secretarías de Bogotá**, `899999034` los **78 centros del SENA**,
+  `899999239` las 32 regionales del ICBF, `890399011` las 28 dependencias de Cali
+  y `899999114` las 18 de Cundinamarca. Agrupar por `nit_entidad` los funde en uno
+  y agrupar por `nombre_entidad` los separa: ninguna de las dos es «la entidad».
+  Elige según la pregunta y dilo — quien pasa de la Secretaría de Ambiente a la de
+  Gobierno de Bogotá no cambió de empleador, pero sí de contrato.
 
 ## Lo que este servidor NO hace
 

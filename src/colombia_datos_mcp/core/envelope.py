@@ -40,6 +40,12 @@ class Sobre:
     # Hay respuestas donde «N fila(s)» no significa nada —exportar a disco
     # devuelve una ruta, no filas— y anunciarlo confunde más que informa.
     mostrar_conteo: bool = True
+    # Qué añadir cuando se ve menos de lo que hay. El texto por defecto manda a
+    # agregar, pero en una respuesta YA agregada ese consejo no aplica: los
+    # grupos ocultos no se recuperan agregando otra vez, sino subiendo el
+    # límite o afinando el filtro.
+    aviso_parcial: str = ("Cualquier conclusión cuantitativa debe usar una herramienta "
+                          "de agregación, no estas filas.")
 
     # ---------------------------------------------------------------- meta --
     @property
@@ -105,8 +111,7 @@ class Sobre:
                 and self.devueltos < self.total_coincidencias):
             self.advertir(
                 f"Viendo {self.devueltos} de {self.total_coincidencias} coincidencias. "
-                "Cualquier conclusión cuantitativa debe usar una herramienta de agregación, "
-                "no estas filas."
+                f"{self.aviso_parcial}"
             )
         return {"texto": texto + "\n\n" + self._pie(), "estructurado": {"datos": self.datos, "_meta": self.meta()}}
 

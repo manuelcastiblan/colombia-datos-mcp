@@ -131,16 +131,30 @@ async def co_datos_consultar(dataset_id: str, seleccionar: str = "", donde: str 
 @mcp.tool(annotations=SOLO_LECTURA)
 async def co_datos_agregar(dataset_id: str, agrupar_por: str,
                            metricas: str = "count(*) as total", donde: str = "",
-                           teniendo: str = "", limite: int = 20,
+                           teniendo: str = "", luego: str = "", limite: int = 20,
                            formato: str = "tabla", grafica: bool = True) -> ToolResult:
     """Agrega del lado del servidor: agrupa y devuelve grupos, no filas.
+
+    `teniendo` filtra grupos por su métrica (`count(*) > 1`).
+
+    `luego` encadena una SEGUNDA agregación sobre el resultado de la primera.
+    Sus columnas son los alias de la primera etapa, no los campos del dataset.
+    Sirve para preguntas sobre los grupos mismos:
+
+        agrupar_por="documento_proveedor", metricas="count(*) as n",
+        teniendo="count(*) > 1", luego="count(*) as personas, sum(n) as contratos"
+
+    devuelve cuántas PERSONAS repiten, no cuántos contratos tiene cada una.
+    Sin `luego` esa pregunta no tiene respuesta: `count(*)` con `having` cuenta
+    dentro de cada grupo, nunca los grupos.
 
     `grafica` añade una columna de barras proporcionales a la métrica, para
     comparar los grupos de un vistazo. `formato`: "tabla", "csv" o "json".
     """
     return await _ejecuta(catalogo.agregar(
         dataset_id, agrupar_por, metricas=metricas, donde=donde or None,
-        teniendo=teniendo or None, limite=limite, formato=formato, grafica=grafica))
+        teniendo=teniendo or None, luego=luego or None, limite=limite,
+        formato=formato, grafica=grafica))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)

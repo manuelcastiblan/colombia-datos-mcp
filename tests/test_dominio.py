@@ -397,3 +397,72 @@ async def test_el_resumen_conserva_una_columna_ausente_en_la_primera_fila(monkey
     # Y el orden curado se conserva: la fecha no se va al final de la tabla.
     cabecera = salida["texto"].splitlines()[0]
     assert cabecera.index("fecha de firma") < cabecera.index("estado contrato")
+
+
+# ------------------------------- honestidad del conteo de grupos (0.7.0) ----
+async def test_agregar_no_toma_las_filas_devueltas_por_el_total(monkeypatch):
+    """Regresión: `total_coincidencias` era `len(filas)`, así que una tabla
+    recortada a 5 juraba «5 de 5» habiendo 2.881 grupos. El sobre existe
+    justo para no mentir en eso."""
+    def respuesta(params):
+        if "$query" in params:
+            assert "|>" in params["$query"]  # contar grupos exige anidar
+            return [{"grupos": "2881"}]
+        return [{"nombre_entidad": f"ENTIDAD {i}", "contratos": "10"} for i in range(5)]
+
+    _instala(monkeypatch, {"api/catalog/v1": CATALOGO,
+                           "/resource/jbjy-vk9h.json": respuesta})
+    salida = await catalogo.agregar("jbjy-vk9h", "nombre_entidad",
+                                    metricas="count(*) as contratos", limite=5)
+    meta = salida["estructurado"]["_meta"]
+    assert meta["total_coincidencias"] == 2881
+    assert "5 de 2881" in " ".join(meta["advertencias"])
+
+
+async def test_agregar_no_pregunta_el_total_si_ya_vio_todos_los_grupos(monkeypatch):
+    """Si la fuente devuelve menos de lo pedido, no hay más: el total es
+    exacto y gratis. Cobrar una petición extra por saberlo sería tonto."""
+    def respuesta(params):
+        assert "$query" not in params, "no hacía falta contar los grupos"
+        return [{"nombre_entidad": "A", "contratos": "10"}]
+
+    _instala(monkeypatch, {"api/catalog/v1": CATALOGO,
+                           "/resource/jbjy-vk9h.json": respuesta})
+    salida = await catalogo.agregar("jbjy-vk9h", "nombre_entidad",
+                                    metricas="count(*) as contratos", limite=20)
+    assert salida["estructurado"]["_meta"]["total_coincidencias"] == 1
+
+
+async def test_agregar_declara_el_total_desconocido_en_vez_de_inventarlo(monkeypatch):
+    """Si la fuente no admite anidar, el total se declara desconocido. Un
+    total ignorado se puede avisar; uno inventado contamina lo que toque."""
+    def respuesta(params):
+        if "$query" in params:
+            raise ErrorValidacion("esta fuente no admite el operador anidado")
+        return [{"nombre_entidad": f"E{i}", "contratos": "1"} for i in range(3)]
+
+    _instala(monkeypatch, {"api/catalog/v1": CATALOGO,
+                           "/resource/jbjy-vk9h.json": respuesta})
+    salida = await catalogo.agregar("jbjy-vk9h", "nombre_entidad",
+                                    metricas="count(*) as contratos", limite=3)
+    meta = salida["estructurado"]["_meta"]
+    assert meta.get("total_coincidencias") is None
+    assert "desconocido" in " ".join(meta["advertencias"]).lower()
+
+
+async def test_luego_encadena_una_segunda_agregacion(monkeypatch):
+    """`count(*)` con `having` cuenta DENTRO de cada grupo. Para contar los
+    grupos que el `having` deja hace falta una segunda etapa."""
+    def respuesta(params):
+        q = params.get("$query", "")
+        assert "|> SELECT" in q and "HAVING" in q
+        # El orden va sobre el alias de la 2.ª etapa, no sobre el de la 1.ª.
+        assert "ORDER BY personas DESC" in q
+        return [{"personas": "130720", "contratos": "293546"}]
+
+    _instala(monkeypatch, {"api/catalog/v1": CATALOGO,
+                           "/resource/jbjy-vk9h.json": respuesta})
+    salida = await catalogo.agregar(
+        "jbjy-vk9h", "nombre_entidad", metricas="count(*) as n",
+        teniendo="count(*) > 1", luego="count(*) as personas, sum(n) as contratos")
+    assert salida["estructurado"]["datos"][0]["personas"] == "130.720"
