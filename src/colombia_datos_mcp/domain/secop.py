@@ -9,7 +9,7 @@ from . import agregacion
 from ..adapters import socrata
 from ..core import format as fmt
 from ..core.budget import Detalle
-from ..core.envelope import Fuente, Sobre
+from ..core.envelope import Fuente, Sobre, Total
 from ..core.errors import ErrorNoEncontrado, ErrorValidacion
 from ..registry import datasets as reg
 
@@ -151,14 +151,14 @@ async def _buscar(clave: str, detalle="resumen", limite=20, offset=0,
     if imposible:
         # El término no existe en la fuente: cero es la respuesta correcta, y
         # se dice por qué en vez de gastar una consulta que devolvería cero.
-        sobre = Sobre(datos=[], total_coincidencias=0, detalle=nivel, fuente=_fuente(ds))
+        sobre = Sobre(datos=[], total=Total.completo(0), detalle=nivel, fuente=_fuente(ds))
         for a in avisos:
             sobre.advertir(a)
         return sobre.render(lambda _f: "_Sin coincidencias._")
 
     total = await socrata.contar(ds.id, donde=donde)
     if nivel is Detalle.CONTEO:
-        sobre = Sobre(datos=[], total_coincidencias=total, detalle=nivel, fuente=_fuente(ds),
+        sobre = Sobre(datos=[], total=Total.contado(total), detalle=nivel, fuente=_fuente(ds),
                       consulta=socrata.url_reproducible(
                           f"{socrata.BASE_DATOS}/resource/{ds.id}.json",
                           {"$select": "count(*)", "$where": donde}))
@@ -172,7 +172,7 @@ async def _buscar(clave: str, detalle="resumen", limite=20, offset=0,
     columnas = list(ds.campos_resumen) if nivel is Detalle.RESUMEN else None
     filas = _proyecta(r["filas"], columnas, ds)
 
-    sobre = Sobre(datos=filas, total_coincidencias=total, offset=offset, orden=orden,
+    sobre = Sobre(datos=filas, total=Total.contado(total), offset=offset, orden=orden,
                   detalle=nivel, consulta=r["consulta"], fuente=_fuente(ds))
     for a in avisos:
         sobre.advertir(a)
@@ -302,7 +302,7 @@ async def detalle_contrato(id_contrato: str):
         lineas += ["", "_Sin modificaciones registradas en SECOP II._"]
 
     cuerpo = "\n".join(lineas)
-    sobre = Sobre(datos=[c], total_coincidencias=1, detalle=Detalle.COMPLETO,
+    sobre = Sobre(datos=[c], total=Total.completo(1), detalle=Detalle.COMPLETO,
                   consulta=base["consulta"], fuente=_fuente(contratos))
     return sobre.render(lambda _f: cuerpo)
 
@@ -329,7 +329,7 @@ async def perfil_proveedor(documento: str, limite=20):
                           agrupar="nombre_entidad", ordenar="valor DESC", limite=tope),
     )
     if total == 0:
-        sobre = Sobre(datos=[], total_coincidencias=0, fuente=_fuente(contratos),
+        sobre = Sobre(datos=[], total=Total.completo(0), fuente=_fuente(contratos),
                       consulta=top["consulta"])
         sobre.advertir(
             "Cero contratos para ese documento en SECOP II. No es un fallo de la fuente: "

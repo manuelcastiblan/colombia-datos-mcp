@@ -8,7 +8,7 @@ from . import agregacion
 from ..adapters import socrata
 from ..core import format as fmt
 from ..core.budget import Detalle
-from ..core.envelope import Fuente, Sobre
+from ..core.envelope import Fuente, Sobre, Total
 from ..core.errors import ErrorNoEncontrado, ErrorValidacion
 from ..registry import datasets as reg
 
@@ -55,7 +55,8 @@ async def buscar_datasets(consulta=None, categoria=None, entidad=None, limite=20
 
     sobre = Sobre(
         datos=filas,
-        total_coincidencias=crudo.get("resultSetSize"),
+        # La Discovery API devuelve el total del catalogo: lo conto ella.
+        total=Total.contado(crudo["resultSetSize"]) if crudo.get("resultSetSize") is not None else None,
         offset=offset,
         orden="relevancia",
         consulta=r["consulta"],
@@ -95,7 +96,8 @@ async def describir_dataset(dataset_id: str):
     ]
     sobre = Sobre(
         datos=filas,
-        total_coincidencias=len(filas),
+        # Son TODAS las columnas del esquema, no una pagina de ellas.
+        total=Total.completo(len(filas)),
         detalle=Detalle.COMPLETO,
         orden="posición",
         fuente=_fuente_de(esq, dataset_id),
@@ -124,7 +126,7 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
 
     if nivel is Detalle.CONTEO:
         total = await socrata.contar(dataset_id, donde=donde)
-        sobre = Sobre(datos=[], total_coincidencias=total, detalle=nivel, fuente=fuente,
+        sobre = Sobre(datos=[], total=Total.contado(total), detalle=nivel, fuente=fuente,
                       consulta=socrata.url_reproducible(
                           f"{socrata.BASE_DATOS}/resource/{dataset_id}.json",
                           {"$select": "count(*)", "$where": donde}))
@@ -145,7 +147,7 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
         columnas = list(conocido.campos_resumen) if conocido and conocido.campos_resumen else None
         filas = _proyecta(filas, columnas)
 
-    sobre = Sobre(datos=filas, total_coincidencias=total, offset=offset,
+    sobre = Sobre(datos=filas, total=Total.contado(total), offset=offset,
                   orden=r.get("orden") or ordenar, detalle=nivel,
                   consulta=r["consulta"], fuente=fuente)
     if socrata.sin_token():

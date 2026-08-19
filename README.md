@@ -141,6 +141,12 @@ agregación. El servidor te lo advierte, pero no puede impedírtelo. En una
 agregación el `total` cuenta **grupos**, y si sale `desconocido` es literal: la
 fuente no dejó contarlos, así que puede haber más de los que ves.
 
+Cada total viene con `origen_del_total`, que dice **cómo se supo**: `contado`
+(lo contó la fuente), `cabia_entero` (devolvió menos de lo pedido, así que no
+había más) o `completo` (la colección no sale de una consulta con `$limit`: las
+columnas de un esquema, un contrato concreto). Si vas a citar la cifra, ese
+campo es la diferencia entre un dato y una suposición.
+
 **2. Cuenta antes de traer.** `detalle="conteo"` cuesta ~200 tokens y te dice si
 el filtro está bien antes de gastar miles en filas.
 

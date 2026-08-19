@@ -29,7 +29,11 @@ nada preguntaba. Se arregló en una y siguió vivo en cinco.
   argumentos mínimos y la prueba comprobará que, con una fuente que llena el
   límite y no deja contar los grupos, tu respuesta **no se declara completa**.
   Para cumplirlo, usa `domain/agregacion.anota_total()`; no calcules el total a
-  mano.
+  mano. De hecho ya no puedes: `Sobre` no acepta un entero, sino un `Total` que
+  obliga a decir de dónde salió (`Total.contado`, `Total.cupo_entero`,
+  `Total.completo`, `Total.desconocido`). El que usarías por descuido
+  —`cupo_entero(filas, limite)`— decide él, y devuelve desconocido si la fuente
+  llenó el límite.
 * **`EXENTAS`**: no aplica. Escribe el motivo, que se lee. «Se me olvidó» y «no
   aplica» son indistinguibles desde fuera si el hueco está vacío.
 

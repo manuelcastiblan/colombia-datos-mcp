@@ -9,7 +9,7 @@ from ..core import format as fmt
 from ..core import texto
 from ..core.budget import Detalle
 from ..core.coords import normaliza_par
-from ..core.envelope import Fuente, Sobre
+from ..core.envelope import Fuente, Sobre, Total
 from ..core.errors import ErrorValidacion
 from ..registry import datasets as reg
 
@@ -39,7 +39,7 @@ def _sin_coincidencias(ds, consulta, campo, offset):
     Devolver esto sin consultar evita el peor resultado posible, que es una
     tabla vacía indistinguible de "la fuente no tiene datos".
     """
-    sobre = Sobre(datos=[], total_coincidencias=0, offset=offset,
+    sobre = Sobre(datos=[], total=Total.completo(0), offset=offset,
                   fuente=Fuente(id=ds.id, nombre=ds.nombre, licencia=_LIC))
     sobre.advertir(
         f"«{consulta}» no corresponde a ningún valor de `{campo}` en DIVIPOLA. "
@@ -90,7 +90,7 @@ async def _municipios(consulta, codigo, nivel, con_coordenadas, limite, offset,
                 sin_coord += 1
         filas.append(fila)
 
-    sobre = Sobre(datos=filas, total_coincidencias=total, offset=offset, orden="cod_mpio",
+    sobre = Sobre(datos=filas, total=Total.contado(total), offset=offset, orden="cod_mpio",
                   consulta=r["consulta"],
                   fuente=Fuente(id=ds.id, nombre=ds.nombre, licencia=_LIC,
                                 atribucion="DIVIPOLA (republicación); origen DANE"))
@@ -143,7 +143,7 @@ async def _centros(consulta, codigo, con_coordenadas, limite, offset, formato="t
                 sin_coord += 1
         filas.append(fila)
 
-    sobre = Sobre(datos=filas, total_coincidencias=total, offset=offset,
+    sobre = Sobre(datos=filas, total=Total.contado(total), offset=offset,
                   orden="codigo_centro_poblado", consulta=r["consulta"],
                   fuente=Fuente(id=ds.id, nombre=ds.nombre, licencia=_LIC, atribucion="DANE"))
     sobre.advertir("CM = cabecera municipal, CP = centro poblado.")
@@ -191,7 +191,9 @@ async def cotejar_coordenadas(limite=15):
         f"Municipios cotejados: **{len(indice)}** · cabeceras: **{len(cab['filas'])}** · "
         f"discrepancias > ~1 km: **{len(discrepancias)}** · sin pareja: {sin_par}"
     )
-    sobre = Sobre(datos=discrepancias[:limite], total_coincidencias=len(discrepancias),
+    # `datos` va recortado pero el total es el de TODAS las discrepancias
+    # halladas: este sitio ya lo hacia bien y fue el modelo del resto.
+    sobre = Sobre(datos=discrepancias[:limite], total=Total.completo(len(discrepancias)),
                   orden="delta DESC", detalle=Detalle.RESUMEN, consulta=cab["consulta"],
                   fuente=Fuente(id="gdxc-w37w + xaxy-8nri", nombre="Cotejo DIVIPOLA", licencia=_LIC))
     sobre.advertir(
@@ -273,7 +275,7 @@ async def limites(nivel: str = "municipio", codigo: str | None = None,
             "lat": f"{y0:.2f} a {y1:.2f}",
         })
 
-    sobre = Sobre(datos=[], total_coincidencias=len(rasgos), mostrar_conteo=False,
+    sobre = Sobre(datos=[], total=Total.completo(len(rasgos)), mostrar_conteo=False,
                   fuente=Fuente(id="MGN 2018", nombre="Límites municipales del DANE",
                                 licencia=_LIC, atribucion=geometria.PROCEDENCIA))
     cuerpo = [f"**{len(rasgos)}** geometría(s) de nivel {nivel}.", ""]

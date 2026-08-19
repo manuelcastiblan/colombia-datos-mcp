@@ -2,6 +2,44 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.11.0] — 2026-08-19
+
+Cierra el patrón de las dos auditorías por el otro extremo: hasta ahora el error
+era **detectable**; ahora es **inexpresable**.
+
+### Cambiado
+
+- **El total del sobre lleva su procedencia.** `Sobre.total_coincidencias` era
+  un `int | None`, y un entero desnudo no puede distinguir «lo conté» de
+  «supuse». Por eso `len(filas)` se coló en seis herramientas: sintácticamente
+  es impecable. Ahora el campo es `total: Total`, y `Total` no se construye sin
+  decir cómo se supo:
+
+  | Constructor | Cuándo |
+  |---|---|
+  | `Total.contado(n)` | lo contó la fuente: `count(*)` o la subconsulta anidada |
+  | `Total.cupo_entero(filas, limite)` | devolvió menos de lo pedido: no había más |
+  | `Total.completo(n)` | la colección no sale de una consulta con `$limit` |
+  | `Total.desconocido()` | no consta, y se advierte |
+
+  La pieza que cierra el asunto es `cupo_entero`: es el constructor que se
+  usaría por descuido, exige el límite de la consulta y **decide él**. Si la
+  fuente lo llenó, devuelve desconocido en vez del número que alguien habría
+  escrito. Ya no hay forma de afirmar un total sin haberlo comprobado.
+
+  El keyword viejo desaparece a propósito: cualquier sitio que siguiera pasando
+  un entero falla al construirse, y `total_coincidencias` queda como propiedad
+  de **solo lectura**. Los 17 sitios se revisaron uno a uno para elegir el
+  constructor que describe la verdad de cada uno.
+
+### Añadido
+
+- **`origen_del_total` en el sobre.** Quien cite una cifra puede ver si se contó
+  o si simplemente cupo, sin preguntar. Verificado contra la fuente viva:
+  `co_secop_resolver_entidad` → 11 `contado`; `co_datos_agregar` por
+  `tipodocproveedor` → 10 `cabia_entero`; `co_datos_describir_dataset` → 85
+  `completo`.
+
 ## [0.10.0] — 2026-08-19
 
 Dos auditorías seguidas encontraron el mismo patrón: los defectos de este

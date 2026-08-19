@@ -5,7 +5,7 @@ import pytest
 from colombia_datos_mcp.core import format as fmt
 from colombia_datos_mcp.core.budget import Detalle, ajusta_filas, estima_tokens, siguiente_nivel
 from colombia_datos_mcp.core.coords import normaliza_coord, normaliza_par
-from colombia_datos_mcp.core.envelope import Fuente, Sobre
+from colombia_datos_mcp.core.envelope import Fuente, Sobre, Total
 from colombia_datos_mcp.core.errors import ErrorValidacion
 
 from .fixtures import CENTROS_POBLADOS, MUNICIPIOS
@@ -95,18 +95,18 @@ def test_ajusta_filas_no_toca_lo_que_ya_cabe():
 # ------------------------------------------------------------------ sobre --
 def test_siguiente_offset_es_honesto():
     """Nunca se anuncia un salto mayor a lo realmente devuelto (§6.3)."""
-    s = Sobre(datos=[{"a": i} for i in range(20)], total_coincidencias=8412, offset=0)
+    s = Sobre(datos=[{"a": i} for i in range(20)], total=Total.contado(8412), offset=0)
     assert s.devueltos == 20
     assert s.siguiente_offset == 20   # no 200, aunque se hubieran descargado 200
 
 
 def test_sin_siguiente_pagina_al_final():
-    s = Sobre(datos=[{"a": 1}], total_coincidencias=1, offset=0)
+    s = Sobre(datos=[{"a": 1}], total=Total.contado(1), offset=0)
     assert s.siguiente_offset is None
 
 
 def test_sobre_advierte_cuando_solo_muestra_una_parte():
-    s = Sobre(datos=[{"a": i} for i in range(5)], total_coincidencias=1000,
+    s = Sobre(datos=[{"a": i} for i in range(5)], total=Total.contado(1000),
               consulta="https://x", fuente=Fuente(id="jbjy-vk9h", nombre="SECOP II"))
     salida = s.render(lambda f: fmt.tabla_markdown(f))
     assert "5 de 1000" in " ".join(s.advertencias)
@@ -116,7 +116,7 @@ def test_sobre_advierte_cuando_solo_muestra_una_parte():
 
 
 def test_sobre_marca_truncado_y_dice_que_hacer():
-    s = Sobre(datos=[{"x": "y" * 400} for _ in range(100)], total_coincidencias=100)
+    s = Sobre(datos=[{"x": "y" * 400} for _ in range(100)], total=Total.contado(100))
     s.render(lambda f: fmt.tabla_markdown(f), presupuesto=300)
     assert s.truncado is True
     assert any("conteo" in a for a in s.advertencias)
@@ -219,7 +219,7 @@ def test_sin_conteo_no_se_advierte_de_estar_viendo_una_parte():
     """`datos` no siempre son filas: en co_geo_limites es un FeatureCollection y
     en la exportación la ficha del fichero. Decir «viendo 1 de 2 coincidencias»
     sobre eso es falso, y arrastra el aviso de no sacar conclusiones."""
-    s = Sobre(datos=[{"coleccion": "entera"}], total_coincidencias=2,
+    s = Sobre(datos=[{"coleccion": "entera"}], total=Total.completo(2),
               mostrar_conteo=False)
     salida = s.render(lambda _f: "cuerpo")
     assert "Viendo" not in salida["texto"]
@@ -227,7 +227,7 @@ def test_sin_conteo_no_se_advierte_de_estar_viendo_una_parte():
 
 
 def test_con_conteo_el_aviso_sigue_saliendo():
-    s = Sobre(datos=[{"a": 1}], total_coincidencias=20)
+    s = Sobre(datos=[{"a": 1}], total=Total.contado(20))
     assert "Viendo 1 de 20" in s.render(lambda _f: "cuerpo")["texto"]
 
 
@@ -262,7 +262,7 @@ def test_el_pie_cuenta_dentro_del_presupuesto():
     y el exceso crecía con cada advertencia."""
     from colombia_datos_mcp.core import format as fmt
     from colombia_datos_mcp.core.budget import estima_tokens
-    from colombia_datos_mcp.core.envelope import Fuente, Sobre
+    from colombia_datos_mcp.core.envelope import Fuente, Sobre, Total
 
     sobre = Sobre(
         datos=[{"campo": "x" * 60, "otro": "y" * 60} for _ in range(200)],
@@ -300,3 +300,45 @@ async def test_cancelar_al_dueno_no_cuelga_a_quien_espera(tmp_path):
     dueno.cancel()
     with pytest.raises((RuntimeError, asyncio.CancelledError)):
         await asyncio.wait_for(espera, timeout=2)
+
+
+# ---------------------- el total no se puede afirmar a la ligera (0.11.0) ---
+def test_el_keyword_viejo_ya_no_existe():
+    """Pasar un entero desnudo era la forma del error: sintácticamente
+    impecable, semánticamente una afirmación sin comprobar. Ahora falla al
+    construirse en vez de colarse."""
+    import pytest
+    with pytest.raises(TypeError):
+        Sobre(datos=[{"a": 1}], total_coincidencias=1)
+
+
+def test_el_total_es_de_solo_lectura():
+    import pytest
+    s = Sobre(datos=[{"a": 1}])
+    with pytest.raises(AttributeError):
+        s.total_coincidencias = 1
+
+
+def test_cupo_entero_se_niega_cuando_la_fuente_lleno_el_limite():
+    """El constructor que uno usaría por descuido decide él. Si la fuente llenó
+    el límite no consta que no hubiera más, así que devuelve desconocido en vez
+    del número que alguien habría escrito sin pensarlo."""
+    assert Total.cupo_entero([1, 2, 3], limite=20).valor == 3        # cabía entero
+    lleno = Total.cupo_entero([1, 2, 3], limite=3)                   # lo llenó
+    assert lleno.valor is None and lleno.origen == "desconocido"
+    assert not lleno.consta
+
+
+def test_el_sobre_declara_como_supo_el_total():
+    """Quien cite la cifra puede ver si se contó o si cupo, sin preguntar."""
+    from colombia_datos_mcp.core import format as fmt
+    for total, origen in ((Total.contado(500), "contado"),
+                          (Total.cupo_entero([1], 20), "cabia_entero"),
+                          (Total.completo(3), "completo")):
+        meta = Sobre(datos=[{"a": 1}], total=total).render(
+            lambda f: fmt.tabla_markdown(f))["estructurado"]["_meta"]
+        assert meta["origen_del_total"] == origen
+    # Y cuando no consta, no se declara un origen falso.
+    meta = Sobre(datos=[{"a": 1}], total=Total.desconocido()).render(
+        lambda f: fmt.tabla_markdown(f))["estructurado"]["_meta"]
+    assert "total_coincidencias" not in meta and "origen_del_total" not in meta

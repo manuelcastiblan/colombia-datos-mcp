@@ -23,6 +23,57 @@ PLANTILLA_RECORTE = (
 PLANTILLA_PARCIAL = "Viendo {devueltos} de {total} coincidencias. {detalle}"
 
 
+@dataclass(frozen=True)
+class Total:
+    """Cuántas coincidencias hay **y cómo se supo**.
+
+    El defecto más repetido de este servidor fue escribir `len(filas)` donde
+    iba un total. Sintácticamente es un entero impecable; semánticamente es una
+    afirmación que nadie comprobó, y apareció en seis herramientas por separado.
+
+    Un entero desnudo no puede distinguir «lo conté» de «supuse». Este tipo sí,
+    y el constructor que se usaría por descuido —`cupo_entero`— exige el límite
+    de la consulta y **decide él**: si la fuente lo llenó, devuelve desconocido
+    en vez del número que alguien habría puesto. No hay forma de afirmar un
+    total sin haberlo comprobado, así que el error deja de ser detectable para
+    ser inexpresable.
+    """
+
+    valor: int | None
+    origen: str
+
+    @property
+    def consta(self) -> bool:
+        return self.valor is not None
+
+    @classmethod
+    def contado(cls, n: int) -> "Total":
+        """La fuente lo contó: `count(*)`, o la subconsulta anidada de grupos."""
+        return cls(int(n), "contado")
+
+    @classmethod
+    def cupo_entero(cls, filas, limite: int) -> "Total":
+        """El total cuando la respuesta cabía entera.
+
+        Si la fuente devolvió MENOS de lo que se le pidió, no hay más y
+        `len(filas)` sí es el total, exacto y sin coste. Si llenó el límite, no
+        consta: eso es justo lo que se afirmaba a la ligera.
+        """
+        return (cls(len(filas), "cabia_entero") if len(filas) < limite
+                else cls(None, "desconocido"))
+
+    @classmethod
+    def completo(cls, n: int) -> "Total":
+        """La colección ES completa por construcción, no por haber cabido: las
+        columnas de un esquema, un contrato concreto, una lista fija de
+        datasets, un resultado vacío. No hay consulta con `$limit` detrás."""
+        return cls(int(n), "completo")
+
+    @classmethod
+    def desconocido(cls) -> "Total":
+        return cls(None, "desconocido")
+
+
 @dataclass
 class Fuente:
     id: str
@@ -38,7 +89,11 @@ class Fuente:
 @dataclass
 class Sobre:
     datos: list[dict] = field(default_factory=list)
-    total_coincidencias: int | None = None
+    # Se llama `total`, y no `total_coincidencias`, a propósito: así cualquier
+    # sitio que siguiera pasando un entero desnudo falla al construirse en vez
+    # de colarse. `total_coincidencias` sigue existiendo como propiedad de solo
+    # lectura —y como campo del sobre en la respuesta—, pero ya no se asigna.
+    total: Total | None = None
     offset: int = 0
     orden: str | None = None
     detalle: Detalle = Detalle.RESUMEN
@@ -62,6 +117,13 @@ class Sobre:
         return len(self.datos)
 
     @property
+    def total_coincidencias(self) -> int | None:
+        """Solo lectura. Para fijarlo hay que construir un `Total` y decir de
+        dónde salió; asignar aquí un entero da AttributeError, que es el
+        objetivo."""
+        return self.total.valor if self.total else None
+
+    @property
     def siguiente_offset(self) -> int | None:
         """Honestidad de paginación (§6.3): nunca se anuncia un salto que
         deje filas sin ver. Se calcula sobre lo REALMENTE devuelto."""
@@ -73,6 +135,11 @@ class Sobre:
     def meta(self) -> dict:
         m = {
             "total_coincidencias": self.total_coincidencias,
+            # Cómo se supo ese total: `contado` por la fuente, `cabia_entero`
+            # porque no había más que ver, o `completo` porque la colección no
+            # sale de una consulta con `$limit`. Quien cite la cifra puede ver
+            # de dónde vino sin preguntar.
+            "origen_del_total": self.total.origen if self.total and self.total.consta else None,
             "devueltos": self.devueltos,
             "offset": self.offset,
             "siguiente_offset": self.siguiente_offset if self.mostrar_conteo else None,

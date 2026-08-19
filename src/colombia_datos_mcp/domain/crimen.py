@@ -26,7 +26,7 @@ from ..adapters import socrata
 from ..core import format as fmt
 from ..core import texto
 from ..core.cache import TTL_METADATOS, cache
-from ..core.envelope import Fuente, Sobre
+from ..core.envelope import Fuente, Sobre, Total
 from ..core.errors import ErrorValidacion
 from ..registry import datasets as reg
 
@@ -140,7 +140,7 @@ async def por_municipio(delito: str, anio: int, limite: int = 20,
     if departamento:
         filtro, valores, _t = await socrata.filtro_categorico(ds.id, "departamento", departamento)
         if filtro is None:
-            sobre = Sobre(datos=[], total_coincidencias=0, fuente=_fuente(ds))
+            sobre = Sobre(datos=[], total=Total.completo(0), fuente=_fuente(ds))
             sobre.advertir(
                 f"«{departamento}» no corresponde a ningún departamento en este "
                 "dataset. No es un fallo de la fuente."
@@ -211,7 +211,8 @@ async def comparar(anio_a: int, anio_b: int, delitos: str = "", formato: str = "
                       "cambio": f"{(vb / va - 1) * 100:+.0f} %"})
     filas.sort(key=lambda f: -float(f["cambio"].replace(" %", "").replace("+", "")))
 
-    sobre = Sobre(datos=filas, total_coincidencias=len(filas),
+    # Una fila por delito de una lista fija: no hay `$limit` que llenar.
+    sobre = Sobre(datos=filas, total=Total.completo(len(filas)),
                   orden=f"cambio {anio_a}→{anio_b} DESC",
                   fuente=Fuente(id="MinDefensa", nombre="Delitos comparados",
                                 licencia=_LIC, atribucion=_ATRIB))

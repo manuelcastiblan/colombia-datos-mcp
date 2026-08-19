@@ -12,7 +12,7 @@ Cada sitio lo arreglaba por su cuenta o no lo arreglaba. Ahora hay uno solo.
 from __future__ import annotations
 
 from ..adapters import socrata
-from ..core.envelope import Sobre
+from ..core.envelope import Sobre, Total
 
 # El aviso por defecto del sobre manda a agregar; dentro de una agregación ese
 # consejo no aplica, porque los grupos ocultos no se recuperan agregando otra
@@ -47,16 +47,16 @@ async def anota_total(
        total ignorado se advierte; uno inventado contamina lo que toque.
     """
     sobre.aviso_parcial = AVISO_PARCIAL
-    if len(filas) < limite:
-        sobre.total_coincidencias = len(filas)
-        return
-    sobre.total_coincidencias = (
-        await socrata.contar_grupos(dataset_id, seleccionar, agrupar,
-                                    donde=donde, teniendo=teniendo)
-        if contable else None
+    sobre.total = Total.cupo_entero(filas, limite)
+    if sobre.total.consta:
+        return                       # cabía entero: exacto y sin una petición más
+    if contable:
+        contados = await socrata.contar_grupos(dataset_id, seleccionar, agrupar,
+                                               donde=donde, teniendo=teniendo)
+        if contados is not None:
+            sobre.total = Total.contado(contados)
+            return
+    sobre.advertir(
+        f"Total de grupos desconocido: no se pudieron contar. Puede haber "
+        f"más de los {len(filas)} mostrados; no los tomes por todos."
     )
-    if sobre.total_coincidencias is None:
-        sobre.advertir(
-            f"Total de grupos desconocido: no se pudieron contar. Puede haber "
-            f"más de los {len(filas)} mostrados; no los tomes por todos."
-        )
