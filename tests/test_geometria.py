@@ -161,3 +161,11 @@ async def test_declara_de_donde_sale_la_geometria(monkeypatch):
     assert "Marco Geoestadístico Nacional 2018" in salida["texto"]
     assert "réplica" in salida["texto"]
     assert "2018" in salida["texto"]
+
+
+async def test_advierte_de_que_la_geometria_esta_simplificada(monkeypatch):
+    """Mediana de 10 vértices por municipio: vale para colorear, no para medir."""
+    _instala(monkeypatch)
+    salida = await geo.limites(nivel="departamento")
+    assert "SIMPLIFICADA" in salida["texto"]
+    assert "medir áreas" in salida["texto"]

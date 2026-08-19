@@ -36,6 +36,12 @@ un FeatureCollection, que traiga ~1.122 municipios, que tenga `MPIO_CCNCT`— y
 falla con un mensaje claro si la réplica cambia, en vez de dibujar un mapa con
 agujeros. Cada respuesta declara la procedencia completa.
 
+Y está **muy simplificada**: mediana de 10 vértices por municipio, con el 48 %
+por debajo de diez —San Andrés son 5 puntos—. Basta para colorear un mapa
+nacional, pero no para medir áreas ni para resolver si un punto cae dentro cerca
+de un límite. Se advierte en cada respuesta, porque es la diferencia entre un
+uso legítimo y una cifra inventada.
+
 Una prueba de contrato **vigila si el IGAC vuelve a responder**: el día que lo
 haga, esto debería migrar a la fuente oficial.
 

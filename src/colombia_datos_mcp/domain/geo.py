@@ -314,6 +314,11 @@ async def limites(nivel: str = "municipio", codigo: str | None = None,
         "El código es la clave DIVIPOLA: une por código con cualquier otra "
         "fuente del servidor, sin pasar por el nombre."
     )
+    sobre.advertir(
+        "GEOMETRÍA MUY SIMPLIFICADA: mediana de 10 vértices por municipio y el "
+        "48 % tiene menos de 10. Sirve para colorear un mapa nacional, NO para "
+        "medir áreas ni para decidir si un punto cae dentro cerca de un límite."
+    )
     return sobre.render(lambda _f: "\n".join(cuerpo))
 
 

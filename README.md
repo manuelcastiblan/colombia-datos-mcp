@@ -245,6 +245,10 @@ Como el identificador es la clave DIVIPOLA, une por código con el resto del
 servidor sin pasar por el nombre, que es donde se pierden Cali, Cartagena y
 Cúcuta.
 
+**La geometría está muy simplificada**: mediana de 10 vértices por municipio.
+Sirve para colorear un mapa nacional, no para medir áreas ni para resolver si un
+punto cae dentro cerca de un límite. Va advertido en cada respuesta.
+
 ## Criminalidad
 
 **9. Son casos registrados, no delitos cometidos.** Una subida en extorsión, en
@@ -409,6 +413,10 @@ advierte: relleno se ve igual, pero si trazas el borde aparecen las divisiones.
 Como el identificador es la clave DIVIPOLA, une por código con el resto del
 servidor sin pasar por el nombre, que es donde se pierden Cali, Cartagena y
 Cúcuta.
+
+**La geometría está muy simplificada**: mediana de 10 vértices por municipio.
+Sirve para colorear un mapa nacional, no para medir áreas ni para resolver si un
+punto cae dentro cerca de un límite. Va advertido en cada respuesta.
 
 ## Criminalidad
 

@@ -512,6 +512,12 @@ lo haga, esto debería migrar a la fuente oficial.
 Es un corte de **2018**: los municipios creados después no están. Falta Nuevo
 Belén de Bajirá, que en DIVIPOLA sí existe.
 
+**Está muy simplificada**: mediana de **10 vértices por municipio**, y el 48 %
+tiene menos de diez. San Andrés son 5 puntos. Eso basta para colorear un mapa
+nacional —el contorno del país se reconoce— pero **no sirve para medir áreas ni
+para resolver si un punto cae dentro** cerca de un límite. Cada respuesta lo
+advierte.
+
 ---
 
 ## Recursos MCP
