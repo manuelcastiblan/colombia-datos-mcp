@@ -9,8 +9,9 @@ adaptador de Socrata y los módulos de catálogo, SECOP, DIVIPOLA y crimen.
 
 > **Si vas a citar una cifra de aquí, lee
 > [Antes de citar una cifra](#antes-de-citar-una-cifra).** Estos datos tienen
-> trampas que no se ven: contratos en borrador que suman, unidades de análisis
-> que no se pueden mezclar y montos sin deflactar.
+> trampas que no se ven: contratos en borrador que suman, delitos que suben o
+> bajan según el año que elijas de base, y casos registrados que no son delitos
+> cometidos.
 
 ## Instalación
 
@@ -123,8 +124,10 @@ trampas: [docs/recetas.md](docs/recetas.md).
 
 ## Antes de citar una cifra
 
-Esto es lo que el servidor **no puede decidir por ti**. Son ocho reglas, y
-saltárselas produce cifras que parecen correctas y no lo son.
+Esto es lo que el servidor **no puede decidir por ti**. Las tres primeras valen
+para cualquier dato; las demás son de su fuente.
+
+### Para cualquier consulta
 
 **1. Comprueba `devueltos` contra `total`.** Si el sobre dice «20 filas de 4.312
 coincidencias», sumar esas 20 no da el total de nada. Usa una herramienta de
@@ -136,7 +139,12 @@ el filtro está bien antes de gastar miles en filas.
 **3. No mezcles unidades de análisis.** Un contrato no es un proceso, y una
 adición no es un contrato: hay **26,1 M de adiciones para ~5,9 M de contratos**.
 Cada respuesta declara su unidad; sumar filas de dos datasets distintos produce
-un número sin significado.
+un número sin significado. Lo mismo en criminalidad: MinDefensa publica 37
+datasets con **idéntico esquema** de los que solo 23 cuentan delitos — en
+`ERRADICACIÓN` la `cantidad` son hectáreas. El esquema igual no garantiza que se
+puedan sumar.
+
+### Contratación pública
 
 **4. Los contratos en `Borrador` están en el dataset y suman.** No están
 firmados —no traen `fecha_de_firma` y su `valor_pagado` es 0—, pero cuentan en
@@ -179,6 +187,34 @@ un total por nombre; si sale más de una cédula, son varias personas.
 **8. Casi todo es solo SECOP II.** Para contratación anterior a la plataforma hay
 que consultar también `rpmr-utcd` (SECOP Integrado). Un «cero contratos» puede
 significar «no está en SECOP II», no «no contrató nunca».
+
+### Criminalidad
+
+**9. Son casos registrados, no delitos cometidos.** Una subida en extorsión, en
+delitos sexuales o en violencia intrafamiliar puede ser **más denuncia y no más
+delito**: el alza del 1.153 % en intrafamiliar desde 2003 mide sobre todo cuánto
+se denuncia hoy. El homicidio es el indicador menos sensible a eso —un muerto es
+difícil de no registrar— y es, con diferencia, el que menos subió.
+
+**10. El año base decide el titular.** El secuestro **subió 259 %** contra 2017 y
+**bajó 67 %** contra 2003. Es la misma serie: 2.121 casos en 2003, 195 en 2017,
+701 en 2025. Las dos frases son ciertas. Mira la serie completa con
+`co_crimen_serie` antes de citar cualquier porcentaje; la herramienta te devuelve
+el máximo y el mínimo justo para eso.
+
+**11. Sin población no hay tasas.** La fuente no publica proyecciones
+municipales —se buscaron, incluido el facet del DANE, y no están—, así que un
+ranking de municipios por casos es casi un ranking de municipios grandes, y un
+mapa de conteos es casi un mapa de dónde vive la gente.
+
+**12. Cada dataset corta por su cuenta**, en general a finales de julio de 2026.
+Comparar ese año a medias con años cerrados es la forma más fácil de inventarse
+una caída. El servidor consulta `max(fecha_hecho)` y lo advierte.
+
+**13. `cantidad` no vale uno.** Un hecho puede tener varias víctimas: homicidio
+tiene 342.971 filas y 343.680 víctimas. Se suma `cantidad`, nunca se cuentan
+filas. Y **«HURTO A COMERCIO» y «HURTO A RESIDENCIAS» son el mismo dato** con dos
+títulos: sumarlos duplica la cifra.
 
 Y una que el servidor sí garantiza: **cero filas nunca es lo mismo que fuente
 caída.** Son mensajes distintos a propósito. Un `[FUENTE_CAIDA]` no significa

@@ -15,6 +15,18 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
   siendo común, y las dos suposiciones de abajo.
 - 16 pruebas sin red del módulo (107 → 123).
 
+### Documentación
+
+- **Las reglas de «Antes de citar una cifra» eran todas de contratación.** Quien
+  leía la sección estrella del README no recibía ni un aviso sobre criminalidad.
+  Ahora se agrupan en tres bloques —las que valen para cualquier consulta, las de
+  contratación y las de crimen— y las cinco nuevas cubren lo que el módulo
+  advierte: casos registrados frente a delitos cometidos, el año base, la falta
+  de tasas, el corte de cada dataset y que `cantidad` no vale uno.
+- `docs/herramientas.md`, `docs/fuentes.md`, `docs/recetas.md`,
+  `docs/arquitectura.md` y `CONTRIBUTING.md` documentan el módulo, los 23
+  datasets, los 14 que quedan fuera y por qué, y las dos lecciones de MinDefensa.
+
 ### Decisiones que documenta el registro
 
 - **Se excluyen los datasets operativos.** MinDefensa publica 37 con el mismo
