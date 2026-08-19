@@ -29,21 +29,40 @@ Cómo confirmarlo sin adivinar:
    muestra el SoQL que el proceso generó de verdad. Si esperabas un
    `replace(replace(...))` y ves un `upper(campo) like '%…%'` plano, el proceso
    es anterior al arreglo del plegado de acentos.
-2. Compara la hora de arranque del proceso con la de tu commit:
+2. Compara la hora de arranque del proceso con la de tu commit. `Get-Process`
+   no sirve aquí: el ejecutable es `python.exe` y el nombre del servidor solo
+   aparece en la línea de comandos, así que hay que preguntar por ella.
 
 ```bash
-powershell -NoProfile -Command "Get-Process | Where-Object {$_.Path -like '*colombia-datos-mcp*'} | Select-Object Id,StartTime"
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name like '%python%'\" | Where-Object { $_.CommandLine -like '*colombia*' } | Select-Object ProcessId, CreationDate"
 ```
 
-Solución: reiniciar la sesión del cliente MCP. O, sin reiniciarla:
+### Reiniciar la sesión NO basta
+
+Es el error que más tiempo cuesta, porque parece que debería funcionar.
+Verificado el 19-ago-2026: tras reiniciar la sesión del cliente, los PID eran
+**los mismos de una hora antes** y las respuestas seguían sin un campo recién
+añadido. Los procesos del servidor sobreviven al reinicio.
+
+Lo que sí funciona es matarlos. El cliente levanta uno nuevo en la siguiente
+llamada, ya con el código actual:
 
 ```bash
-claude mcp remove colombia-datos --scope user
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name like '%python%'\" | Where-Object { $_.CommandLine -like '*colombia*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
 ```
 
-```bash
-claude mcp add --scope user colombia-datos "<ruta al colombia-datos-mcp.exe>"
-```
+**Salvo que hayas cambiado la firma de una herramienta.** Ahí sí hace falta que
+el usuario reinicie la sesión, porque la *lista de herramientas* —los nombres y
+parámetros que el cliente conoce— se negocia al conectar y no se renegocia.
+Son dos cosas distintas y confundirlas manda a reiniciar cuando no hacía falta,
+o a no reiniciar cuando sí:
+
+| Qué cambiaste | Basta con matar el proceso | Hay que reiniciar la sesión |
+|---|:---:|:---:|
+| Contenido de las respuestas, avisos, formato | ✅ | |
+| Lógica interna, corrección de un cálculo | ✅ | |
+| Parámetros nuevos en una herramienta | | ✅ |
+| Herramienta nueva, o renombrada | | ✅ |
 
 ### `pip install -e .` falla con «El proceso no tiene acceso al archivo»
 

@@ -144,6 +144,58 @@ co_datos_agregar(dataset_id="jbjy-vk9h", agrupar_por="departamento",
 
 ---
 
+## Contar cuántos, no cuánto tiene cada uno
+
+Hay una pregunta que parece la misma y no lo es. «Cuántos contratos tiene cada
+proveedor que repite» y «cuántos proveedores repiten» se escriben casi igual, y
+solo la primera se puede responder con `teniendo`:
+
+```
+co_datos_agregar(dataset_id="jbjy-vk9h", agrupar_por="documento_proveedor",
+                 metricas="count(*) as n", teniendo="count(*) > 1")
+→ una fila por persona, con su número de contratos
+```
+
+`count(*)` con `having` cuenta **dentro** de cada grupo. Para contar los grupos
+que ese filtro deja hay que agregar sobre el resultado, y eso es `luego`:
+
+```
+co_datos_agregar(dataset_id="jbjy-vk9h", agrupar_por="documento_proveedor",
+                 metricas="count(*) as n", teniendo="count(*) > 1",
+                 luego="count(*) as personas, sum(n) as contratos")
+→ personas: 130.720   contratos: 293.546
+```
+
+La segunda etapa recibe como tabla el resultado de la primera: sus columnas son
+los **alias** de `metricas` (`n`), no los campos del dataset. Nombrar ahí
+`documento_proveedor` o `valor_del_contrato` da un 400.
+
+### Un ejemplo que cambia la respuesta
+
+Contratistas persona natural con prestación de servicios firmada en 2026:
+
+```
+donde = "fecha_de_firma >= '2026-01-01'
+         AND tipodocproveedor = 'Cédula de Ciudadanía'
+         AND tipo_de_contrato = 'Prestación de servicios'"
+```
+
+| Pregunta | `teniendo` | `luego` | Resultado |
+|---|---|---|---|
+| ¿Cuántas personas repiten? | `count(*) > 1` | `count(*) as personas` | **130.720** de 483.073 |
+| ¿Y en más de una entidad? | `count(distinct nit_entidad) > 1` | `count(*) as personas` | **41.413** |
+
+La diferencia entre esas dos cifras es todo el análisis: el 27 % que repite lo
+hace casi siempre **dentro de la misma entidad** —renovaciones y contratos
+cortos encadenados—, y solo un 8,6 % cruza entidades. Sin `luego` no hay forma
+de separarlas, y quien mire solo la primera concluirá otra cosa.
+
+Ojo con la unidad: agrupar por `nit_entidad` funde organismos que contratan por
+separado —las 34 secretarías de Bogotá comparten NIT, el SENA tiene 78 centros—,
+así que ese 41.413 es un **piso**, no un techo. Declara siempre cuál elegiste.
+
+---
+
 ## La historia completa de un contrato
 
 ```
@@ -393,6 +445,8 @@ Qué mirar, en orden:
 |---|---|
 | `devueltos == total` | Tienes el conjunto completo. Puedes sumar. |
 | `devueltos < total` | Estás viendo una parte. **Usa agregación para cualquier cifra.** |
+| `origen_del_total` | Cómo se supo ese total: `contado` por la fuente, `cabia_entero` porque devolvió menos de lo pedido, o `completo` porque no sale de una consulta con `$limit`. Si vas a citar la cifra, mira esto. |
+| Sin `total_coincidencias` | **No consta cuántos hay.** No es cero ni es lo que ves: la fuente no dejó contarlos y el sobre prefiere decirlo a inventárselo. |
 | `truncado: true` | No cupo en el presupuesto. Refina el filtro; no pagines a ciegas. |
 | `Siguiente página: offset=N` | Usa ese `N`, no la suma de tus límites. |
 | `orden: …` | Sin esto, «los 20 primeros» no quiere decir nada. |

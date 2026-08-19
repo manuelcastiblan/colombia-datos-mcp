@@ -68,7 +68,13 @@ Lanza `[NO_ENCONTRADO]` si el ID no existe: los IDs de Socrata rotan.
 
 ### `co_datos_consultar`
 
-SoQL sobre cualquier dataset, con allow-list de columnas.
+SoQL sobre cualquier dataset. Las **columnas** se validan contra el esquema
+vivo; las funciones no, a propósito: el catálogo de funciones de datos.gov.co
+no coincide con el de la documentación general de Socrata —`caseless_eq` y
+`date_diff_d` existen, `char_length` y `to_number` no—, así que cualquier lista
+propia estaría incompleta o de más. Decide la fuente. Los alias tampoco se
+validan: `nombre_entidad as entidad` es SoQL correcto y durante un tiempo se
+rechazaba como «columna inexistente: entidad».
 
 | Parámetro | Tipo | Defecto | Notas |
 |---|---|---|---|
@@ -81,9 +87,8 @@ SoQL sobre cualquier dataset, con allow-list de columnas.
 | `detalle` | string | `"resumen"` | |
 | `formato` | string | `"tabla"` | `tabla`, `csv` o `json`. |
 
-Los identificadores citados en `seleccionar`, `donde` y `ordenar` se validan
-contra el esquema vivo. Una columna inexistente se rechaza con `[VALIDACION]`
-listando las válidas, en vez de dejar que Socrata devuelva un 400 opaco.
+Una columna inexistente se rechaza con `[VALIDACION]` listando las válidas, en
+vez de dejar que Socrata devuelva un 400 opaco.
 
 `detalle="conteo"` no descarga filas: solo ejecuta `count(*)`.
 
@@ -305,6 +310,12 @@ Nombre coloquial → nombre canónico + NIT. **Úsala antes de filtrar por nombr
 |---|---|---|---|
 | `nombre` | string | obligatorio | Mínimo 3 caracteres. |
 | `limite` | int | `10` | Tope 30. |
+
+**Mira el total antes de elegir el NIT.** Con el límite por defecto ves 10
+coincidencias, y puede haber más: «MUNICIPIO DE SANTA» casa con 11. El sobre
+declara cuántas hay de verdad, porque aquí ocultar una y darlas por todas es
+lo más caro que puede pasar — eliges el NIT equivocado con confianza y
+contaminas cada consulta posterior.
 
 Tiene alias curados para **DANE, IGAC, ICBF, SENA, INVIAS, DIAN, ANLA, UNGRD**,
 verificados contra la fuente y revalidados a diario por la suite de contrato.

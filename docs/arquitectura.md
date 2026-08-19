@@ -77,6 +77,10 @@ Dos detalles que el diagrama hace evidentes y la prosa escondía:
   consulta mal escrita no puede dejar fuera de servicio a los demás.
 - **El recorte por presupuesto ocurre después del sobre**, no antes. Por eso el
   `siguiente_offset` se calcula sobre lo que realmente se devolvió.
+- **Lo que se mide para recortar es el sobre entero**, con su pie y sus avisos,
+  no solo la tabla. Medir una parte y estimar el resto tenía un fallo circular:
+  recortar añade el aviso de recorte, y ese aviso empujaba la respuesta por
+  encima del presupuesto que el recorte acababa de imponer.
 
 ---
 
@@ -86,6 +90,13 @@ Toda respuesta lleva al pie los mismos metadatos, y son parte del contrato:
 
 - **filas devueltas** y **total de coincidencias** — si `devueltos < total`, el
   sobre lo dice y advierte que no se concluya nada cuantitativo desde esas filas.
+- **`origen_del_total`: cómo se supo ese total.** `contado` (lo contó la
+  fuente), `cabia_entero` (devolvió menos de lo pedido, así que no había más) o
+  `completo` (la colección no sale de una consulta con `$limit`). Está porque un
+  entero desnudo no distingue «lo conté» de «supuse», y esa indistinción metió
+  `total = len(filas)` en seis herramientas. Hoy el total es un `Total` que no
+  se construye sin declarar su procedencia, así que la afirmación sin comprobar
+  ya no se puede escribir. Si no consta, el campo no aparece y se advierte.
 - **orden aplicado** — para que el resultado sea interpretable.
 - **la URL exacta y reproducible** que produjo el resultado, sin el token. Para
   uso periodístico o de control fiscal, una cifra sin su consulta no sirve.
@@ -132,6 +143,18 @@ unos 200 tokens frente a los miles de un volcado.
 
 La estimación es deliberadamente conservadora —3,5 caracteres por token— porque
 el español acentuado y los nombres largos de entidades pesan más que el inglés.
+
+**Lo que se mide es la respuesta completa**, con su pie: procedencia, URL
+reproducible y advertencias cuentan, porque se envían. Durante un tiempo se midió
+solo el cuerpo y se descontó el pie por aritmética, y no funcionó por un motivo
+circular: recortar **añade** el aviso de recorte, así que ese aviso empujaba la
+respuesta por encima del presupuesto que el recorte acababa de imponer. La
+función que la búsqueda binaria evalúa es hoy exactamente la que se manda, de
+modo que no queda reserva que pueda quedarse corta.
+
+Es el mismo patrón que aparece en varios sitios del servidor: **cuando algo se
+repite, casi siempre hay un cálculo intermedio donde debería haber una
+medición.**
 
 ---
 

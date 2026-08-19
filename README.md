@@ -6,7 +6,8 @@ división territorial con geometría (DIVIPOLA y MGN). 19 herramientas,
 sin credenciales.
 
 Esta es la **fase F0 + la mitad Socrata de F1** del diseño: núcleo completo,
-adaptador de Socrata y los módulos de catálogo, SECOP, DIVIPOLA y crimen.
+adaptador de Socrata y los módulos de catálogo, SECOP, DIVIPOLA, crimen,
+análisis y geometría. Falta el adaptador SDMX y el motor de privacidad.
 
 > **Si vas a citar una cifra de aquí, lee
 > [Antes de citar una cifra](#antes-de-citar-una-cifra).** Estos datos tienen
@@ -87,7 +88,7 @@ Todo lo que hay debajo de la tabla es **el sobre**, y es parte del contrato:
 
 | Línea | Para qué sirve |
 |---|---|
-| `1 fila(s)` de `1` coincidencias | Si los dos números son iguales tienes el conjunto completo y puedes sumar. Si difieren, **estás viendo una parte**. |
+| `1 fila(s)` de `1` coincidencias | Si los dos números son iguales tienes el conjunto completo y puedes sumar. Si difieren, **estás viendo una parte**. Si el segundo número falta, no consta cuántos hay: ni es cero ni es lo que ves. |
 | `orden: cod_mpio` | Sin orden declarado, «los 20 primeros» no significa nada. |
 | `Fuente` + licencia | La atribución que debes propagar si republicas. |
 | `Consulta reproducible` | El SoQL exacto que se ejecutó. Pégalo en el navegador y verifica: **es la prueba**. |
@@ -97,14 +98,19 @@ Fíjate en la URL: escribí «Itagui» y el filtro salió `nom_mpio in ('ITAGÜ�
 es la resolución de nombres funcionando — ver
 [Cómo se comparan los nombres](#cómo-se-comparan-los-nombres).
 
+El **contenido estructurado** de la respuesta trae además `_meta`, con los
+mismos datos en forma de objeto y uno que no cabe en la prosa:
+`origen_del_total`, que dice si ese total se contó, si cupo entero o si la
+colección era completa de por sí.
+
 ## Herramientas
 
 | Herramienta | Qué hace |
 |---|---|
 | `co_datos_buscar_datasets` | Catálogo nacional; traduce siglas de entidad a la cadena de atribución exacta |
 | `co_datos_describir_dataset` | Esquema en vivo: campo técnico + nombre legible + tipo + descripción |
-| `co_datos_consultar` | SoQL con allow-list de columnas; `detalle` = conteo / resumen / completo |
-| `co_datos_agregar` | Agrupa del lado del servidor |
+| `co_datos_consultar` | SoQL; valida las columnas contra el esquema vivo; `detalle` = conteo / resumen / completo |
+| `co_datos_agregar` | Agrupa del lado del servidor; `luego` encadena una segunda agregación sobre los grupos |
 | `co_datos_serie` | Serie temporal sobre cualquier dataset; avisa si el último periodo está incompleto |
 | `co_datos_perfilar` | Retrato de una columna: nulos, magnitudes y concentración |
 | `co_secop_buscar_contratos` | Contratos de SECOP II |
@@ -659,14 +665,27 @@ esquema.**
 ## Estado y siguiente paso
 
 Implementado: núcleo (sobre, presupuesto, caché de dos niveles, HTTP con
-autolímite y circuit breaker, errores tipados, coordenadas), adaptador Socrata,
-comparación de nombres tolerante a acentos, extracción estructurada con
-exportación a disco, y los módulos de catálogo, SECOP, DIVIPOLA y criminalidad.
-CI con las pruebas sin red en Python 3.11-3.13 y el contrato programado a diario.
+autolímite y circuit breaker, errores tipados, coordenadas), adaptador Socrata
+con subconsultas anidadas, comparación de nombres tolerante a acentos,
+extracción estructurada con exportación a disco, y los módulos de catálogo,
+SECOP, DIVIPOLA, criminalidad, análisis y geometría. CI con las pruebas sin red
+en Python 3.11-3.13 y el contrato programado a diario.
 
-Pendiente: adaptador SDMX para Banco de la República, y el motor de privacidad
-—que el módulo de crimen no necesita, porque MinDefensa publica ya agregado, pero
-cualquier fuente con detalle de víctima sí exigiría—.
+**Lo que más trabajo ha costado no es traer datos, es que el servidor no afirme
+de más.** El defecto que más veces se repitió fue declarar como total el número
+de filas que cabían en la pantalla: apareció en seis herramientas por separado y
+hubo que cerrarlo por los dos extremos. Por el lado de la detección,
+`tests/test_invariantes.py` lo comprueba en todas a la vez y **falla mientras una
+herramienta nueva no esté clasificada**. Por el lado de la escritura, el total ya
+no es un entero sino un `Total` que no se construye sin declarar su procedencia,
+de modo que la afirmación sin comprobar dejó de ser expresable. Si algo de esto
+se toca, [CONTRIBUTING](CONTRIBUTING.md) explica qué se espera.
+
+Pendiente: adaptador SDMX para Banco de la República —que es además lo que hoy
+impide deflactar: el servidor advierte que no compares montos entre años, pero no
+puede arreglarlo—, y el motor de privacidad, que el módulo de crimen no necesita
+porque MinDefensa publica ya agregado, pero cualquier fuente con detalle de
+víctima sí exigiría.
 
 **La geometría es la pieza más frágil del servidor.** No hay endpoint oficial
 utilizable: el servicio nacional del IGAC devuelve HTTP 500 y `datos.gov.co` no
