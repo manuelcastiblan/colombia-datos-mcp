@@ -9,28 +9,28 @@ era **detectable**; ahora es **inexpresable**.
 
 ### Cambiado
 
-- **El total del sobre lleva su procedencia.** `Sobre.total_coincidencias` era
-  un `int | None`, y un entero desnudo no puede distinguir «lo conté» de
-  «supuse». Por eso `len(filas)` se coló en seis herramientas: sintácticamente
-  es impecable. Ahora el campo es `total: Total`, y `Total` no se construye sin
-  decir cómo se supo:
+**El total del sobre lleva su procedencia.** `Sobre.total_coincidencias` era
+un `int | None`, y un entero desnudo no puede distinguir «lo conté» de
+«supuse». Por eso `len(filas)` se coló en seis herramientas: sintácticamente
+es impecable. Ahora el campo es `total: Total`, y `Total` no se construye sin
+decir cómo se supo:
 
-  | Constructor | Cuándo |
-  |---|---|
-  | `Total.contado(n)` | lo contó la fuente: `count(*)` o la subconsulta anidada |
-  | `Total.cupo_entero(filas, limite)` | devolvió menos de lo pedido: no había más |
-  | `Total.completo(n)` | la colección no sale de una consulta con `$limit` |
-  | `Total.desconocido()` | no consta, y se advierte |
+| Constructor | Cuándo |
+|---|---|
+| `Total.contado(n)` | lo contó la fuente: `count(*)` o la subconsulta anidada |
+| `Total.cupo_entero(filas, limite)` | devolvió menos de lo pedido: no había más |
+| `Total.completo(n)` | la colección no sale de una consulta con `$limit` |
+| `Total.desconocido()` | no consta, y se advierte |
 
-  La pieza que cierra el asunto es `cupo_entero`: es el constructor que se
-  usaría por descuido, exige el límite de la consulta y **decide él**. Si la
-  fuente lo llenó, devuelve desconocido en vez del número que alguien habría
-  escrito. Ya no hay forma de afirmar un total sin haberlo comprobado.
+La pieza que cierra el asunto es `cupo_entero`: es el constructor que se
+usaría por descuido, exige el límite de la consulta y **decide él**. Si la
+fuente lo llenó, devuelve desconocido en vez del número que alguien habría
+escrito. Ya no hay forma de afirmar un total sin haberlo comprobado.
 
-  El keyword viejo desaparece a propósito: cualquier sitio que siguiera pasando
-  un entero falla al construirse, y `total_coincidencias` queda como propiedad
-  de **solo lectura**. Los 17 sitios se revisaron uno a uno para elegir el
-  constructor que describe la verdad de cada uno.
+El keyword viejo desaparece a propósito: cualquier sitio que siguiera pasando
+un entero falla al construirse, y `total_coincidencias` queda como propiedad
+de **solo lectura**. Los 17 sitios se revisaron uno a uno para elegir el
+constructor que describe la verdad de cada uno.
 
 ### Añadido
 
@@ -122,26 +122,26 @@ diario).
 
 ### Corregido
 
-- **El conteo falso de 0.7.0 no era un bug: eran seis.** Arreglarlo en
-  `co_datos_agregar` dejó vivo el mismo `total_coincidencias = len(filas)` en
-  todas las demás. Medido contra la fuente viva, esto es lo que afirmaban antes
-  frente a lo que hay:
+**El conteo falso de 0.7.0 no era un bug: eran seis.** Arreglarlo en
+`co_datos_agregar` dejó vivo el mismo `total_coincidencias = len(filas)` en
+todas las demás. Medido contra la fuente viva, esto es lo que afirmaban antes
+frente a lo que hay:
 
-  | Herramienta | Decía | Hay |
-  |---|---:|---:|
-  | `co_secop_agregar` (proveedor, 2026) | 5 de 5 | **525.759** |
-  | `co_datos_serie` (día, SECOP II) | 2.000 de 2.000 | **3.646** |
-  | `co_secop_perfil_proveedor` | 5 de 5 | **1.084** |
-  | `co_crimen_por_municipio` (homicidio 2025) | 5 de 5 | **820** |
-  | `co_secop_resolver_entidad` («MUNICIPIO DE SANTA») | 10 de 10 | **11** |
+| Herramienta | Decía | Hay |
+|---|---:|---:|
+| `co_secop_agregar` (proveedor, 2026) | 5 de 5 | **525.759** |
+| `co_datos_serie` (día, SECOP II) | 2.000 de 2.000 | **3.646** |
+| `co_secop_perfil_proveedor` | 5 de 5 | **1.084** |
+| `co_crimen_por_municipio` (homicidio 2025) | 5 de 5 | **820** |
+| `co_secop_resolver_entidad` («MUNICIPIO DE SANTA») | 10 de 10 | **11** |
 
-  El más caro es `resolver_entidad`: es la herramienta de desambiguación, así
-  que ocultar una coincidencia y jurar que se vieron todas hace elegir el NIT
-  equivocado con confianza y contamina cada consulta posterior.
+El más caro es `resolver_entidad`: es la herramienta de desambiguación, así
+que ocultar una coincidencia y jurar que se vieron todas hace elegir el NIT
+equivocado con confianza y contamina cada consulta posterior.
 
-  El arreglo no es parchear seis copias sino **`domain/agregacion.py`**, con la
-  única función `anota_total()` que ahora usan todas. La lógica vive en un sitio
-  y el error no puede volver a aparecer sitio por sitio.
+El arreglo no es parchear seis copias sino **`domain/agregacion.py`**, con la
+única función `anota_total()` que ahora usan todas. La lógica vive en un sitio
+y el error no puede volver a aparecer sitio por sitio.
 
 - **`co_datos_serie` con `periodo="dia"` truncaba de verdad, no en teoría.** El
   tope de 2.000 periodos sobra para años y meses, pero SECOP II abarca 3.646

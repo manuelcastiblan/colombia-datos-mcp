@@ -103,7 +103,7 @@ Agrupa del lado del servidor: devuelve grupos, no filas.
 | `metricas` | string | `"count(*) as total"` | El orden se deriva del **primer alias**. |
 | `donde` | string | `""` | |
 | `teniendo` | string | `""` | `$having`: filtra **grupos** por su métrica. |
-| `luego` | string | `""` | Segunda agregación sobre el resultado de la primera (`|>`). |
+| `luego` | string | `""` | Segunda agregación sobre el resultado de la primera (`\|>`). |
 | `limite` | int | `20` | Sin tope propio. |
 | `formato` | string | `"tabla"` | `tabla`, `csv` o `json`. |
 | `grafica` | bool | `true` | Añade la columna de barras. Se ignora si `formato` no es tabla. |
