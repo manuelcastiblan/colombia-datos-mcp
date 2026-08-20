@@ -509,9 +509,9 @@ tildes («ITAGÜÍ», «EL PEÑÓN»). Las tres mediciones están en
 En la práctica: **escribe los nombres con tilde o sin ella, da igual.**
 
 Lo que sí importa es el **orden de las palabras**: el filtro busca la cadena
-completa como subcadena. Si la fuente guarda `CHAPARRO CARMONA JHON SEBASTIAN` y
-buscas el nombre en orden natural, obtienes cero. Si un nombre de persona da
-cero, prueba solo con los apellidos.
+completa como subcadena. La fuente suele guardar a las personas como
+`APELLIDO1 APELLIDO2 NOMBRE1 NOMBRE2`, así que buscar el nombre en orden natural
+devuelve cero. Si un nombre de persona da cero, prueba solo con los apellidos.
 
 ## Qué hace distinto
 

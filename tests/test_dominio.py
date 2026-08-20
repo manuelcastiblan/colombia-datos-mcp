@@ -391,7 +391,7 @@ async def test_el_resumen_conserva_una_columna_ausente_en_la_primera_fila(monkey
         ]
 
     _instala(monkeypatch, {"/resource/jbjy-vk9h.json": respuesta})
-    salida = await secop.buscar_contratos(documento_proveedor="1032472802")
+    salida = await secop.buscar_contratos(documento_proveedor="1000000001")
     assert "fecha de firma" in salida["texto"]
     assert "2026-01-10" in salida["texto"]
     # Y el orden curado se conserva: la fecha no se va al final de la tabla.

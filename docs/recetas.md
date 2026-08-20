@@ -35,18 +35,17 @@ flowchart TD
 ```
 
 ```
-co_secop_buscar_contratos(proveedor="Jhon Sebastian Chaparro Carmona",
-                          detalle="conteo")
+co_secop_buscar_contratos(proveedor="<nombre completo>", detalle="conteo")
 → 12 contratos
 ```
 
-**La trampa del orden.** El filtro busca la cadena completa como subcadena. Si
-la fuente registra a la persona como `CHAPARRO CARMONA JHON SEBASTIAN`, buscar
-el nombre en orden natural devuelve cero. Si el conteo sale 0, prueba solo con
-los apellidos:
+**La trampa del orden.** El filtro busca la cadena completa como subcadena. La
+fuente suele registrar a las personas como `APELLIDO1 APELLIDO2 NOMBRE1 NOMBRE2`,
+así que buscar el nombre en orden natural devuelve cero. Si el conteo sale 0,
+prueba solo con los apellidos:
 
 ```
-co_secop_buscar_contratos(proveedor="chaparro carmona", detalle="conteo")
+co_secop_buscar_contratos(proveedor="<los dos apellidos>", detalle="conteo")
 → 36 contratos    ← incluye otros homónimos de apellido
 ```
 
@@ -57,14 +56,14 @@ mezclan sin avisar. Agrupa por documento:
 co_datos_agregar(dataset_id="jbjy-vk9h",
                  agrupar_por="documento_proveedor",
                  metricas="count(*) as contratos, sum(valor_del_contrato) as valor",
-                 donde="upper(proveedor_adjudicado) like '%JHON SEBASTIAN CHAPARRO CARMONA%'")
-→ una sola fila: 1032472802 · 12 contratos · $547.285.071
+                 donde="upper(proveedor_adjudicado) like '%<APELLIDOS NOMBRES>%'")
+→ una sola fila: una cédula · 12 contratos · $547.285.071
 ```
 
 **Con la cédula, usa el perfil.** Es exacto y agrega del lado del servidor:
 
 ```
-co_secop_perfil_proveedor(documento="1032472802")
+co_secop_perfil_proveedor(documento="<cédula>")
 → 12 contratos · $547.285.071, desglosado por entidad contratante
 ```
 
