@@ -38,22 +38,43 @@ def cerrado(corte: str | None, periodo: str) -> bool:
     return (mes, dia) == (12, 31)
 
 
-def incompleto(etiqueta: str | int | None, corte: str | None, periodo: str = "anio") -> bool:
-    """¿`etiqueta` —«2026», «2026-08»— es el periodo donde cortan los datos y
-    ese periodo aún no ha cerrado?"""
+def contiene_corte(etiqueta: str | int | None, corte: str | None) -> bool:
+    """¿`etiqueta` —«2026», «2026-08», «2026-08-24»— es el periodo donde se
+    detuvo la carga de datos?
+
+    Distinto de `incompleto`, y la diferencia importa. Hay dos preguntas:
+
+    * ¿cerró el **calendario**? — se demuestra con la fecha (un año cierra el 31
+      de diciembre, un día cierra siempre).
+    * ¿terminó la **carga**? — no se puede demostrar, pero el periodo donde
+      cortan los datos es justo donde la fuente dejó de cargar, así que casi
+      nunca está completo.
+
+    Para años y meses la primera implica la segunda. Para días no: el 24 de
+    agosto cerró como día y aun así traía 1.194 contratos frente a los ~4.500 de
+    un lunes normal, porque la carga se quedó a medias. Confundir las dos
+    preguntas hacía que una serie diaria terminara en un desplome inventado.
+    """
     if not (corte and etiqueta):
         return False
     texto = str(etiqueta)
-    return texto == corte[:len(texto)] and not cerrado(corte, periodo)
+    return texto == corte[:len(texto)]
+
+
+def incompleto(etiqueta: str | int | None, corte: str | None, periodo: str = "anio") -> bool:
+    """Incompleto DEMOSTRABLE: contiene el corte y el calendario dice que no
+    ha cerrado. Es el caso que permite afirmarlo sin matices."""
+    return contiene_corte(etiqueta, corte) and not cerrado(corte, periodo)
 
 
 def comparables(filas: list[dict], corte: str | None, periodo: str = "anio",
                 clave: str = "periodo") -> list[dict]:
-    """La serie sin su último periodo, si ese periodo no ha cerrado.
+    """La serie sin su último periodo, si ahí es donde cortan los datos.
 
-    Para máximos, mínimos y cualquier comparación entre periodos: mezclar uno
-    incompleto con los cerrados produce extremos que no existen.
+    Para máximos, mínimos y cualquier comparación entre periodos. Se excluye
+    aunque el calendario haya cerrado: un día a medio cargar puede salir como
+    «mínimo de la serie» con la misma facilidad que un año a medias.
     """
-    if filas and incompleto(filas[-1].get(clave), corte, periodo):
+    if filas and contiene_corte(filas[-1].get(clave), corte):
         return filas[:-1]
     return filas

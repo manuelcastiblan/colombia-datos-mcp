@@ -76,11 +76,17 @@ async def test_avisa_de_que_el_ultimo_periodo_esta_incompleto(monkeypatch):
 
 
 async def test_no_da_falsa_alarma_si_el_periodo_esta_cerrado(monkeypatch):
-    """Un aviso que salta siempre deja de leerse."""
+    """Un aviso que salta siempre deja de leerse.
+
+    Con el calendario cerrado no se afirma que esté INCOMPLETO —eso sería la
+    falsa alarma—, pero tampoco se calla: sigue siendo el periodo donde la
+    fuente dejó de cargar y puede recibir más registros. Son dos cosas
+    distintas y el texto lo dice con dos tonos distintos.
+    """
     _instala(monkeypatch, corte="2026-12-31T00:00:00.000")
     salida = await analisis.serie("test-0001", "fecha_hecho")
     assert "INCOMPLETO" not in salida["texto"]
-    assert "llegan hasta 2026-12-31" in salida["texto"]
+    assert "último periodo cargado" in salida["texto"]
 
 
 async def test_rechaza_una_columna_de_fecha_que_es_texto(monkeypatch):

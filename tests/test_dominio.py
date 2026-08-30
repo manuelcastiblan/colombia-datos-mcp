@@ -560,10 +560,31 @@ def test_incompleto_solo_marca_el_periodo_donde_cortan_los_datos():
     assert periodos.incompleto("2026", None, "anio") is False
 
 
-def test_comparables_quita_el_ultimo_solo_si_no_cerro():
+def test_comparables_quita_el_periodo_donde_cortan_los_datos():
+    """Se excluye aunque el calendario haya cerrado.
+
+    Que el corte caiga el 31 de diciembre no demuestra que la carga terminara:
+    es donde la fuente se detuvo, y puede seguir recibiendo registros. La
+    asimetría decide: excluirlo cuesta un punto que se recupera solo en la
+    próxima actualización; incluirlo puede publicar un mínimo falso, y eso no
+    se recupera.
+    """
     from colombia_datos_mcp.domain import periodos
     serie = [{"periodo": "2024"}, {"periodo": "2025"}, {"periodo": "2026"}]
-    assert len(periodos.comparables(serie, "2026-07-31", "anio")) == 2
-    assert len(periodos.comparables(serie, "2026-12-31", "anio")) == 3
+    assert len(periodos.comparables(serie, "2026-07-31", "anio")) == 2   # a medias
+    assert len(periodos.comparables(serie, "2026-12-31", "anio")) == 2   # cargando
+    assert len(periodos.comparables(serie, "2025-12-31", "anio")) == 3   # el corte no es el último
     assert len(periodos.comparables(serie, None, "anio")) == 3
     assert periodos.comparables([], "2026-07-31", "anio") == []
+
+
+def test_una_serie_diaria_no_toma_por_minimo_el_dia_a_medio_cargar():
+    """El caso que destapó todo: el último día cerró como día y aun así traía
+    1.194 contratos frente a los ~4.500 de un lunes normal, porque la carga se
+    quedó a medias. `cerrado` decía que sí; la realidad, que no."""
+    from colombia_datos_mcp.domain import periodos
+    dias = [{"periodo": "2026-08-21"}, {"periodo": "2026-08-24"}]
+    assert periodos.cerrado("2026-08-24", "dia") is True          # el día sí cerró
+    assert periodos.incompleto("2026-08-24", "2026-08-24", "dia") is False
+    assert periodos.contiene_corte("2026-08-24", "2026-08-24") is True
+    assert len(periodos.comparables(dias, "2026-08-24", "dia")) == 1

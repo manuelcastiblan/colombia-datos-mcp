@@ -121,7 +121,7 @@ async def serie(dataset_id: str, campo_fecha: str, metrica: str = "count(*) as c
     cerrados = periodos.comparables(filas, corte, periodo)
     valores = crudos[:len(cerrados)]
     if len(valores) > 1:
-        excluido = (f" Excluye «{filas[-1]['periodo']}», que aún no ha cerrado."
+        excluido = (f" Excluye «{filas[-1]['periodo']}», el último periodo cargado."
                     if len(cerrados) < len(filas) else "")
         sobre.advertir(
             f"Máximo de la serie: {fmt.numero(max(valores))} · mínimo: "
@@ -154,6 +154,16 @@ def _avisa_periodo_incompleto(sobre: Sobre, filas: list, corte: str, periodo: st
             f"ATENCIÓN: los datos cortan el {corte}, así que «{ultimo}» está "
             "INCOMPLETO. Compararlo con periodos cerrados produce caídas que no "
             "existen. Exclúyelo o dilo al citarlo."
+        )
+    elif periodos.contiene_corte(ultimo, corte):
+        # El calendario cerró pero la CARGA no tiene por qué haberlo hecho: es
+        # el último periodo que la fuente alcanzó a publicar. Se vio en una
+        # serie diaria de contratación, donde el último día traía 1.194 firmas
+        # frente a las ~4.500 de un lunes normal y nada lo advertía.
+        sobre.advertir(
+            f"«{ultimo}» es el último periodo cargado —la fuente se detuvo ahí— "
+            "y puede seguir recibiendo registros. Su cifra probablemente suba: "
+            "no la compares con periodos anteriores ni la tomes por un mínimo."
         )
     else:
         sobre.advertir(f"Los datos de la fuente llegan hasta {corte}.")

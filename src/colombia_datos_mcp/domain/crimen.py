@@ -73,11 +73,15 @@ def _fuente(ds: reg.Dataset) -> Fuente:
 
 
 def _avisos_dataset(sobre: Sobre, ds: reg.Dataset, corte: str | None,
-                    incompleto: bool = False) -> None:
-    """`incompleto` debe decir si lo que se está MOSTRANDO alcanza el periodo sin
-    cerrar. Antes se avisaba siempre que hubiera fecha de corte, aunque la serie
-    pedida terminara en un año cerrado: una falsa alarma repetida enseña a
-    ignorar el aviso, y entonces no sirve el día que es verdad."""
+                    incompleto: bool = False, ultimo_cargado: bool = False) -> None:
+    """Tres estados distintos, y confundirlos sale caro en las dos direcciones.
+
+    `incompleto`: lo mostrado alcanza un periodo que el calendario dice que no
+    ha cerrado. `ultimo_cargado`: cerró el calendario pero es el periodo donde
+    la fuente dejó de cargar, así que puede seguir recibiendo registros. Ninguno
+    de los dos: la serie termina en un periodo cerrado y cargado, y avisar de
+    incompletitud sería una falsa alarma — repetida, enseña a ignorar el aviso.
+    """
     sobre.advertir(f"Unidad de análisis: {ds.unidad}. Se suma `cantidad`, no filas.")
     sobre.advertir(AVISO_REGISTRO)
     for n in ds.notas:
@@ -88,6 +92,11 @@ def _avisos_dataset(sobre: Sobre, ds: reg.Dataset, corte: str | None,
         sobre.advertir(
             f"ATENCIÓN: los datos cortan el {corte}, así que el último periodo "
             "está INCOMPLETO y no es comparable con periodos cerrados."
+        )
+    elif ultimo_cargado:
+        sobre.advertir(
+            f"El último periodo es donde la fuente dejó de cargar ({corte}) y "
+            "puede seguir recibiendo registros: su cifra probablemente suba."
         )
     else:
         sobre.advertir(f"Los datos de este dataset llegan hasta {corte}.")
@@ -134,10 +143,14 @@ async def serie(delito: str, desde: int | None = None, hasta: int | None = None,
     # julio, dentro del aviso que existe para no elegir mal el año base.
     cerrados = periodos.comparables(filas, corte, agrupar_por)
     parcial = len(cerrados) < len(filas)
-    _avisos_dataset(sobre, ds, corte, incompleto=parcial)
+    ultimo = filas[-1]["periodo"] if filas else None
+    _avisos_dataset(
+        sobre, ds, corte,
+        incompleto=periodos.incompleto(ultimo, corte, agrupar_por),
+        ultimo_cargado=parcial and not periodos.incompleto(ultimo, corte, agrupar_por))
     valores = crudos[:len(cerrados)]
     if len(valores) > 1:
-        excluido = (f" Excluye «{filas[-1]['periodo']}», que aún no ha cerrado."
+        excluido = (f" Excluye «{ultimo}», el último periodo cargado."
                     if parcial else "")
         sobre.advertir(
             f"Máximo de la serie: {fmt.numero(max(valores))}. Mínimo: "

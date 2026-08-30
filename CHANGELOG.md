@@ -2,6 +2,34 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.13.0] — 2026-08-29
+
+### Corregido
+
+**Una serie diaria terminaba en un desplome inventado.** Pedir la contratación
+día a día devolvía 1.194 contratos el último día frente a los ~4.500 de un lunes
+normal, y el servidor se limitaba a decir «los datos llegan hasta 2026-08-24».
+No era una caída: era que la carga se había quedado a medias justo ahí.
+
+El fallo era conceptual. `cerrado()` preguntaba si el **calendario** había
+cerrado, y un día siempre cierra. Pero la pregunta que importa es si terminó la
+**carga**, y eso no se puede demostrar nunca: el periodo donde cortan los datos
+es exactamente donde la fuente dejó de publicar. Para años y meses la primera
+pregunta implica la segunda; para días, no.
+
+Ahora son tres estados con tres tonos:
+
+| Estado | Cuándo | Qué dice |
+|---|---|---|
+| Incompleto | contiene el corte y el calendario no ha cerrado | `ATENCIÓN … INCOMPLETO` |
+| Último cargado | contiene el corte con el calendario cerrado | «puede seguir recibiendo registros» |
+| Cerrado | el corte queda antes | solo declara el alcance |
+
+Y `comparables()` —lo que alimenta el máximo y el mínimo— excluye el último
+periodo **en los dos primeros casos**. La asimetría lo decide: excluirlo cuesta
+un punto que se recupera solo en la próxima actualización de la fuente;
+incluirlo puede publicar un mínimo falso, y eso no se recupera.
+
 ## [0.12.0] — 2026-08-19
 
 El error fundacional del proyecto —comparar un periodo a medias con periodos
