@@ -8,6 +8,7 @@ import re
 from . import agregacion
 from ..adapters import socrata
 from ..core import format as fmt
+from ..core import nit as nits
 from ..core.budget import Detalle
 from ..core.envelope import Fuente, Sobre, Total
 from ..core.errors import ErrorNoEncontrado, ErrorValidacion
@@ -33,6 +34,26 @@ def _filtro_texto(campo: str, valor: str) -> str:
 
 def _solo_digitos(valor: str) -> str:
     return re.sub(r"\D", "", str(valor or ""))
+
+
+def _filtro_nit(campo: str, valor: str) -> tuple[str, str | None]:
+    """Filtro por NIT que alcanza las dos formas del mismo número.
+
+    En SECOP el mismo NIT está cargado con y sin dígito de verificación
+    —`899999061` y `8999990619` son Bogotá—, así que la igualdad simple perdía
+    la mitad de los organismos de la entidad sin decirlo. Devuelve el filtro y,
+    si hubo expansión, el aviso que hay que poner en el sobre.
+    """
+    formas = nits.equivalentes(valor)
+    if len(formas) < 2:
+        return f"{campo} = '{formas[0] if formas else _solo_digitos(valor)}'", None
+    lista = ", ".join(f"'{f}'" for f in formas)
+    return (
+        f"{campo} in ({lista})",
+        f"Se buscó el NIT en sus dos formas ({' y '.join(formas)}): en SECOP el mismo "
+        "NIT aparece con y sin dígito de verificación, y filtrar por una sola "
+        "deja fuera parte de los organismos de la entidad.",
+    )
 
 
 def _numero(valor, etiqueta: str) -> float:
@@ -125,11 +146,19 @@ async def _construye_where(ds: reg.Dataset, **filtros):
     if filtros.get("entidad") and c.get("entidad"):
         partes.append(_filtro_texto(c["entidad"], filtros["entidad"]))
     if filtros.get("nit_entidad") and c.get("nit_entidad"):
-        partes.append(f"{c['nit_entidad']} = '{_solo_digitos(filtros['nit_entidad'])}'")
+        filtro, aviso = _filtro_nit(c["nit_entidad"], filtros["nit_entidad"])
+        partes.append(filtro)
+        if aviso:
+            avisos.append(aviso)
     if filtros.get("proveedor") and c.get("proveedor"):
         partes.append(_filtro_texto(c["proveedor"], filtros["proveedor"]))
     if filtros.get("documento_proveedor") and c.get("doc_proveedor"):
-        partes.append(f"{c['doc_proveedor']} = '{_solo_digitos(filtros['documento_proveedor'])}'")
+        # Las cédulas no se expanden: `equivalentes` solo toca los números que
+        # empiezan por 8 o 9, que son los NIT de entidades y empresas.
+        filtro, aviso = _filtro_nit(c["doc_proveedor"], filtros["documento_proveedor"])
+        partes.append(filtro)
+        if aviso:
+            avisos.append(aviso)
     if filtros.get("desde") and c.get("fecha"):
         partes.append(f"{c['fecha']} >= '{socrata.escapa(filtros['desde'])}'")
     if filtros.get("hasta") and c.get("fecha"):
@@ -316,7 +345,7 @@ async def perfil_proveedor(documento: str, limite=20):
             "Ejemplo: 900123456",
         )
     contratos = reg.SECOP["contratos"]
-    donde = f"documento_proveedor = '{doc}'"
+    donde, aviso_nit = _filtro_nit("documento_proveedor", doc)
 
     tope = min(int(limite), 50)
     SELECT_TOP = "nombre_entidad, count(*) as total, sum(valor_del_contrato) as valor"
@@ -335,6 +364,8 @@ async def perfil_proveedor(documento: str, limite=20):
             "Cero contratos para ese documento en SECOP II. No es un fallo de la fuente: "
             "puede ser un proveedor solo presente en SECOP I, o un documento mal digitado."
         )
+        if aviso_nit:
+            sobre.advertir(aviso_nit)
         return sobre.render(lambda _f: "_Sin contratos registrados._")
 
     agregado = resumen["filas"][0] if resumen["filas"] else {}
@@ -353,6 +384,8 @@ async def perfil_proveedor(documento: str, limite=20):
     await agregacion.anota_total(sobre, top["filas"], tope, dataset_id=contratos.id,
                                  seleccionar=SELECT_TOP, agrupar="nombre_entidad",
                                  donde=donde)
+    if aviso_nit:
+        sobre.advertir(aviso_nit)
     sobre.advertir(
         "Solo SECOP II. Para contratación anterior a la plataforma consulta también "
         "rpmr-utcd (SECOP Integrado)."
@@ -396,6 +429,21 @@ async def resolver_entidad(nombre: str, limite=10):
     ]
     sobre = Sobre(datos=filas, orden="total DESC", consulta=r["consulta"],
                   fuente=_fuente(contratos))
+    # Dos NIT que solo se diferencian en el dígito de verificación son la misma
+    # entidad. Sin decirlo, quien elige uno de los dos se lleva la mitad de los
+    # organismos creyendo que se lleva todos.
+    hallados = [f.get("nit_entidad") for f in r["filas"] if f.get("nit_entidad")]
+    parejas = {
+        " y ".join(sorted({a, b}))
+        for i, a in enumerate(hallados) for b in hallados[i + 1:]
+        if nits.misma_entidad(a, b)
+    }
+    if parejas:
+        sobre.advertir(
+            "Mismo NIT con y sin dígito de verificación: " + "; ".join(sorted(parejas))
+            + ". Son una sola entidad; filtrar por uno deja fuera los organismos "
+            "cargados con el otro."
+        )
     # Ocultar coincidencias aquí es lo más caro de todo el servidor: es la
     # herramienta de desambiguación, y elegir el NIT equivocado creyendo que
     # se vieron todos contamina cada consulta posterior.

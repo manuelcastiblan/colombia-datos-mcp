@@ -3,6 +3,7 @@
 import pytest
 
 from colombia_datos_mcp.core import format as fmt
+from colombia_datos_mcp.core import nit
 from colombia_datos_mcp.core.budget import Detalle, ajusta_filas, estima_tokens, siguiente_nivel
 from colombia_datos_mcp.core.coords import normaliza_coord, normaliza_par
 from colombia_datos_mcp.core.envelope import Fuente, Sobre, Total
@@ -68,6 +69,42 @@ def test_limpia_texto_repara_el_mojibake_de_origen():
 
 def test_tabla_vacia_no_es_tabla_vacia():
     assert "Sin resultados" in fmt.tabla_markdown([])
+
+
+def test_una_marca_de_tiempo_se_reconoce_sin_mirar_el_nombre():
+    """Agrupando por `date_trunc_ym(fecha_de_firma) as mes`, la columna ya no se
+    llama «fecha» y el mes salía como `2026-07-01T00:00:00.000`."""
+    assert fmt.parece_fecha("2026-07-01T00:00:00.000")
+    assert not fmt.parece_fecha("2026-07-01")      # ya es una fecha legible
+    assert not fmt.parece_fecha("800214750")
+    assert fmt.fecha("2026-07-01T00:00:00.000") == "2026-07-01"
+
+
+def test_una_url_no_se_recorta():
+    """`urlproceso` es el enlace de verificación pública de un contrato: a 70
+    caracteres quedaba inservible, y el estructurado recibe el mismo valor."""
+    url = ("https://community.secop.gov.co/Public/Tendering/OpportunityDetail/"
+           "Index?noticeUID=CO1.NTC.9716625&isFromPublicArea=True")
+    assert fmt.recorta(url, 70) == url
+    assert fmt.recorta("x" * 100, 70).endswith("…")
+
+
+# ------------------------------------------- NIT con y sin DV (0.14.0) ------
+def test_el_nit_se_busca_en_sus_dos_formas():
+    # Las parejas reales: Bogotá, el SENA y el Valle del Cauca.
+    assert nit.equivalentes("899999061") == ["899999061", "8999990619"]
+    assert nit.equivalentes("8999990619") == ["899999061", "8999990619"]
+    assert nit.equivalentes("899.999.034-1") == ["899999034", "8999990341"]
+    assert nit.misma_entidad("890399029", "8903990295")
+    assert not nit.misma_entidad("899999061", "899999062")
+
+
+def test_una_cedula_nunca_se_pliega():
+    """Una de cada once cédulas de diez dígitos pasa la prueba del dígito de
+    verificación por azar; plegarla buscaría los contratos de otra persona."""
+    assert nit.equivalentes("1022403264") == ["1022403264"]
+    assert nit.equivalentes("79123456") == ["79123456"]
+    assert nit.equivalentes("") == []
 
 
 # ------------------------------------------------------------ presupuesto --

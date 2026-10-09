@@ -191,7 +191,13 @@ de separarlas, y quien mire solo la primera concluirá otra cosa.
 
 Ojo con la unidad: agrupar por `nit_entidad` funde organismos que contratan por
 separado —las 34 secretarías de Bogotá comparten NIT, el SENA tiene 78 centros—,
-así que ese 41.413 es un **piso**, no un techo. Declara siempre cuál elegiste.
+así que tiende a subcontar. Pero **no es un piso**: el mismo NIT está cargado con
+y sin dígito de verificación (`899999061` y `8999990619` son Bogotá; `899999034`
+y `8999990341`, el SENA), y eso infla el conteo en sentido contrario. Son 92
+parejas que tocan el 28,9 % de los contratos de 2026: al fusionarlas, ese 41.413
+baja a 41.070. Las herramientas de SECOP ya buscan las dos formas cuando filtras
+por NIT; si agrupas por `nit_entidad` en `co_datos_agregar`, la fusión te toca a
+ti. Declara siempre qué unidad elegiste.
 
 ---
 

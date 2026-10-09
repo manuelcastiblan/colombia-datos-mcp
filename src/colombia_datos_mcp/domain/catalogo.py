@@ -132,7 +132,8 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
                           {"$select": "count(*)", "$where": donde}))
         return sobre.render(lambda _f: f"**{fmt.numero(total)}** filas coinciden con el filtro.")
 
-    limite = min(int(limite), 200 if nivel is Detalle.RESUMEN else 20)
+    pedido = int(limite)
+    limite = min(pedido, 200 if nivel is Detalle.RESUMEN else 20)
     # El conteo y la página iban encadenados sin motivo: dos viajes en serie a
     # la misma fuente, y en un dataset de millones de filas el `count(*)` no es
     # gratis. Ahora la latencia es la del más lento, no la suma de los dos.
@@ -150,15 +151,30 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
     sobre = Sobre(datos=filas, total=Total.contado(total), offset=offset,
                   orden=r.get("orden") or ordenar, detalle=nivel,
                   consulta=r["consulta"], fuente=fuente)
+    if limite < pedido:
+        # El tope se aplicaba en silencio: pedir 40 filas con detalle="completo"
+        # devolvía 20 y el sobre decía `truncado: false`, que es exactamente lo
+        # contrario de lo que había pasado.
+        sobre.advertir(
+            f"Pediste {pedido} filas y el tope con detalle='{nivel.value}' es {limite}: "
+            f"se devolvieron {limite}. Pagina con offset={offset + limite} o usa "
+            "detalle='resumen', cuyo tope es 200."
+        )
     if socrata.sin_token():
         sobre.advertir(AVISO_SIN_TOKEN)
     return sobre.render(lambda f: fmt.tabla_markdown(f), formato=formato)
 
 
 async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
-                  donde=None, teniendo=None, luego=None, limite=20,
+                  donde=None, teniendo=None, luego=None, limite=20, offset=0,
                   formato="tabla", grafica=True):
     """Agregación del lado del servidor: 20 grupos en vez de 10.000 filas.
+
+    `agrupar_por` admite expresiones además de columnas —`date_trunc_ym(fecha)`,
+    `upper(nombre_entidad)`—; declara el nombre con `as` si quieres elegirlo.
+
+    `offset` pagina los grupos. Sin él, una agregación con más grupos que
+    `limite` no tenía continuación posible: había que irse a la API a mano.
 
     `luego` encadena una segunda etapa sobre el resultado de la primera
     (operador `|>` de SoQL). Es la única forma de agregar SOBRE los grupos:
@@ -171,26 +187,31 @@ async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
             "agrupar_por es obligatorio.",
             "Para contar sin agrupar usa co_datos_consultar con detalle='conteo'.",
         )
-    await socrata.valida_campos(dataset_id, [c.strip() for c in agrupar_por.split(",")])
+    seleccion_grupos, grupos, claves = grupos_soql(agrupar_por)
+    await socrata.valida_campos(dataset_id, _campos_citados(agrupar_por, metricas))
 
     esq = await socrata.esquema(dataset_id)
-    seleccionar = f"{agrupar_por}, {metricas}"
+    seleccionar = f"{seleccion_grupos}, {metricas}"
     if luego:
         # La segunda etapa solo ve los alias de la primera, así que ordenar por
         # la métrica interna sería un 400 seguro.
         alias_final = _alias_metrica(luego)
         orden = f"{alias_final} DESC" if alias_final else None
-        consulta = socrata.arma_soql(seleccionar, donde=donde, agrupar=agrupar_por,
+        consulta = socrata.arma_soql(seleccionar, donde=donde, agrupar=grupos,
                                      teniendo=teniendo, luego=luego, ordenar=orden,
-                                     limite=limite)
+                                     limite=limite, offset=offset)
         r = await socrata.consultar_soql(dataset_id, consulta)
     else:
-        orden = _orden_de_metrica(metricas, agrupar_por)
+        # Dos grupos empatados en la métrica pueden salir en cualquier orden, y
+        # entonces paginar repite unos y se salta otros. El desempate por las
+        # claves de grupo es lo que hace que la página 2 continúe la página 1.
+        orden = _orden_de_metrica(metricas, grupos)
+        if orden.lower() != grupos.lower():
+            orden = f"{orden}, {grupos}"
         r = await socrata.consultar(
-            dataset_id, seleccionar=seleccionar, donde=donde, agrupar=agrupar_por,
-            teniendo=teniendo, ordenar=orden, limite=limite,
+            dataset_id, seleccionar=seleccionar, donde=donde, agrupar=grupos,
+            teniendo=teniendo, ordenar=orden, limite=limite, offset=offset,
         )
-    claves = {c.strip().lower() for c in agrupar_por.split(",")}
     filas = [{k: _formatea_valor(k, v, es_metrica=k.lower() not in claves)
               for k, v in f.items()} for f in r["filas"]]
     # La gráfica se calcula sobre los valores CRUDOS: los ya formateados llevan
@@ -201,12 +222,13 @@ async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
         for fila, dibujo in zip(filas, dibujos):
             fila["gráfica"] = dibujo
 
-    sobre = Sobre(datos=filas, orden=orden, consulta=r["consulta"],
+    sobre = Sobre(datos=filas, orden=orden, offset=offset, consulta=r["consulta"],
                   fuente=_fuente_de(esq, dataset_id))
     # `contable=not luego`: contar las filas de una 2.ª etapa exigiría una 3.ª.
     await agregacion.anota_total(sobre, r["filas"], limite, dataset_id=dataset_id,
-                                 seleccionar=seleccionar, agrupar=agrupar_por,
-                                 donde=donde, teniendo=teniendo, contable=not luego)
+                                 seleccionar=seleccionar, agrupar=grupos,
+                                 donde=donde, teniendo=teniendo, contable=not luego,
+                                 offset=offset)
     if not donde:
         sobre.advertir(
             "Agregación sin filtro: hace full scan y en datasets grandes puede agotar "
@@ -259,6 +281,43 @@ def _campos_citados(*expresiones):
     return encontrados
 
 
+def grupos_soql(agrupar_por: str) -> tuple[str, str, set[str]]:
+    """Reparte `agrupar_por` entre el `$select` y el `$group`.
+
+    Agrupar por una expresión era imposible: `agrupar_por` se partía por comas y
+    se contrastaba entero contra el esquema, así que `date_trunc_ym(fecha)` se
+    rechazaba como «columna inexistente» y había que bajar a la API o conformarse
+    con la herramienta de series, que solo agrupa fechas.
+
+    El `$group` necesita la expresión tal cual y el `$select` necesita un alias,
+    porque el nombre que Socrata le pone a una expresión sin alias no es
+    predecible. Si no lo declaras con `as`, se nombra `grupo`, `grupo_2`…
+
+    Devuelve `(para_select, para_group, claves)`. `claves` son los nombres que
+    tendrán las columnas de grupo en la respuesta: lo demás es métrica.
+    """
+    import re
+    selecciones, grupos, claves = [], [], set()
+    partes = [p.strip() for p in str(agrupar_por or "").split(",") if p.strip()]
+    for i, parte in enumerate(partes):
+        declarado = re.match(r"^(.+?)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)$", parte, re.I)
+        if declarado:
+            expresion, alias = declarado.group(1).strip(), declarado.group(2)
+        elif "(" in parte:
+            expresion, alias = parte, "grupo" if i == 0 else f"grupo_{i + 1}"
+        else:
+            expresion = alias = parte
+        selecciones.append(expresion if alias == expresion else f"{expresion} AS {alias}")
+        grupos.append(expresion)
+        claves.add(alias.lower())
+    if not grupos:
+        raise ErrorValidacion(
+            "agrupar_por no tiene ninguna columna ni expresión utilizable.",
+            "Ejemplos: 'departamento' · 'date_trunc_ym(fecha_de_firma) as mes'.",
+        )
+    return ", ".join(selecciones), ", ".join(grupos), claves
+
+
 def _alias_metrica(metricas: str) -> str | None:
     """Primer alias declarado en `metricas`, que es la columna de la métrica."""
     import re
@@ -303,7 +362,7 @@ def _formatea_valor(campo: str, valor, es_metrica: bool = False):
         return fmt.moneda(valor)
     if fmt.es_conteo(nombre):
         return fmt.numero(valor)
-    if "fecha" in nombre:
+    if "fecha" in nombre or fmt.parece_fecha(valor):
         return fmt.fecha(valor)
     # En una agregación, toda columna que no sea clave de grupo es una métrica.
     # El alias lo elige quien consulta —`personas`, `entidades`, `municipios`—

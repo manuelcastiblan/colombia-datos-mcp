@@ -32,6 +32,7 @@ dominio nunca llama a `httpx` y el adaptador nunca sabe qué es un contrato.
 | `core/coords.py` | Saneamiento de coordenadas de DIVIPOLA. |
 | `core/format.py` | Markdown, moneda es-CO, fechas, mojibake. |
 | `core/texto.py` | Plegado y comparación de nombres contra fuentes acentuadas. |
+| `core/nit.py` | Las dos formas de un NIT —con y sin dígito de verificación— y por qué una cédula no se pliega nunca. |
 | `registry/datasets.py` | IDs, unidad de análisis, campos clave, alias, atribuciones. |
 | `adapters/geometria.py` | Límites del MGN, con validación de forma y caché en disco. |
 | `domain/analisis.py` | Series temporales y perfilado de calidad, para cualquier dataset. |

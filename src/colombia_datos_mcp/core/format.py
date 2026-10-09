@@ -85,6 +85,20 @@ def fecha(valor) -> str:
     return limpia_texto(s)
 
 
+_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+
+
+def parece_fecha(valor) -> bool:
+    """Marca de tiempo de Socrata, se llame como se llame la columna.
+
+    Al agrupar por `date_trunc_ym(fecha_de_firma) as mes` la columna ya no se
+    llama «fecha», así que la regla por nombre no la alcanzaba y el mes salía
+    como `2026-07-01T00:00:00.000`.
+    """
+    s = str(valor or "")
+    return bool(_TIMESTAMP.match(s))
+
+
 def numero(valor) -> str:
     if valor in (None, ""):
         return "-"
@@ -98,8 +112,20 @@ def numero(valor) -> str:
 
 
 def recorta(valor, ancho: int = 60) -> str:
+    """Recorta texto largo, salvo si es una URL.
+
+    Una URL cortada no es una URL. `urlproceso` —el enlace de verificación
+    pública de un contrato, lo único que permite comprobar la cifra en la
+    fuente— salía a 70 caracteres y quedaba inservible, y no solo en la tabla:
+    el contenido estructurado recibe este mismo valor ya formateado, así que el
+    enlace se perdía también para quien lo leyera por programa.
+    """
     s = limpia_texto(valor)
-    return s if len(s) <= ancho else s[: ancho - 1] + "…"
+    if len(s) <= ancho:
+        return s
+    if s.lower().startswith(("http://", "https://")):
+        return s
+    return s[: ancho - 1] + "…"
 
 
 def columnas_union(filas: list[dict]) -> list[str]:

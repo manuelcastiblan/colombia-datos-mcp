@@ -92,6 +92,11 @@ vez de dejar que Socrata devuelva un 400 opaco.
 
 `detalle="conteo"` no descarga filas: solo ejecuta `count(*)`.
 
+Si `limite` supera el tope del nivel de detalle, **el sobre lo advierte** con las
+dos cifras y el `offset` de la página siguiente. Antes el recorte era silencioso:
+pedir 40 filas con `detalle="completo"` devolvía 20 y el sobre decía
+`truncado: false`, que es lo contrario de lo que había pasado.
+
 ### `co_datos_agregar`
 
 Agrupa del lado del servidor: devuelve grupos, no filas.
@@ -99,12 +104,13 @@ Agrupa del lado del servidor: devuelve grupos, no filas.
 | Parámetro | Tipo | Defecto | Notas |
 |---|---|---|---|
 | `dataset_id` | string | obligatorio | |
-| `agrupar_por` | string | obligatorio | Una o varias columnas separadas por coma. |
+| `agrupar_por` | string | obligatorio | Columnas o **expresiones** separadas por coma, con `as` opcional. |
 | `metricas` | string | `"count(*) as total"` | El orden se deriva del **primer alias**. |
 | `donde` | string | `""` | |
 | `teniendo` | string | `""` | `$having`: filtra **grupos** por su métrica. |
 | `luego` | string | `""` | Segunda agregación sobre el resultado de la primera (`\|>`). |
 | `limite` | int | `20` | Sin tope propio. |
+| `offset` | int | `0` | Pagina los grupos. Para la tabla entera, `co_datos_exportar`. |
 | `formato` | string | `"tabla"` | `tabla`, `csv` o `json`. |
 | `grafica` | bool | `true` | Añade la columna de barras. Se ignora si `formato` no es tabla. |
 
@@ -115,6 +121,27 @@ primer alias de `luego`: la segunda etapa no ve los alias de la primera.
 
 Sin `donde` hace *full scan* y el sobre lo advierte: en datasets grandes puede
 agotar el tiempo.
+
+#### Expresiones y paginación
+
+`agrupar_por` admite expresiones, no solo columnas:
+
+```python
+co_datos_agregar(dataset_id="jbjy-vk9h",
+                 agrupar_por="date_trunc_ym(fecha_de_firma) as mes",
+                 metricas="count(*) as contratos")
+```
+
+La expresión va al `$group` tal cual y al `$select` con alias, porque el nombre
+que Socrata le pone a una expresión sin alias no es predecible: si no lo
+declaras con `as`, se llama `grupo`, `grupo_2`… Dentro de la expresión las
+columnas sí se validan contra el esquema.
+
+Al paginar con `offset`, el orden lleva **las claves de grupo como desempate**
+(`contratos DESC, nit_entidad`): dos grupos con la misma métrica salen en
+cualquier orden, y sin desempate la página 2 repite unos y se salta otros. Para
+llevarse una tabla de miles de grupos no pagines: `co_datos_exportar` acepta los
+mismos `agrupar_por`, `metricas` y `teniendo` y la escribe entera en disco.
 
 #### `luego`: agregar sobre los grupos
 
@@ -293,11 +320,16 @@ Totales agregados por contratista, no volcado de filas.
 
 | Parámetro | Tipo | Defecto | Notas |
 |---|---|---|---|
-| `documento` | string | obligatorio | Cédula o NIT sin dígito de verificación. |
+| `documento` | string | obligatorio | Cédula o NIT, con o sin dígito de verificación. |
 | `limite` | int | `20` | Tope 50 entidades contratantes. |
 
 Devuelve número de contratos, valor total y desglose por entidad contratante
 ordenado por valor.
+
+Si el documento es un NIT —empieza por 8 o 9— se busca en sus **dos formas**,
+con y sin dígito de verificación, y el sobre lo dice. Las cédulas no se tocan: a
+una de cada once cédulas de diez dígitos le cuadra el dígito de verificación por
+azar, y plegarla a nueve traería los contratos de otra persona.
 
 Solo cubre SECOP II. Con cero resultados advierte que puede tratarse de un
 proveedor presente únicamente en SECOP I, y apunta a `rpmr-utcd`.
@@ -310,6 +342,10 @@ Nombre coloquial → nombre canónico + NIT. **Úsala antes de filtrar por nombr
 |---|---|---|---|
 | `nombre` | string | obligatorio | Mínimo 3 caracteres. |
 | `limite` | int | `10` | Tope 30. |
+
+Si entre los resultados hay dos NIT que son el mismo número con y sin dígito de
+verificación, lo advierte: son una sola entidad, y quedarse con uno deja fuera
+los organismos cargados con el otro.
 
 **Mira el total antes de elegir el NIT.** Con el límite por defecto ves 10
 coincidencias, y puede haber más: «MUNICIPIO DE SANTA» casa con 11. El sobre
@@ -496,6 +532,9 @@ que sirve para volúmenes que no caben en una respuesta.
 | `ordenar` | string | `""` | `$order` |
 | `formato` | string | `"csv"` | `csv`, `json` o `parquet`. |
 | `max_filas` | int | `50000` | Tope duro 200.000. |
+| `agrupar_por` | string | `""` | Exporta la **tabla de grupos** en vez de las filas. |
+| `metricas` | string | `""` | Con `agrupar_por`; por defecto `count(*) as total`. |
+| `teniendo` | string | `""` | `$having` sobre los grupos. |
 
 **Es la única herramienta que escribe**, y está anotada con
 `readOnlyHint: false` para que el cliente pueda pedir confirmación al usuario.
@@ -516,6 +555,25 @@ respuesta lo dice** con las dos cifras. El contenido estructurado trae `ruta`,
 
 Con cero filas no se crea ningún fichero, y se explica que es el filtro y no un
 fallo de la fuente.
+
+#### Exportar una agregación
+
+Con `agrupar_por` lo que se escribe es la tabla de grupos:
+
+```python
+co_datos_exportar(dataset_id="jbjy-vk9h", nombre_archivo="organismos",
+                  donde="fecha_de_firma >= '2026-08-07'",
+                  agrupar_por="nit_entidad, nombre_entidad",
+                  metricas="count(*) as contratos, sum(valor_del_contrato) as valor")
+```
+
+Es la vía para una agregación con más grupos de los que caben en una respuesta:
+pedirla en CSV no evita el presupuesto de tokens, así que una tabla de 2.000
+organismos obligaba a repetir las consultas contra la API a mano. Se pagina por
+las claves de grupo, el único orden estable, y el estructurado trae `agrupado:
+true`. El total de grupos se cuenta anidando; si ese conteo falla, se pagina
+hasta agotar la fuente y la respuesta dice que la garantía es esa y no un conteo
+previo.
 
 ### `co_geo_limites`
 

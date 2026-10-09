@@ -2,6 +2,73 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.14.0] — 2026-10-08
+
+Todo lo de esta versión salió del mismo sitio: un análisis de contratación por
+nivel de gobierno en el que hubo que **salirse del servidor** y golpear la API
+con scripts. Cada cosa que obligó a hacerlo es un arreglo aquí.
+
+### Añadido
+
+**Exportar una agregación entera.** `co_datos_exportar` acepta `agrupar_por`,
+`metricas` y `teniendo`: escribe la tabla de grupos en disco en vez de las filas.
+Era el hueco que forzaba el desvío. Una agregación con más grupos que `limite` no
+se podía ni paginar ni volcar —pedirla en CSV no evita el presupuesto de tokens,
+porque el recorte se aplica después—, así que una tabla de 2.000 organismos
+contratantes había que reconstruirla a mano. Se pagina por las claves de grupo,
+que es el único orden estable, y si el conteo previo de grupos falla se pagina
+hasta agotar la fuente y la respuesta dice que la garantía es esa.
+
+**`offset` en `co_datos_agregar`.** Los grupos ya se pueden paginar. El orden
+lleva ahora las claves de grupo como desempate: dos grupos empatados en la
+métrica salen en cualquier orden, y sin desempate la página 2 repite unos y se
+salta otros —el mismo fallo que el adaptador ya evitaba en las consultas sin
+agrupar. Con `offset`, el total deja de ser `len(filas)`: cuenta también lo que
+quedó detrás.
+
+**Expresiones en `agrupar_por`.** `date_trunc_ym(fecha_de_firma) as mes` o
+`upper(nombre_entidad)` ya agrupan. Antes `agrupar_por` se partía por comas y se
+contrastaba entero contra el esquema, así que la expresión se rechazaba como
+«columna inexistente» y la única salida era `co_datos_serie`, que solo agrupa
+fechas. La expresión va al `$group` tal cual y al `$select` con alias, porque el
+nombre que Socrata le da a una expresión sin alias no es predecible; las columnas
+citadas dentro de ella sí se validan.
+
+**`core/nit.py`:** dígito de verificación con el algoritmo de la DIAN.
+
+### Corregido
+
+**Un NIT filtraba la mitad de la entidad.** En SECOP el mismo NIT está cargado
+con y sin dígito de verificación: `899999061` y `8999990619` son Bogotá;
+`899999034` y `8999990341`, el SENA. Son 92 parejas que tocan el 28,9 % de los
+contratos de prestación de servicios de 2026. `nit_entidad = '899999061'` dejaba
+fuera, en silencio, los organismos cargados con la otra forma. Ahora las
+herramientas de SECOP buscan ambas y lo advierten, y `co_secop_resolver_entidad`
+avisa cuando dos NIT de su propia tabla son el mismo número.
+
+Las cédulas no se expanden nunca: a una de cada once cédulas de diez dígitos le
+cuadra el dígito de verificación por azar, y plegarla a nueve traería los
+contratos de otra persona. Solo se tocan los números que empiezan por 8 o 9.
+
+**Las URL se cortaban a 70 caracteres.** `urlproceso` —el enlace de verificación
+pública de un contrato, lo único que permite comprobar una cifra en la fuente—
+salía truncado y por tanto inservible, y no solo en la tabla: el contenido
+estructurado recibe el mismo valor ya formateado, así que el enlace se perdía
+también para quien lo leyera por programa. `recorta()` deja pasar las URL
+enteras.
+
+**El tope de `limite` se aplicaba en silencio.** Pedir 40 filas con
+`detalle="completo"` devolvía 20 y el sobre decía `truncado: false`, que es justo
+lo contrario de lo que había pasado. Ahora lo advierte con las dos cifras y el
+`offset` siguiente.
+
+**Documentación con una afirmación falsa.** `docs/recetas.md` decía que agrupar
+por `nit_entidad` da un «piso» del conteo de contratistas multi-entidad. No lo
+da: funde organismos en un sentido, pero los NIT duplicados inflan en el otro.
+El README gana además la trampa de `orden`/`rama`, que no son fiables para
+filtrar por nivel de gobierno —el ITM, municipal, figura como nacional en sus
+15.482 contratos de 2026— y remite al Universo de entidades del DAFP.
+
 ## [0.13.0] — 2026-08-29
 
 ### Corregido

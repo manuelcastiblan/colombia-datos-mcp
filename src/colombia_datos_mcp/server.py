@@ -132,8 +132,15 @@ async def co_datos_consultar(dataset_id: str, seleccionar: str = "", donde: str 
 async def co_datos_agregar(dataset_id: str, agrupar_por: str,
                            metricas: str = "count(*) as total", donde: str = "",
                            teniendo: str = "", luego: str = "", limite: int = 20,
-                           formato: str = "tabla", grafica: bool = True) -> ToolResult:
+                           offset: int = 0, formato: str = "tabla",
+                           grafica: bool = True) -> ToolResult:
     """Agrega del lado del servidor: agrupa y devuelve grupos, no filas.
+
+    `agrupar_por` acepta columnas y también expresiones, con alias opcional:
+    `date_trunc_ym(fecha_de_firma) as mes`, `upper(nombre_entidad)`.
+
+    `offset` pagina los grupos. Para llevarse la tabla ENTERA a disco en vez de
+    paginarla, `co_datos_exportar` acepta los mismos `agrupar_por` y `metricas`.
 
     `teniendo` filtra grupos por su métrica (`count(*) > 1`).
 
@@ -154,7 +161,7 @@ async def co_datos_agregar(dataset_id: str, agrupar_por: str,
     return await _ejecuta(catalogo.agregar(
         dataset_id, agrupar_por, metricas=metricas, donde=donde or None,
         teniendo=teniendo or None, luego=luego or None, limite=limite,
-        formato=formato, grafica=grafica))
+        offset=offset, formato=formato, grafica=grafica))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
@@ -290,11 +297,18 @@ async def co_geo_cotejar_coordenadas(limite: int = 15) -> ToolResult:
 @mcp.tool(annotations=ESCRIBE)
 async def co_datos_exportar(dataset_id: str, nombre_archivo: str, donde: str = "",
                             seleccionar: str = "", ordenar: str = "",
-                            formato: str = "csv", max_filas: int = 50000) -> ToolResult:
+                            formato: str = "csv", max_filas: int = 50000,
+                            agrupar_por: str = "", metricas: str = "",
+                            teniendo: str = "") -> ToolResult:
     """Descarga un dataset filtrado ENTERO y lo guarda en disco.
 
     Es la única herramienta que escribe. Pagina hasta agotar el filtro, así que
     sirve para sacar volúmenes que no caben en una respuesta.
+
+    Con `agrupar_por` (y `metricas`, `teniendo`) exporta la TABLA DE GRUPOS
+    completa en vez de las filas: es la vía para una agregación con más grupos
+    de los que caben en una respuesta —pedirla en CSV no evita el presupuesto de
+    tokens—, por ejemplo los 2.000 organismos que contrataron en un periodo.
 
     `nombre_archivo` es un nombre, NO una ruta: el fichero se escribe siempre
     bajo `CO_EXPORT_DIR` (por defecto `~/colombia-datos-export`).
@@ -306,7 +320,8 @@ async def co_datos_exportar(dataset_id: str, nombre_archivo: str, donde: str = "
     return await _ejecuta(exportar.exportar(
         dataset_id, nombre_archivo, donde=donde or None,
         seleccionar=seleccionar or None, ordenar=ordenar or None,
-        formato=formato, max_filas=max_filas))
+        formato=formato, max_filas=max_filas, agrupar_por=agrupar_por or None,
+        metricas=metricas or None, teniendo=teniendo or None))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)

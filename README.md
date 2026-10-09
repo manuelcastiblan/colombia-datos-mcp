@@ -593,6 +593,22 @@ debajo, y porque cada punto costó una verificación contra la fuente viva.
   y agrupar por `nombre_entidad` los separa: ninguna de las dos es «la entidad».
   Elige según la pregunta y dilo — quien pasa de la Secretaría de Ambiente a la de
   Gobierno de Bogotá no cambió de empleador, pero sí de contrato.
+- **El mismo NIT está cargado con y sin dígito de verificación.** `899999061` y
+  `8999990619` son Bogotá; `899999034` y `8999990341`, el SENA. Son 92 parejas que
+  tocan el **28,9 %** de los contratos de prestación de servicios de 2026, así que
+  filtrar por una sola forma pierde la mitad de los organismos y agrupar sin
+  fusionarlas infla cualquier conteo de «contratista en varias entidades» (41.413
+  → 41.070). Las herramientas de SECOP buscan las dos formas y lo advierten;
+  `core/nit.py` calcula el dígito con el algoritmo de la DIAN y **no toca las
+  cédulas**: a una de cada once de diez dígitos le cuadra por azar.
+- **`orden` y `rama` no sirven para filtrar por nivel de gobierno.** El error es
+  sistemático, no por contrato suelto: el ITM —institución municipal de Medellín—
+  figura como `orden='Nacional'` en sus 15.482 contratos de 2026, las CAR salen
+  unas nacionales y otras territoriales, y la JEP o la CNSC aparecen con
+  `rama='Corporación Autónoma'`. 36 NIT tienen más de un valor de `orden`. Para
+  «entidades nacionales» hay que cruzar por NIT con el Universo de entidades de
+  Función Pública (`h7zv-k39x`), separando las CAR y completando las unidades con
+  NIT propio de la Fuerza Pública y las seccionales de la Rama Judicial.
 
 ## Lo que este servidor NO hace
 

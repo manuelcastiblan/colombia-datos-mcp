@@ -95,6 +95,34 @@ async def test_exportar_escribe_csv_y_reporta_la_ruta(monkeypatch):
     assert ruta.read_text(encoding="utf-8").startswith("﻿")
 
 
+async def test_exportar_agrupado_saca_la_tabla_de_grupos(monkeypatch):
+    """La agregación entera a disco: en una respuesta la recorta el presupuesto
+    de tokens aunque se pida en CSV, y sin esto había que salirse del servidor."""
+    red = RedFalsa({"api/catalog/v1": {"results": []},
+                    "/resource/jbjy-vk9h.json": _filas_de_contratos})
+    monkeypatch.setattr(socrata, "_http", red)
+    salida = await exportar.exportar(
+        "jbjy-vk9h", "entidades", formato="csv",
+        agrupar_por="nombre_entidad", metricas="count(*) as contratos")
+    pedidas = [p for _, p in red.llamadas if "$group" in p]
+    assert pedidas, "una exportación agrupada tiene que pedir $group"
+    # Ordenar por la métrica no sirve para paginar: los empates se reordenan.
+    assert pedidas[-1]["$order"] == "nombre_entidad"
+    ficha = salida["estructurado"]["datos"][0]
+    assert ficha["agrupado"] is True
+    assert (exportar.DIR_EXPORT / "entidades.csv").exists()
+    assert "grupo" in salida["texto"]
+
+
+async def test_exportar_sin_agrupar_no_manda_group(monkeypatch):
+    red = RedFalsa({"api/catalog/v1": {"results": []},
+                    "/resource/jbjy-vk9h.json": _filas_de_contratos})
+    monkeypatch.setattr(socrata, "_http", red)
+    salida = await exportar.exportar("jbjy-vk9h", "contratos", formato="csv")
+    assert not [p for _, p in red.llamadas if "$group" in p]
+    assert salida["estructurado"]["datos"][0]["agrupado"] is False
+
+
 async def test_exportar_no_deja_salir_del_directorio(monkeypatch):
     """`nombre_archivo` es un nombre, no una ruta: un modelo que la compone a
     partir del texto del usuario no debe poder escribir donde quiera."""

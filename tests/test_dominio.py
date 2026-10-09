@@ -272,7 +272,7 @@ async def test_agregar_ordena_por_el_alias_real_de_la_metrica(monkeypatch):
     orden = [p["$order"] for _, p in red.llamadas if "$order" in p][0]
     # Estaba cableado a "total DESC": con cualquier métrica que no se llamara
     # `total`, Socrata respondía 400 «No such column: total».
-    assert orden == "valor DESC"
+    assert orden.startswith("valor DESC")
 
 
 async def test_agregar_por_defecto_sigue_ordenando_por_total(monkeypatch):
@@ -281,7 +281,80 @@ async def test_agregar_por_defecto_sigue_ordenando_por_total(monkeypatch):
         "/resource/jbjy-vk9h.json": _filas_de_contratos,
     })
     await catalogo.agregar("jbjy-vk9h", "nombre_entidad")
-    assert [p["$order"] for _, p in red.llamadas if "$order" in p][0] == "total DESC"
+    assert [p["$order"] for _, p in red.llamadas if "$order" in p][0].startswith("total DESC")
+
+
+async def test_agregar_desempata_por_las_claves_para_poder_paginar(monkeypatch):
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    await catalogo.agregar("jbjy-vk9h", "nombre_entidad", offset=20)
+    pagina = [p for _, p in red.llamadas if "$group" in p][0]
+    # Sin desempate, dos grupos con la misma métrica salen en cualquier orden y
+    # la página 2 repite unos y se salta otros.
+    assert pagina["$order"] == "total DESC, nombre_entidad"
+    assert pagina["$offset"] == 20
+
+
+async def test_agregar_acepta_expresiones_y_les_pone_alias(monkeypatch):
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    # Antes esto se rechazaba: `agrupar_por` se partía por comas y la expresión
+    # entera se contrastaba contra el esquema como si fuera una columna.
+    await catalogo.agregar("jbjy-vk9h", "date_trunc_ym(fecha_de_firma) as mes",
+                           metricas="count(*) as contratos")
+    p = [p for _, p in red.llamadas if "$group" in p][0]
+    assert p["$group"] == "date_trunc_ym(fecha_de_firma)"
+    assert p["$select"].startswith("date_trunc_ym(fecha_de_firma) AS mes")
+
+
+async def test_agregar_rechaza_la_columna_inventada_dentro_de_la_expresion(monkeypatch):
+    _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    with pytest.raises(ErrorValidacion):
+        await catalogo.agregar("jbjy-vk9h", "date_trunc_ym(fecha_inventada)")
+
+
+async def test_consultar_avisa_cuando_recorta_el_limite(monkeypatch):
+    _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    salida = await catalogo.consultar("jbjy-vk9h", limite=40, detalle="completo")
+    # El tope se aplicaba en silencio y el sobre decía `truncado: false`.
+    assert "40" in salida["texto"] and "tope" in salida["texto"]
+
+
+async def test_buscar_contratos_alcanza_el_nit_con_y_sin_dv(monkeypatch):
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    salida = await secop.buscar_contratos(nit_entidad="899999061")
+    donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
+    # Bogotá está cargada con las dos formas del mismo NIT: con la igualdad
+    # simple se perdían los organismos de la otra.
+    assert "nit_entidad in ('899999061', '8999990619')" in donde
+    assert "dígito de verificación" in salida["texto"]
+
+
+async def test_resolver_entidad_avisa_del_mismo_nit_por_duplicado(monkeypatch):
+    _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": lambda _p: [
+            {"nombre_entidad": "BOGOTA D.C. - SECRETARIA DE SALUD",
+             "nit_entidad": "899999061", "total": "900"},
+            {"nombre_entidad": "(Secretaría Distrital de Integración Social)",
+             "nit_entidad": "8999990619", "total": "300"},
+        ],
+    })
+    salida = await secop.resolver_entidad("bogota")
+    assert "899999061 y 8999990619" in salida["texto"]
 
 
 async def test_el_conteo_no_se_formatea_como_pesos(monkeypatch):

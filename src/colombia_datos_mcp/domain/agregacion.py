@@ -32,6 +32,7 @@ async def anota_total(
     donde: str | None = None,
     teniendo: str | None = None,
     contable: bool = True,
+    offset: int = 0,
 ) -> None:
     """Pone en el sobre cuántos grupos hay **de verdad**.
 
@@ -49,6 +50,10 @@ async def anota_total(
     sobre.aviso_parcial = AVISO_PARCIAL
     sobre.total = Total.cupo_entero(filas, limite)
     if sobre.total.consta:
+        if offset:
+            # Con `offset` la página corta cierra el recuento, pero el total es
+            # todo lo que hay detrás: las filas saltadas también son grupos.
+            sobre.total = Total.contado(offset + len(filas))
         return                       # cabía entero: exacto y sin una petición más
     if contable:
         contados = await socrata.contar_grupos(dataset_id, seleccionar, agrupar,
