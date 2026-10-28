@@ -59,7 +59,9 @@ async def _municipios(consulta, codigo, nivel, con_coordenadas, limite, offset,
     avisos = []
     if consulta:
         campo = "dpto" if nivel == "departamento" else "nom_mpio"
-        filtro, valores, truncado = await socrata.filtro_categorico(ds.id, campo, consulta)
+        # DIVIPOLA son 1.122 filas: el `distinct` es inmediato y la degradación
+        # por lentitud no se da aquí, pero se desempaqueta igual.
+        filtro, valores, truncado, _deg = await socrata.filtro_categorico(ds.id, campo, consulta)
         if filtro is None:
             return _sin_coincidencias(ds, consulta, campo, offset)
         if truncado:
@@ -114,7 +116,7 @@ async def _centros(consulta, codigo, con_coordenadas, limite, offset, formato="t
         campo = "codigo_centro_poblado" if len(c) > 5 else "codigo_municipio"
         partes.append(f"{campo} = '{socrata.escapa(c)}'")
     if consulta:
-        filtro, _valores, _trunc = await socrata.filtro_categorico(
+        filtro, _valores, _trunc, _deg = await socrata.filtro_categorico(
             ds.id, "nombre_centro_poblado", consulta)
         if filtro is None:
             return _sin_coincidencias(ds, consulta, "nombre_centro_poblado", offset)

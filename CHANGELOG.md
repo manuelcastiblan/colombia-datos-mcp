@@ -2,6 +2,75 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.15.0] — 2026-10-28
+
+Cuatro arreglos salidos de auditar el servidor con él mismo: tres se notan en
+cada respuesta y el cuarto quita un desvío que se repetía.
+
+### Corregido
+
+**`detalle="resumen"` no resumía nada fuera del registro.** Sin campos curados,
+el nivel solo cambiaba el tope de filas: dos filas del Universo de entidades del
+DAFP llegaban con sus 24 columnas, un blob JSON de dirección, fax, correo,
+teléfono y el nombre del representante legal. Unos 1.200 tokens, y datos
+personales de alguien concreto arrastrados a la conversación por una pregunta
+sobre el orden administrativo de la entidad.
+
+Ahora, cuando el dataset no está en el registro y no se pidieron columnas, el
+resumen es heurístico: fuera las columnas vacías en todas las filas, los blobs y
+las de contacto o datos personales, y el sobre declara cuántas columnas quedaron
+de cuántas. Con `seleccionar` explícito no se toca nada —quien pide columnas ya
+eligió— y `detalle="completo"` sigue trayendo todo.
+
+**El diagnóstico de la fuente llegaba ilegible.** Un 400 de Socrata se recortaba
+en crudo a 300 caracteres, así que el modelo recibía `{"message":"Query
+coordinator error: …` con las comillas escapadas, el SQL repetido dentro —que ya
+conoce, lo acaba de escribir— y el corte justo donde empezaba la explicación.
+Ahora se parsea el JSON, se tira el eco de la consulta y se conserva el código de
+error, que es lo que dice qué arreglar.
+
+**La frescura que publicaba el sobre no era la de los datos.** `updatedAt` del
+catálogo es el **máximo** entre la fecha de los datos y la de la ficha, así que
+un retoque de metadatos se presentaba como actualización. Verificado el
+28-oct-2026: los indicadores de mortalidad del MinSalud (`4e4i-ua65`) decían
+«actualizado 2026-09-19» con los datos parados desde **2022-08-02**; la Medición
+del Desempeño Municipal del DNP, desde 2022-02-21; y hasta DIVIPOLA figuraba al
+día con datos de enero de 2025. Ahora el sobre publica `data_updated_at`, y
+`co_datos_describir_dataset` avisa cuando la ficha se tocó después que los datos.
+
+La clave de caché del esquema lleva ahora **versión de forma** (`esquema/v2`). El
+esquema se guarda 24 h en disco, así que al añadirle un campo las entradas viejas
+seguían sirviendo la forma anterior: el arreglo de la frescura no se notaba hasta
+el día siguiente, y en la primera prueba contra la fuente viva salió la fecha
+antigua. Hay que subirla cada vez que cambie la forma del diccionario.
+
+**El pie mostraba la marca de tiempo entera donde iba una fecha.** Las fechas del
+catálogo traen zona —`2026-08-17T09:22:03.000Z`— y esa `Z` rompía los cuatro
+formatos de `fmt.fecha`, que devolvía el texto sin tocar.
+
+**Un dominio categórico que no responde ya no tumba la respuesta.** Resolver un
+término contra los valores reales de una columna cuesta un `distinct`, y el de
+`tipo_de_contrato` —5,9 M filas— agotó los 90 s del cliente: la consulta entera
+moría. Ahora esa enumeración lleva su propio plazo (`CO_TIMEOUT_DOMINIO`, 20 s) y
+al vencer degrada a comparación de texto **diciéndolo**, porque entonces el
+filtro puede casar valores vecinos y un cero ya no demuestra que el término no
+exista. Afectaba también a filtros que ya existían: departamento y modalidad en
+las búsquedas de SECOP, y departamento en criminalidad.
+
+### Añadido
+
+**`ordenar` en `co_datos_agregar`.** El orden era siempre la métrica
+descendente, que para una serie es lo contrario de lo que se quiere: agrupada por
+mes salía ordenada por el conteo y no había manera de pedirla cronológica. Puede
+citar un alias de la primera etapa, y por eso no se valida contra el esquema,
+donde el alias no existe.
+
+**`nit_entidad` y `tipo` en `co_secop_agregar`.** La pregunta más frecuente
+—cuánta prestación de servicios firmó esta entidad— obligaba a bajar a la
+herramienta genérica y escribir el `$where` a mano. El NIT se busca en sus dos
+formas y el tipo se resuelve contra los valores reales de la columna: si el
+término no existe en la fuente, el cero viene explicado.
+
 ## [0.14.0] — 2026-10-08
 
 Todo lo de esta versión salió del mismo sitio: un análisis de contratación por

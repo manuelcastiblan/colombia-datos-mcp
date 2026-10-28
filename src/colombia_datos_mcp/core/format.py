@@ -73,10 +73,19 @@ def moneda(valor) -> str:
 
 
 def fecha(valor) -> str:
-    """Socrata devuelve floating timestamps sin zona; se muestran como fecha."""
+    """Socrata devuelve floating timestamps sin zona; se muestran como fecha.
+
+    Los del catálogo sí traen zona —`2026-08-17T09:22:03.000Z`— y esa `Z`
+    rompía los cuatro formatos, así que la fecha salía sin tocar: el pie de cada
+    respuesta llevaba la marca de tiempo entera donde debía ir un día.
+    """
     if not valor:
         return "-"
-    s = str(valor)
+    s = str(valor).strip()
+    if s.endswith("Z"):
+        s = s[:-1]
+    elif "+" in s[10:]:
+        s = s[: 10 + s[10:].index("+")]
     for formato in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%d/%m/%Y"):
         try:
             return datetime.strptime(s, formato).strftime("%Y-%m-%d")

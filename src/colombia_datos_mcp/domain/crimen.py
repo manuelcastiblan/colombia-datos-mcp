@@ -169,7 +169,14 @@ async def por_municipio(delito: str, anio: int, limite: int = 20,
               f"fecha_hecho < '{int(anio) + 1}-01-01'"]
     avisos = []
     if departamento:
-        filtro, valores, _t = await socrata.filtro_categorico(ds.id, "departamento", departamento)
+        filtro, valores, _t, degradado = await socrata.filtro_categorico(
+            ds.id, "departamento", departamento)
+        if degradado:
+            avisos.append(
+                f"No se pudo enumerar los departamentos de este dataset (la fuente tardó "
+                f"demasiado), así que «{departamento}» se filtró por coincidencia de texto: "
+                "puede incluir nombres parecidos."
+            )
         if filtro is None:
             sobre = Sobre(datos=[], total=Total.completo(0), fuente=_fuente(ds))
             sobre.advertir(

@@ -47,6 +47,7 @@ def _instala(monkeypatch, respuestas):
 DOMINIOS = {
     "departamento": ["Antioquia", "Atlántico", "Distrito Capital de Bogotá", "Chocó"],
     "modalidad_de_contratacion": ["Contratación directa", "Mínima cuantía"],
+    "tipo_de_contrato": ["Prestación de servicios", "Obra", "Suministros"],
 }
 
 
@@ -341,6 +342,128 @@ async def test_buscar_contratos_alcanza_el_nit_con_y_sin_dv(monkeypatch):
     # simple se perdían los organismos de la otra.
     assert "nit_entidad in ('899999061', '8999990619')" in donde
     assert "dígito de verificación" in salida["texto"]
+
+
+async def test_agregar_respeta_el_orden_pedido(monkeypatch):
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    # Una serie agrupada por mes salía ordenada por el conteo, o sea descolocada.
+    await catalogo.agregar("jbjy-vk9h", "date_trunc_ym(fecha_de_firma) as mes",
+                           metricas="count(*) as contratos", ordenar="mes")
+    p = [p for _, p in red.llamadas if "$group" in p][0]
+    assert p["$order"] == "mes"      # ni desempate ni métrica: manda quien pregunta
+
+
+async def test_resumen_heuristico_cuando_el_dataset_no_esta_registrado(monkeypatch):
+    """`detalle="resumen"` devolvía el dataset entero —blobs, teléfono, correo y
+    el nombre del representante legal— porque sin campos curados no recortaba."""
+    fila = {"nombre": "DIRECCION NACIONAL DE BOMBEROS", "orden": "NACIONAL",
+            "sector": "INTERIOR", "estado_ins": "ACTIVA",
+            "direccion": '{"tipoVia":{"id":341},"numero":"26"}',
+            "fax": "No disponible", "email": "x@dnbc.gov.co", "ccb_telefono": "5557926",
+            "ccb_pagina_web": "https://dnbc.gov.co",
+            "nombre_representante": "LINA MARIA MARIN RODRIGUEZ",
+            "cargo_representante": "Directora", "vacia": ""}
+    _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/h7zv-k39x.json": lambda p: (
+            [{"total": "2"}] if "count(*)" in p.get("$select", "") else [fila, fila]),
+    })
+    salida = await catalogo.consultar("h7zv-k39x", limite=2)
+    devuelta = salida["estructurado"]["datos"][0]
+    assert "nombre" in devuelta and "orden" in devuelta
+    for ruido in ("direccion", "email", "ccb_telefono", "nombre_representante", "vacia"):
+        assert ruido not in devuelta
+    assert "Resumen heurístico" in salida["texto"]
+
+
+async def test_con_seleccionar_explicito_no_se_recorta_nada(monkeypatch):
+    """Quien pide columnas ya eligió: el heurístico ahí sería una sorpresa.
+
+    `valor_pendiente_de` viene vacía en todas las filas —el heurístico la
+    descartaría por eso mismo—, pero se pidió, así que se devuelve."""
+    fila = {"nombre_entidad": "INVIAS", "valor_pendiente_de": ""}
+    _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/h7zv-k39x.json": lambda p: (
+            [{"total": "1"}] if "count(*)" in p.get("$select", "") else [fila]),
+    })
+    salida = await catalogo.consultar(
+        "h7zv-k39x", seleccionar="nombre_entidad, valor_pendiente_de", limite=1)
+    assert "valor_pendiente_de" in salida["estructurado"]["datos"][0]
+    assert "Resumen heurístico" not in salida["texto"]
+
+
+async def test_la_frescura_es_la_de_los_datos_no_la_de_la_ficha(monkeypatch):
+    """`updatedAt` es el máximo entre datos y metadatos: los indicadores del
+    MinSalud decían «actualizado 2026-09-19» con los datos parados en 2022."""
+    import copy
+
+    catalogo_fechado = copy.deepcopy(CATALOGO)
+    catalogo_fechado["results"][0]["resource"].update({
+        "updatedAt": "2026-09-19T17:35:00.000Z",
+        "data_updated_at": "2022-08-02T21:37:55.000Z",
+        "metadata_updated_at": "2026-09-19T17:35:00.000Z",
+    })
+    _instala(monkeypatch, {"api/catalog/v1": catalogo_fechado})
+    salida = await catalogo.describir_dataset("4e4i-ua65")
+    assert salida["estructurado"]["_meta"]["fuente"]["actualizado"] == "2022-08-02"
+    assert "los DATOS no cambian desde el 2022-08-02" in salida["texto"]
+
+
+async def test_sin_fecha_de_datos_se_usa_la_del_catalogo(monkeypatch):
+    """Los portales viejos no mandan `data_updated_at`: ahí no hay nada mejor."""
+    _instala(monkeypatch, {"api/catalog/v1": CATALOGO})
+    salida = await catalogo.describir_dataset("jbjy-vk9h")
+    assert salida["estructurado"]["_meta"]["fuente"]["actualizado"] == "2026-08-17"
+
+
+async def test_un_dominio_que_no_responde_degrada_a_texto_y_lo_dice(monkeypatch):
+    """Medido el 28-oct-2026: el `distinct` de `tipo_de_contrato` agotó los 90 s
+    del cliente y tumbaba la respuesta entera. Filtrar algo parecido diciéndolo
+    es mejor que no responder."""
+    from colombia_datos_mcp.core.errors import ErrorTimeout
+
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+
+    async def lento(*_a, **_k):
+        raise ErrorTimeout("Tiempo agotado consultando www.datos.gov.co.", "")
+
+    monkeypatch.setattr(socrata, "valores_distintos", lento)
+    salida = await secop.agregar(tipo="prestacion de servicios", limite=3)
+    donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
+    assert "like" in donde.lower()          # degradó a comparación de texto
+    assert "coincidencia de texto" in salida["texto"]
+
+
+async def test_secop_agregar_filtra_por_nit_y_tipo(monkeypatch):
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    salida = await secop.agregar(agrupar_por="departamento", nit_entidad="899999061",
+                                 tipo="prestacion de servicios", desde="2026-08-07")
+    donde = [p["$where"] for _, p in red.llamadas if "$where" in p][0]
+    assert "nit_entidad in ('899999061', '8999990619')" in donde
+    # El tipo se resuelve contra el valor real, con tilde, que es como está en
+    # la fuente: un `like` sobre lo que escribió el usuario daría cero.
+    assert "tipo_de_contrato" in donde and "Prestación de servicios" in donde
+    assert "dígito de verificación" in salida["texto"]
+
+
+async def test_secop_agregar_con_un_tipo_inexistente_no_consulta_y_lo_dice(monkeypatch):
+    red = _instala(monkeypatch, {
+        "api/catalog/v1": CATALOGO,
+        "/resource/jbjy-vk9h.json": _filas_de_contratos,
+    })
+    salida = await secop.agregar(tipo="contrato de nada")
+    assert "no corresponde a ningún valor" in salida["texto"]
+    assert not [p for _, p in red.llamadas if "$group" in p]
 
 
 async def test_resolver_entidad_avisa_del_mismo_nit_por_duplicado(monkeypatch):

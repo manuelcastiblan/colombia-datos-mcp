@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import os
 import urllib.parse
+from typing import NamedTuple
 
 from ..core import texto
 from ..core.cache import TTL_DATOS, TTL_METADATOS, cache
@@ -30,6 +31,10 @@ _http = ClienteHTTP(perfil="socrata")
 # Plazo propio del conteo de grupos. Es un dato de cortesia: si tarda mas
 # que esto se declara desconocido y la respuesta sale igual, con sus datos.
 TIMEOUT_CONTEO = float(os.environ.get("CO_TIMEOUT_CONTEO", "25"))
+# Plazo propio de enumerar un dominio categorico. El distinct de
+# `tipo_de_contrato` agoto los 90 s del cliente el 28-oct-2026 y tumbo la
+# respuesta entera; con plazo corto se degrada a comparar texto y se avisa.
+TIMEOUT_DOMINIO = float(os.environ.get("CO_TIMEOUT_DOMINIO", "20"))
 
 
 def _cabeceras() -> dict:
@@ -110,7 +115,15 @@ async def esquema(dataset_id: str) -> dict:
             "nombre": r.get("name"),
             "descripcion": r.get("description"),
             "atribucion": r.get("attribution"),
-            "actualizado": r.get("updatedAt"),
+            # `updatedAt` es el MÁXIMO entre datos y metadatos, así que publica
+            # como frescura lo que a veces es un retoque de la ficha. Medido el
+            # 28-oct-2026: los indicadores de mortalidad del MinSalud decían
+            # «actualizado 2026-09-19» con los datos parados desde 2022-08-02, y
+            # hasta DIVIPOLA figuraba al día con datos de enero de 2025. Lo que
+            # vale es `data_updated_at`; el otro se conserva aparte para poder
+            # decir que la ficha se tocó y los datos no.
+            "actualizado": r.get("data_updated_at") or r.get("updatedAt"),
+            "metadatos_actualizados": r.get("metadata_updated_at"),
             "provenance": r.get("provenance"),
             "es_vista_derivada": bool(r.get("parent_fxf")),
             "licencia": (resultados[0].get("metadata") or {}).get("license"),
@@ -126,8 +139,12 @@ async def esquema(dataset_id: str) -> dict:
             ],
         }
 
+    # La clave lleva versión de FORMA, no de contenido: el esquema se cachea 24 h
+    # en disco, así que al añadir un campo al diccionario —`metadatos_actualizados`,
+    # 0.15.0— las entradas viejas seguían sirviendo la forma anterior y el arreglo
+    # no se notaba hasta el día siguiente. Súbela cuando cambie la forma.
     return await cache.obtener_o_calcular(
-        ("esquema", dataset_id), _traer, ttl=TTL_METADATOS, en_disco=True
+        ("esquema", "v2", dataset_id), _traer, ttl=TTL_METADATOS, en_disco=True
     )
 
 
@@ -218,27 +235,44 @@ def filtro_texto_libre(campo: str, termino: str) -> str:
     return f"{expr_sin_acentos(campo)} like '%{t}%'"
 
 
-async def filtro_categorico(dataset_id: str, campo: str, termino: str):
+class Categorico(NamedTuple):
+    """Lo que se sabe tras resolver un término contra una columna categórica."""
+
+    filtro: str | None
+    valores: list[str]
+    truncado: bool
+    degradado: bool = False
+
+
+async def filtro_categorico(dataset_id: str, campo: str, termino: str) -> Categorico:
     """Resuelve un término contra el dominio enumerable de `campo`.
 
-    Devuelve `(filtro_soql, valores_resueltos, truncado)`. Con cero
-    coincidencias devuelve `(None, [], False)`: el llamador debe decir que el
-    término no existe en la fuente en vez de lanzar un filtro que casa nada,
-    que es indistinguible de "no hay datos".
+    Con cero coincidencias devuelve `filtro=None`: el llamador debe decir que el
+    término no existe en la fuente en vez de lanzar un filtro que casa nada, que
+    es indistinguible de "no hay datos".
+
+    Enumerar el dominio cuesta un `distinct` —6,8 s sobre las 5,9 M filas de
+    contratos, cacheado 24 h— y a veces no vuelve: medido el 28-oct-2026, el de
+    `tipo_de_contrato` agotó los 90 s del cliente y tumbó la respuesta entera.
+    Por eso lleva su propio plazo y degrada a comparación de texto: filtrar algo
+    parecido y decirlo es mejor que no responder. `degradado` lo marca, porque
+    entonces el filtro puede casar valores vecinos y ya no se puede afirmar que
+    un término no existe.
     """
     try:
-        dominio = await valores_distintos(dataset_id, campo)
-    except ErrorValidacion:
-        # El campo no admite `distinct` (o no existe): degradamos a texto libre
-        # en vez de tumbar la consulta entera.
-        return filtro_texto_libre(campo, termino), [], False
+        dominio = await asyncio.wait_for(
+            valores_distintos(dataset_id, campo), TIMEOUT_DOMINIO)
+    except (CoDatosError, asyncio.TimeoutError, RuntimeError):
+        # Incluye el campo que no admite `distinct` o no existe, y la fuente
+        # lenta o caída. En todos los casos degradar es mejor que fallar.
+        return Categorico(filtro_texto_libre(campo, termino), [], False, degradado=True)
     casan = texto.coincidencias(termino, dominio)
     if not casan:
-        return None, [], False
+        return Categorico(None, [], False)
     truncado = len(casan) > texto.MAX_VALORES_EN
     if truncado:
         casan = casan[: texto.MAX_VALORES_EN]
-    return filtro_en(campo, casan), casan, truncado
+    return Categorico(filtro_en(campo, casan), casan, truncado)
 
 
 # Funciones que colapsan filas. Sobre ellas no se puede ordenar por `:id`

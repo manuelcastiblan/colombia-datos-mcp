@@ -92,6 +92,16 @@ vez de dejar que Socrata devuelva un 400 opaco.
 
 `detalle="conteo"` no descarga filas: solo ejecuta `count(*)`.
 
+Con `detalle="resumen"` y **sin `seleccionar`**, un dataset que no esté en el
+registro del servidor recibe un resumen **heurístico**: se descartan las columnas
+vacías en todas las filas, los blobs JSON y las de contacto o datos personales
+—dirección, teléfono, correo, nombre y cargo del representante—, y el sobre dice
+cuántas columnas quedaron de cuántas. Antes `resumen` prometía un resumen y
+devolvía el dataset entero: dos filas del Universo de entidades del DAFP traían
+24 columnas, un blob de dirección y el nombre del representante legal, unos 1.200
+tokens que nadie había pedido. Con `seleccionar` explícito no se recorta nada, y
+`detalle="completo"` sigue trayendo todo.
+
 Si `limite` supera el tope del nivel de detalle, **el sobre lo advierte** con las
 dos cifras y el `offset` de la página siguiente. Antes el recorte era silencioso:
 pedir 40 filas con `detalle="completo"` devolvía 20 y el sobre decía
@@ -109,6 +119,7 @@ Agrupa del lado del servidor: devuelve grupos, no filas.
 | `donde` | string | `""` | |
 | `teniendo` | string | `""` | `$having`: filtra **grupos** por su métrica. |
 | `luego` | string | `""` | Segunda agregación sobre el resultado de la primera (`\|>`). |
+| `ordenar` | string | `""` | Manda sobre el orden por defecto. Puede citar un alias. |
 | `limite` | int | `20` | Sin tope propio. |
 | `offset` | int | `0` | Pagina los grupos. Para la tabla entera, `co_datos_exportar`. |
 | `formato` | string | `"tabla"` | `tabla`, `csv` o `json`. |
@@ -136,6 +147,12 @@ La expresión va al `$group` tal cual y al `$select` con alias, porque el nombre
 que Socrata le pone a una expresión sin alias no es predecible: si no lo
 declaras con `as`, se llama `grupo`, `grupo_2`… Dentro de la expresión las
 columnas sí se validan contra el esquema.
+
+El orden por defecto es la métrica descendente, que para una serie es lo
+contrario de lo que se quiere: agrupada por mes salía ordenada por el conteo.
+`ordenar="mes"` lo arregla, y como puede citar un alias de la primera etapa
+—que no existe en el esquema— ese parámetro no se valida contra él: si está
+mal, la fuente lo dice.
 
 Al paginar con `offset`, el orden lleva **las claves de grupo como desempate**
 (`contratos DESC, nit_entidad`): dos grupos con la misma métrica salen en
@@ -374,6 +391,8 @@ Totales de contratación por dimensión.
 | `agrupar_por` | string | `"departamento"` | Lista cerrada, ver abajo. |
 | `metrica` | string | `"valor"` | `"valor"` ordena por importe; cualquier otro valor, por conteo. |
 | `entidad` | string | `""` | Filtra por `nombre_entidad`. |
+| `nit_entidad` | string | `""` | Filtra por NIT, **con y sin dígito de verificación**. |
+| `tipo` | string | `""` | Tipo de contrato, resuelto contra los valores reales. |
 | `desde` / `hasta` | string | `""` | Sobre `fecha_de_firma`. |
 | `limite` | int | `20` | Tope 50. |
 | `formato` | string | `"tabla"` | `tabla`, `csv` o `json`. |
@@ -382,6 +401,20 @@ Totales de contratación por dimensión.
 `agrupar_por` admite exactamente: `departamento`, `entidad`, `modalidad`,
 `proveedor`, `sector`, `tipo`, `estado`. Cualquier otro valor se rechaza con
 `[VALIDACION]` y remite a `co_datos_agregar` sobre `jbjy-vk9h`.
+
+`nit_entidad` y `tipo` existen porque sin ellos la pregunta más frecuente
+—cuánta prestación de servicios firmó esta entidad— obligaba a bajar a la
+herramienta genérica y escribir el `$where` a mano. `tipo` se resuelve contra
+los valores reales de la columna, así que «prestacion de servicios» sin tilde
+encuentra «Prestación de servicios»; si el término no existe en la fuente,
+devuelve cero **diciendo que es el término y no la ausencia de contratos**.
+
+Enumerar esos valores cuesta un `distinct` sobre 5,9 M filas y a veces no vuelve
+—el de `tipo_de_contrato` agotó los 90 s del cliente el 28-oct-2026—, así que
+lleva su propio plazo (`CO_TIMEOUT_DOMINIO`, 20 s por defecto) y al vencer
+degrada a comparación de texto diciéndolo en el sobre. Con la degradación activa
+el filtro puede casar tipos parecidos, y un cero ya no demuestra que el término
+no exista.
 
 Advierte siempre que los montos son **nominales y sin deflactar**: no compares
 valores entre años distintos sin ajustar.

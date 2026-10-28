@@ -56,6 +56,7 @@ Todas son opcionales y tienen valores conservadores.
 | `SOCRATA_APP_TOKEN` | — | Cuota propia en Socrata. Un token inválido produce `[CONFIG]`, no degradación silenciosa. |
 | `CO_PRESUPUESTO_TOKENS` | `6000` | Tamaño máximo de respuesta, **pie incluido**: la procedencia, la URL reproducible y las advertencias cuentan. |
 | `CO_TIMEOUT_CONTEO` | `25` (s) | Plazo del conteo de grupos. Si lo agota, el total sale «desconocido» y la respuesta llega igual con sus datos. |
+| `CO_TIMEOUT_DOMINIO` | `20` (s) | Plazo para enumerar los valores de una columna categórica. Si lo agota, el filtro degrada a comparación de texto y el sobre lo dice. |
 | `CO_TTL_DATOS` | `900` (15 min) | TTL de la caché en memoria. |
 | `CO_TTL_METADATOS` | `86400` (24 h) | TTL de esquemas y dominios categóricos, en disco. |
 | `CO_CACHE_DIR` | `~/.cache/colombia-datos-mcp` | Dónde vive la caché L2. |
@@ -601,6 +602,16 @@ debajo, y porque cada punto costó una verificación contra la fuente viva.
   → 41.070). Las herramientas de SECOP buscan las dos formas y lo advierten;
   `core/nit.py` calcula el dígito con el algoritmo de la DIAN y **no toca las
   cédulas**: a una de cada once de diez dígitos le cuadra por azar.
+- **La fecha de «actualizado» del catálogo no es la de los datos.** `updatedAt` es
+  el máximo entre `data_updated_at` y `metadata_updated_at`, así que un retoque de
+  la ficha se presenta como actualización. Verificado: los indicadores de
+  mortalidad del MinSalud (`4e4i-ua65`) figuran actualizados en septiembre de 2026
+  con los datos parados desde **agosto de 2022**, y la Medición del Desempeño
+  Municipal del DNP (`nkjx-rsq7`) desde febrero de 2022. Cientos de datasets
+  comparten además el sello `2026-05-18`, que fue una migración masiva de
+  metadatos del portal. El servidor publica la fecha de los datos y avisa cuando
+  las dos divergen, pero para saber hasta dónde llega una serie **hay que
+  preguntarle al dato**, no a la ficha: `max()` sobre su columna de periodo.
 - **`orden` y `rama` no sirven para filtrar por nivel de gobierno.** El error es
   sistemático, no por contrato suelto: el ITM —institución municipal de Medellín—
   figura como `orden='Nacional'` en sus 15.482 contratos de 2026, las CAR salen

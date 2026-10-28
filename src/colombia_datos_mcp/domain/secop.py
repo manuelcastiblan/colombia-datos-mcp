@@ -126,7 +126,14 @@ async def _construye_where(ds: reg.Dataset, **filtros):
         if not filtros.get(clave) or not c.get(clave):
             continue
         campo = c[clave]
-        filtro, valores, truncado = await socrata.filtro_categorico(ds.id, campo, filtros[clave])
+        filtro, valores, truncado, degradado = await socrata.filtro_categorico(
+            ds.id, campo, filtros[clave])
+        if degradado:
+            avisos.append(
+                f"No se pudo enumerar los valores de `{campo}` (la fuente tardó demasiado), "
+                f"así que «{filtros[clave]}» se filtró por coincidencia de texto: puede "
+                "incluir valores parecidos, y aquí un cero no demuestra que el término no exista."
+            )
         if filtro is None:
             avisos.append(
                 f"«{filtros[clave]}» no corresponde a ningún valor de `{campo}` en la "
@@ -476,8 +483,14 @@ async def resolver_entidad(nombre: str, limite=10):
 
 
 async def agregar(agrupar_por="departamento", metrica="valor", donde_entidad=None,
-                  desde=None, hasta=None, limite=20, formato="tabla", grafica=True):
-    """Agregación server-side sobre contratos de SECOP II."""
+                  desde=None, hasta=None, nit_entidad=None, tipo=None,
+                  limite=20, formato="tabla", grafica=True):
+    """Agregación server-side sobre contratos de SECOP II.
+
+    `nit_entidad` y `tipo` existen porque sin ellos la pregunta más frecuente
+    —cuánta prestación de servicios firmó esta entidad— obligaba a bajar a la
+    herramienta genérica y escribir el `$where` a mano.
+    """
     campos = {
         "departamento": "departamento",
         "entidad": "nombre_entidad",
@@ -495,9 +508,40 @@ async def agregar(agrupar_por="departamento", metrica="valor", donde_entidad=Non
     ds = reg.SECOP["contratos"]
     campo = campos[agrupar_por]
 
-    partes = []
+    partes, avisos = [], []
     if donde_entidad:
         partes.append(_filtro_texto("nombre_entidad", donde_entidad))
+    if nit_entidad:
+        filtro, aviso = _filtro_nit("nit_entidad", nit_entidad)
+        partes.append(filtro)
+        if aviso:
+            avisos.append(aviso)
+    if tipo:
+        # Se resuelve contra los valores reales: «prestacion de servicios» sin
+        # tilde no existe en la fuente, y un `like` a ciegas devolvería cero sin
+        # distinguirlo de «no hay contratos».
+        filtro, valores, truncado, degradado = await socrata.filtro_categorico(
+            ds.id, "tipo_de_contrato", tipo)
+        if degradado:
+            avisos.append(
+                f"No se pudo enumerar los valores de `tipo_de_contrato` (la fuente tardó "
+                f"demasiado), así que «{tipo}» se filtró por coincidencia de texto: puede "
+                "incluir tipos parecidos."
+            )
+        if filtro is None:
+            sobre = Sobre(datos=[], total=Total.completo(0), fuente=_fuente(ds))
+            sobre.advertir(
+                f"«{tipo}» no corresponde a ningún valor de `tipo_de_contrato` en la "
+                "fuente, así que no hay nada que agregar. No es un fallo de la fuente."
+            )
+            return sobre.render(lambda _f: "_Sin resultados para ese tipo de contrato._")
+        partes.append(filtro)
+        if len(valores) > 1:
+            avisos.append(f"«{tipo}» resolvió a {len(valores)} valor(es): "
+                          + ", ".join(valores[:8]))
+        if truncado:
+            avisos.append(f"«{tipo}» casa con demasiados valores de `tipo_de_contrato`; "
+                          "se usaron los primeros. Afina el término.")
     if desde:
         partes.append(f"fecha_de_firma >= '{socrata.escapa(desde)}'")
     if hasta:
@@ -532,6 +576,8 @@ async def agregar(agrupar_por="departamento", metrica="valor", donde_entidad=Non
         for fila, dibujo in zip(filas, fmt.barras([f.get(clave) for f in r["filas"]])):
             fila["gráfica"] = dibujo
     sobre = Sobre(datos=filas, orden=orden, consulta=r["consulta"], fuente=_fuente(ds))
+    for a in avisos:
+        sobre.advertir(a)
     await agregacion.anota_total(sobre, r["filas"], tope, dataset_id=ds.id,
                                  seleccionar=seleccionar, agrupar=campo, donde=donde)
     _advierte_absurdos(sobre, absurdos, global_)

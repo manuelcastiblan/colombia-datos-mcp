@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import random
+import re
 import time
 
 import httpx
@@ -83,6 +84,35 @@ class _Breaker:
         self.fallos += 1
         if self.fallos >= self.umbral:
             self.abierto_hasta = time.monotonic() + self.descanso
+
+
+_POSICION = re.compile(r"[;,]?\s*position:\s*Map\(.*$", re.S | re.I)
+
+
+def mensaje_de_fuente(r: httpx.Response, tope: int = 400) -> str:
+    """El diagnóstico de la fuente, legible.
+
+    Socrata manda el error como JSON y antes se recortaba el cuerpo crudo a 300
+    caracteres: el modelo recibía `{"message":"Query coordinator error: …` con
+    las comillas escapadas, el SQL repetido dentro —que ya conoce, lo acaba de
+    escribir— y el corte justo donde empieza lo que explica el fallo. Aquí se
+    saca `message`, se tira el eco de la consulta y se deja el código de error,
+    que es lo que dice qué arreglar.
+    """
+    try:
+        cuerpo = r.json()
+    except ValueError:
+        return (r.text or "").strip()[:tope]
+    if not isinstance(cuerpo, dict):
+        return str(cuerpo)[:tope]
+    mensaje = str(cuerpo.get("message") or cuerpo.get("error") or "").strip()
+    codigo = str(cuerpo.get("errorCode") or "").strip()
+    if not mensaje:
+        return (r.text or "").strip()[:tope]
+    mensaje = _POSICION.sub("", mensaje).strip().rstrip(";,")
+    if codigo and codigo not in mensaje:
+        mensaje = f"{mensaje} [{codigo}]"
+    return mensaje[:tope]
 
 
 def _retry_after(r: httpx.Response) -> float | None:
@@ -192,7 +222,7 @@ class ClienteHTTP:
 
     def _error_de(self, r: httpx.Response, host: str):
         codigo = r.status_code
-        cuerpo = (r.text or "")[:300]
+        cuerpo = mensaje_de_fuente(r)
         if codigo == 400:
             return ErrorValidacion(
                 f"Consulta rechazada por {host}: {cuerpo}",

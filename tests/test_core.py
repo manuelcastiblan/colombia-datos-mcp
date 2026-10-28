@@ -58,6 +58,10 @@ def test_moneda_colombiana():
 def test_fecha_floating_timestamp():
     assert fmt.fecha("2025-05-02T00:00:00.000") == "2025-05-02"
     assert fmt.fecha("24/03/2026") == "2026-03-24"
+    # Las del catálogo traen zona, y esa `Z` dejaba la marca de tiempo entera
+    # en el pie de cada respuesta.
+    assert fmt.fecha("2026-08-17T09:22:03.000Z") == "2026-08-17"
+    assert fmt.fecha("2026-08-17T09:22:03+00:00") == "2026-08-17"
 
 
 def test_limpia_texto_repara_el_mojibake_de_origen():
@@ -172,6 +176,37 @@ def test_el_nombre_del_campo_decide_moneda_o_conteo():
 
 
 # ------------------------------------------------------------------ HTTP --
+def test_el_error_de_la_fuente_llega_legible():
+    """Antes se recortaba el JSON crudo a 300 caracteres: el modelo recibía las
+    comillas escapadas, el SQL repetido dentro y el corte donde empezaba lo que
+    explicaba el fallo."""
+    import httpx
+
+    from colombia_datos_mcp.core.http import mensaje_de_fuente
+
+    crudo = httpx.Response(400, json={
+        "message": ("Query coordinator error: query.soql.type-mismatch; Type mismatch "
+                    "for sum, is text; position: Map(row -> 1, column -> 28, line -> "
+                    '"SELECT `departamento`, sum(`nombre_entidad`) AS `disparate` WHERE "'),
+        "errorCode": "query.soql.type-mismatch",
+    })
+    mensaje = mensaje_de_fuente(crudo)
+    assert "Type mismatch for sum, is text" in mensaje
+    assert "SELECT" not in mensaje          # el eco de la consulta no aporta nada
+    assert "query.soql.type-mismatch" in mensaje
+    assert len(mensaje) < 200
+
+
+def test_un_error_que_no_es_json_se_deja_como_viene():
+    import httpx
+
+    from colombia_datos_mcp.core.http import mensaje_de_fuente
+
+    # Una página de bloqueo de WAF, por ejemplo: no hay nada que parsear.
+    assert mensaje_de_fuente(httpx.Response(503, text="<html>bloqueado</html>")) == \
+        "<html>bloqueado</html>"
+
+
 def test_retry_after_se_lee_cuando_la_fuente_lo_da():
     import httpx
 

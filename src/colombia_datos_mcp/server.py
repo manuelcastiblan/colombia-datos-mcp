@@ -131,13 +131,17 @@ async def co_datos_consultar(dataset_id: str, seleccionar: str = "", donde: str 
 @mcp.tool(annotations=SOLO_LECTURA)
 async def co_datos_agregar(dataset_id: str, agrupar_por: str,
                            metricas: str = "count(*) as total", donde: str = "",
-                           teniendo: str = "", luego: str = "", limite: int = 20,
-                           offset: int = 0, formato: str = "tabla",
-                           grafica: bool = True) -> ToolResult:
+                           teniendo: str = "", luego: str = "", ordenar: str = "",
+                           limite: int = 20, offset: int = 0,
+                           formato: str = "tabla", grafica: bool = True) -> ToolResult:
     """Agrega del lado del servidor: agrupa y devuelve grupos, no filas.
 
     `agrupar_por` acepta columnas y también expresiones, con alias opcional:
     `date_trunc_ym(fecha_de_firma) as mes`, `upper(nombre_entidad)`.
+
+    `ordenar` manda sobre el orden por defecto, que es la métrica descendente.
+    Puede citar un alias: `ordenar="mes"` devuelve una serie cronológica en vez
+    de ordenada por el conteo.
 
     `offset` pagina los grupos. Para llevarse la tabla ENTERA a disco en vez de
     paginarla, `co_datos_exportar` acepta los mismos `agrupar_por` y `metricas`.
@@ -160,8 +164,8 @@ async def co_datos_agregar(dataset_id: str, agrupar_por: str,
     """
     return await _ejecuta(catalogo.agregar(
         dataset_id, agrupar_por, metricas=metricas, donde=donde or None,
-        teniendo=teniendo or None, luego=luego or None, limite=limite,
-        offset=offset, formato=formato, grafica=grafica))
+        teniendo=teniendo or None, luego=luego or None, ordenar=ordenar or None,
+        limite=limite, offset=offset, formato=formato, grafica=grafica))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
@@ -259,17 +263,22 @@ async def co_secop_resolver_entidad(nombre: str, limite: int = 10) -> ToolResult
 @mcp.tool(annotations=SOLO_LECTURA)
 async def co_secop_agregar(agrupar_por: str = "departamento", metrica: str = "valor",
                            entidad: str = "", desde: str = "", hasta: str = "",
+                           nit_entidad: str = "", tipo: str = "",
                            limite: int = 20, formato: str = "tabla",
                            grafica: bool = True) -> ToolResult:
     """Totales de contratación por departamento, entidad, modalidad, proveedor,
     sector, tipo o estado.
 
+    `nit_entidad` filtra por entidad con precisión —busca el NIT con y sin
+    dígito de verificación— y `tipo` por tipo de contrato («prestación de
+    servicios»), resuelto contra los valores reales de la fuente.
+
     `grafica` añade barras proporcionales a la métrica por la que se ordena.
     """
     return await _ejecuta(secop.agregar(
         agrupar_por=agrupar_por, metrica=metrica, donde_entidad=entidad or None,
-        desde=desde or None, hasta=hasta or None, limite=limite,
-        formato=formato, grafica=grafica))
+        desde=desde or None, hasta=hasta or None, nit_entidad=nit_entidad or None,
+        tipo=tipo or None, limite=limite, formato=formato, grafica=grafica))
 
 
 # ----------------------------------------------------------------- geo ----

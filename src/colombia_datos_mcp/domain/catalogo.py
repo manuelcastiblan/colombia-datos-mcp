@@ -102,6 +102,14 @@ async def describir_dataset(dataset_id: str):
         orden="posición",
         fuente=_fuente_de(esq, dataset_id),
     )
+    datos, metadatos = fmt.fecha(esq.get("actualizado")), fmt.fecha(esq.get("metadatos_actualizados"))
+    if datos != "-" and metadatos != "-" and metadatos > datos:
+        sobre.advertir(
+            f"La ficha del catálogo se tocó el {metadatos}, pero los DATOS no cambian "
+            f"desde el {datos}. El portal publica como «actualizado» el máximo de las "
+            "dos fechas: aquí se usa la de los datos. Comprueba hasta qué periodo "
+            "llegan antes de darlos por vigentes."
+        )
     if esq.get("es_vista_derivada") or esq.get("provenance") == "community":
         sobre.advertir(
             "Este asset es una VISTA DERIVADA o comunitaria, no la fuente oficial. "
@@ -143,14 +151,21 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
                           ordenar=ordenar, limite=limite, offset=offset),
     )
     filas = r["filas"]
+    aviso_resumen = None
     if nivel is Detalle.RESUMEN:
         conocido = reg.por_id(dataset_id)
         columnas = list(conocido.campos_resumen) if conocido and conocido.campos_resumen else None
+        # Sin campos curados y sin `seleccionar`, el resumen no resumía nada.
+        # Quien pasa `seleccionar` ya eligió: ahí no se toca.
+        if columnas is None and not seleccionar:
+            columnas, aviso_resumen = _resumen_heuristico(filas)
         filas = _proyecta(filas, columnas)
 
     sobre = Sobre(datos=filas, total=Total.contado(total), offset=offset,
                   orden=r.get("orden") or ordenar, detalle=nivel,
                   consulta=r["consulta"], fuente=fuente)
+    if aviso_resumen:
+        sobre.advertir(aviso_resumen)
     if limite < pedido:
         # El tope se aplicaba en silencio: pedir 40 filas con detalle="completo"
         # devolvía 20 y el sobre decía `truncado: false`, que es exactamente lo
@@ -166,12 +181,16 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
 
 
 async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
-                  donde=None, teniendo=None, luego=None, limite=20, offset=0,
-                  formato="tabla", grafica=True):
+                  donde=None, teniendo=None, luego=None, ordenar=None,
+                  limite=20, offset=0, formato="tabla", grafica=True):
     """Agregación del lado del servidor: 20 grupos en vez de 10.000 filas.
 
     `agrupar_por` admite expresiones además de columnas —`date_trunc_ym(fecha)`,
     `upper(nombre_entidad)`—; declara el nombre con `as` si quieres elegirlo.
+
+    `ordenar` manda sobre el orden por defecto, que es la métrica descendente.
+    Una serie agrupada por mes salía ordenada por el conteo, es decir
+    descolocada, y no había forma de pedirla cronológica: `ordenar="mes"`.
 
     `offset` pagina los grupos. Sin él, una agregación con más grupos que
     `limite` no tenía continuación posible: había que irse a la API a mano.
@@ -196,7 +215,7 @@ async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
         # La segunda etapa solo ve los alias de la primera, así que ordenar por
         # la métrica interna sería un 400 seguro.
         alias_final = _alias_metrica(luego)
-        orden = f"{alias_final} DESC" if alias_final else None
+        orden = ordenar or (f"{alias_final} DESC" if alias_final else None)
         consulta = socrata.arma_soql(seleccionar, donde=donde, agrupar=grupos,
                                      teniendo=teniendo, luego=luego, ordenar=orden,
                                      limite=limite, offset=offset)
@@ -205,8 +224,10 @@ async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
         # Dos grupos empatados en la métrica pueden salir en cualquier orden, y
         # entonces paginar repite unos y se salta otros. El desempate por las
         # claves de grupo es lo que hace que la página 2 continúe la página 1.
-        orden = _orden_de_metrica(metricas, grupos)
-        if orden.lower() != grupos.lower():
+        # Un `ordenar` explícito manda: puede citar un alias —`mes ASC`— y por
+        # eso tampoco se valida contra el esquema, donde el alias no existe.
+        orden = ordenar or _orden_de_metrica(metricas, grupos)
+        if not ordenar and orden.lower() != grupos.lower():
             orden = f"{orden}, {grupos}"
         r = await socrata.consultar(
             dataset_id, seleccionar=seleccionar, donde=donde, agrupar=grupos,
@@ -279,6 +300,58 @@ def _campos_citados(*expresiones):
                 encontrados.add(token)
             previo = bajo
     return encontrados
+
+
+# Columnas que no informan en un resumen: contacto, datos personales de quien
+# figura como representante, y blobs. No se borran del dataset —`detalle`
+# "completo" o un `seleccionar` explícito las traen—, solo dejan de colarse en
+# la conversación cuando nadie las pidió.
+_RUIDO_RESUMEN = ("direccion", "fax", "email", "correo", "telefono", "tel_", "celular",
+                  "pagina_web", "sitio_web", "representante", "cargo", "contacto",
+                  "observacion", "geometry", "the_geom")
+_UTILES_RESUMEN = ("nombre", "codigo", "cod_", "fecha", "anio", "año", "mes", "valor",
+                   "total", "cantidad", "numero", "nit", "documento", "departamento",
+                   "municipio", "estado", "tipo", "orden", "sector", "clasificacion")
+
+
+def _resumen_heuristico(filas, tope: int = 10):
+    """Columnas presentables cuando el dataset no está en el registro.
+
+    `detalle="resumen"` prometía un resumen y devolvía el dataset entero: sin
+    campos curados `columnas` quedaba en None, y el nivel solo cambiaba el tope
+    de filas. Dos filas del Universo de entidades del DAFP llegaban con 24
+    columnas —un blob JSON de dirección, fax, correo, teléfono y el nombre del
+    representante legal—: ~1.200 tokens, y datos personales de alguien concreto
+    que nadie había pedido.
+
+    Devuelve `(columnas, aviso)`, o `(None, None)` si no hay nada que recortar.
+    """
+    if not filas:
+        return None, None
+    todas = fmt.columnas_union(filas)
+
+    def informa(c):
+        return any(str(f.get(c, "") or "").strip() for f in filas)
+
+    def es_blob(c):
+        return any(str(f.get(c, "") or "").strip().startswith(("{", "[")) for f in filas)
+
+    limpias = [c for c in todas
+               if informa(c) and not es_blob(c)
+               and not any(p in c.lower() for p in _RUIDO_RESUMEN)]
+    utiles = [c for c in limpias if any(p in c.lower() for p in _UTILES_RESUMEN)]
+    elegidas = utiles[:tope]
+    if len(elegidas) < tope:
+        elegidas += [c for c in limpias if c not in elegidas][:tope - len(elegidas)]
+    elegidas = [c for c in todas if c in set(elegidas)]     # se respeta el orden de la fuente
+    if not elegidas or len(elegidas) == len(todas):
+        return None, None
+    return elegidas, (
+        f"Resumen heurístico: {len(elegidas)} de {len(todas)} columnas. Este dataset no "
+        "está en el registro del servidor, así que no tiene campos curados: se "
+        "descartaron las vacías, los blobs JSON y las de contacto o datos personales. "
+        "Elige tú con `seleccionar`, o pide detalle='completo' para verlas todas."
+    )
 
 
 def grupos_soql(agrupar_por: str) -> tuple[str, str, set[str]]:
