@@ -5,6 +5,9 @@ description = "Servidor MCP unificado para datos públicos de Colombia"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+# fastmcp 4 movió `ToolResult` de `fastmcp.tools.tool` a `fastmcp.tools`, así
+# que `>=2.0` a secas dejaba instalar una versión con la que el servidor no
+# arrancaba. El import prueba las dos rutas; esto deja constancia del motivo.
 dependencies = ["fastmcp>=2.0", "httpx>=0.27"]
 
 [project.scripts]

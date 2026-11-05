@@ -39,6 +39,25 @@ CASOS = {
     "co_geo_divipola": {"consulta": "medellin", "limite": 5},
     "co_crimen_por_municipio": {"delito": "homicidio", "anio": 2025, "limite": 5},
     "co_crimen_serie": {"delito": "homicidio"},
+    "co_empresas_buscar": {"nombre": "constructora", "limite": 5},
+    "co_empresas_ranking": {"anio": 2025, "limite": 5},
+    # Por documento y no por entidad: `entidad` se resuelve contra el dominio
+    # categórico de la fuente, que en la red simulada no casa nada, y entonces
+    # la herramienta devuelve cero filas con razón y el caso no prueba nada.
+    "co_integridad_disciplinarias": {"documento": "79123456", "limite": 5,
+                                     "finalidad": "investigacion"},
+    "co_integridad_panorama": {"agrupar_por": "calidad", "limite": 5},
+    "co_educacion_saber11": {"periodo": "20224", "limite": 5},
+    "co_educacion_indicadores": {"anio": 2023, "limite": 5},
+    "co_territorio_desempeno": {"anio": 2020, "limite": 5},
+    "co_macro_trm": {"desde": "2024-01-01", "hasta": "2024-12-31"},
+    "co_macro_tasas": {"desde": "2024-01-01", "limite": 5},
+    # Las dos que juntan varias consultas con `$limit` propio. Entran aquí, y
+    # no en EXENTAS, porque son justo donde `Total.completo(len(filas))` se
+    # colaba sin verse: cada consulta parecía caber y la que se pasaba quedaba
+    # escondida dentro de la suma. Hoy declaran el total con `Total.union`.
+    "co_empresas_estados_financieros": {"documento": "830010665", "limite": 5},
+    "co_integridad_sanciones_contratacion": {"nombre": "constructora", "limite": 5},
 }
 
 # Exentas, cada una con su motivo. No vale con omitirlas: hay que decir por qué,
@@ -51,6 +70,10 @@ EXENTAS = {
     "co_geo_limites": "devuelve geometría; ya usa mostrar_conteo=False",
     "co_geo_cotejar_coordenadas": "compara dos fuentes y declara el total real de discrepancias",
     "co_crimen_comparar": "una fila por delito de una lista fija; no hay `$limit` que llenar",
+    "co_empresas_ficha": "un documento concreto; declara el total de matrículas con cupo_entero y lo cuenta si no cabe",
+    "co_dossier_documento": "una fila por ámbito de una lista fija de nueve; no hay `$limit` que llenar",
+    "co_integridad_screening": "sus filas de resumen son una por fuente, lista fija; los detalles declaran el total con Total.union",
+    "co_macro_convertir": "una sola fila calculada; ya usa mostrar_conteo=False",
 }
 
 

@@ -1,19 +1,26 @@
 # colombia-datos-mcp
 
 Servidor MCP para datos públicos de Colombia: catálogo nacional de
-`datos.gov.co`, contratación pública (SECOP), criminalidad (MinDefensa) y
-división territorial con geometría (DIVIPOLA y MGN). 19 herramientas,
-sin credenciales.
+`datos.gov.co`, contratación pública (SECOP), criminalidad (MinDefensa),
+división territorial con geometría (DIVIPOLA y MGN), registro mercantil (RUES),
+estados financieros (Supersociedades), sanciones y antecedentes, educación
+(ICFES y MinEducación), desempeño municipal (DNP) y TRM. **34 herramientas, sin
+credenciales.**
 
-Esta es la **fase F0 + la mitad Socrata de F1** del diseño: núcleo completo,
-adaptador de Socrata y los módulos de catálogo, SECOP, DIVIPOLA, crimen,
-análisis y geometría. Falta el adaptador SDMX y el motor de privacidad.
+Núcleo completo, adaptador de Socrata, motor de privacidad y siete familias de
+datasets. Falta el adaptador SDMX y el de ArcGIS.
 
 > **Si vas a citar una cifra de aquí, lee
 > [Antes de citar una cifra](#antes-de-citar-una-cifra).** Estos datos tienen
 > trampas que no se ven: contratos en borrador que suman, delitos que suben o
-> bajan según el año que elijas de base, y casos registrados que no son delitos
-> cometidos.
+> bajan según el año que elijas de base, casos registrados que no son delitos
+> cometidos, y un dataset llamado «Multas y Sanciones» en el que el 91 % de las
+> filas son comentarios positivos.
+
+> **Si vas a consultar a una persona, lee
+> [Datos de personas](#datos-de-personas).** Tres de las fuentes traen nombres y
+> cédulas. Agregar nunca pide permiso; identificar a alguien exige declarar para
+> qué, y eso queda escrito en la respuesta.
 
 ## Instalación
 
@@ -127,13 +134,137 @@ colección era completa de por sí.
 | `co_crimen_serie` | Serie temporal de un delito desde 2003, por año o por mes |
 | `co_crimen_por_municipio` | Municipios con más casos de un delito en un año |
 | `co_crimen_comparar` | Varios delitos entre dos años, ordenados por variación |
+| `co_dossier_documento` | **Todo lo que el servidor sabe de un NIT**: RUES + SECOP + finanzas + 4 fuentes de sanciones, y qué miró |
+| `co_empresas_buscar` | RUES por razón social o documento; 9,4 M de matrículas |
+| `co_empresas_ficha` | Ficha mercantil de un documento: matrícula, forma jurídica, establecimientos, ranking |
+| `co_empresas_estados_financieros` | Activos, pasivos, patrimonio, ingresos y resultado reportados a Supersociedades |
+| `co_empresas_ranking` | Las más grandes por ingresos, activos, patrimonio o ganancia |
+| `co_integridad_screening` | Un documento contra las cinco fuentes de sanciones, enumerando lo que miró |
+| `co_integridad_disciplinarias` | Sanciones del SIRI por documento, nombre o entidad |
+| `co_integridad_panorama` | El reparto de las sanciones del SIRI, sin identificar a nadie |
+| `co_integridad_sanciones_contratacion` | Multas de SECOP I y II a contratistas |
+| `co_educacion_saber11` | Promedios de Saber 11 agregados por territorio, colegio o condición social |
+| `co_educacion_indicadores` | Cobertura, deserción, aprobación y repitencia por municipio |
+| `co_territorio_desempeno` | Índice de Desempeño Municipal del DNP |
+| `co_macro_trm` | TRM de una fecha, de un rango, o la última certificada |
+| `co_macro_convertir` | Un monto entre pesos y dólares a la TRM de una fecha |
+| `co_macro_tasas` | Tasas de captación por producto, con el aviso de que el promedio no está ponderado |
 
-Más tres *resources*: `co://secop/datasets`, `co://secop/joins`,
-`co://atribuciones`.
+Más seis *resources*: `co://secop/datasets`, `co://secop/joins`,
+`co://atribuciones`, `co://privacidad/politica`, `co://fuentes/familias` y
+`co://sin-fuente-abierta`.
 
 **Parámetros, topes y advertencias de cada una:
 [docs/herramientas.md](docs/herramientas.md).** Secuencias que funcionan, con sus
 trampas: [docs/recetas.md](docs/recetas.md).
+
+## Datos de personas
+
+Tres de las fuentes del servidor traen personas identificadas:
+
+| Fuente | Qué trae |
+|---|---|
+| RUES (`c82u-588k`) | 6.962.889 de sus 9.436.330 matrículas son de personas naturales, con nombre, apellidos y cédula |
+| SIRI (`iaeu-rcn6`) | 42.124 sanciones disciplinarias con nombre completo, cédula y cargo |
+| Saber 11 (`kgxf-xxbe`) | 7.109.704 registros individuales con género, fecha de nacimiento, estrato y escolaridad de los padres |
+
+Son datos abiertos publicados por el Estado bajo licencia CC. Eso los hace
+legales de consultar; no los hace inocuos de volcar en una conversación que
+queda guardada. El motor de privacidad (`core/privacidad.py`) impone tres
+reglas:
+
+**1. Agregar nunca pide permiso.** `co_integridad_panorama` reparte las 42.124
+sanciones por entidad, departamento, tipo de sanción o calidad de la persona, y
+`co_educacion_saber11` promedia por territorio, colegio o estrato. Son preguntas
+sobre poblaciones y no pasan por el motor. Que el camino barato sea también el
+que no identifica a nadie es deliberado.
+
+**2. Identificar a una persona natural exige declarar `finalidad`.** Las cuatro
+válidas son `investigacion`, `periodismo`, `control_fiscal` y
+`debida_diligencia`. No es un trámite: la finalidad viaja al sobre y queda en la
+respuesta, así que la consulta es auditable por quien la lea después.
+
+```
+co_empresas_ficha(documento="1023456789")
+→ [PRIVACIDAD] La ficha de 1023456789 identifica a una persona natural, así que
+  hay que declarar `finalidad`. No la supongas: pregúntasela a quien te lo pidió.
+  Sugerencia: declara una de control_fiscal, debida_diligencia, investigacion,
+  periodismo, o responde sin identificar a nadie con co_empresas_buscar con
+  solo_juridicas=True si lo que buscas es una sociedad.
+```
+
+El error **siempre nombra la alternativa agregada**. Un bloqueo que no dice qué
+hacer en su lugar enseña al modelo a reintentar con otras palabras hasta colarse.
+
+**3. Quién relaja la política es el operador, no el modelo.** `CO_PRIVACIDAD` es
+variable de entorno, y ninguna herramienta recibe un parámetro que la afloje: no
+hay forma de que un prompt lo pida. Un valor mal escrito cae del lado que
+protege.
+
+Los documentos salen enmascarados conservando los dos primeros y los dos últimos
+dígitos (`1023456789` → `10••••••89`), lo que deja comprobar que dos filas
+hablan de la misma persona sin escribir el número. **El NIT de una sociedad no
+se enmascara**: es información mercantil pública y ocultarlo dejaría la
+respuesta inútil para cruzarla con SECOP.
+
+### Cómo se decide si un documento es de una persona
+
+Hay dos señales y **ninguna es infalible**, así que se cruzan:
+
+- **`categoria_matricula` del RUES** es la buena: atrapa a los 517.527
+  comerciantes a título personal que figuran con clase de identificación `NIT`
+  y que la forma del número daría por empresas.
+- **La forma del documento** atrapa el error contrario. Y existe: el NIT de
+  **Bancolombia** (890903938) tiene dos matrículas, la de Medellín como
+  sociedad anónima y **la de Cali clasificada como `PERSONA NATURAL`**, con la
+  razón social del banco escrita en la fila.
+
+La primera versión bloqueaba en cuanto una matrícula dijera persona natural,
+por quedarse del lado que protege. El efecto real fue dejar la herramienta
+inútil para su caso central: pedir la ficha de uno de los bancos más grandes
+del país devolvía `[PRIVACIDAD]`. Lo descubrió la primera llamada contra la
+fuente viva, no las pruebas.
+
+La regla que quedó: **manda la fuente, salvo que el documento tenga forma
+inequívoca de NIT de empresa** —nueve dígitos empezando por 8 o 9, un rango al
+que la numeración de cédulas no llegó nunca—. Y cuando las dos señales
+discrepan **no se resuelve en silencio**: la fila se conserva y el sobre dice
+que la fuente la tiene mal clasificada, porque eso es información sobre el
+dato. Hay prueba de contrato que vigila el caso de referencia.
+
+Esto no anonimiza, y conviene no confundirlo: enmascarar un documento no impide
+reidentificar a alguien cuyo nombre, cargo y municipio van en la misma fila.
+Sirve para que el número no quede escrito en un historial, que es un riesgo
+distinto y real.
+
+La política vigente se puede leer sin provocar un error, en el *resource*
+`co://privacidad/politica`.
+
+## Tres fuentes que están aquí para poder decir que no sirven
+
+Lo contrario de lo que haría un catálogo comercial, y es el punto. Un cero en
+una fuente de antecedentes se lee como un certificado limpio, así que el
+servidor nunca devuelve un cero desnudo:
+
+**SECOP II «Multas y Sanciones» (`it5q-hg94`) no es un registro de sanciones.**
+De sus 588 filas, **533 son «Comentarios positivos»** y 55 negativos. Y solo 145
+están publicadas: 379 esperan aprobación, 33 fueron rechazadas y 31 son
+borradores. Es la tabla de retroalimentación de proveedores. Para colmo,
+`as_codigo_proveedor_objeto` es un código interno de la plataforma y no el NIT,
+así que no se puede cruzar por documento: solo por nombre.
+
+**SIRI casi no tiene contratistas.** De 42.124 sanciones, 26.091 son a miembros
+de la fuerza pública y 15.736 a servidores públicos. **18 son a contratistas** y
+8 a particulares. Es una fuente excelente para estudiar la sanción disciplinaria
+del Estado a sus propios funcionarios, y está vacía en la práctica para
+verificar a un proveedor.
+
+**La Responsabilidad Fiscal de la Contraloría (`jr8e-e8tu`) tiene 60 filas** y
+está parada desde el 23-mar-2022. No es el Boletín de Responsables Fiscales.
+
+Ninguna de las tres se oculta, porque entonces la pregunta «¿tiene sanciones?»
+se quedaría sin respuesta y parecería que el servidor no mira ahí. Se exponen
+con la cifra al lado.
 
 ## Antes de citar una cifra
 
@@ -284,14 +415,15 @@ municipales —se buscaron, incluido el facet del DANE, y no están—, así que
 ranking de municipios por casos es casi un ranking de municipios grandes, y un
 mapa de conteos es casi un mapa de dónde vive la gente.
 
-**12. Cada dataset corta por su cuenta**, en general a finales de julio de 2026.
+**12. Cada dataset corta por su cuenta**, y la fecha cambia con cada recarga.
 Comparar ese año a medias con años cerrados es la forma más fácil de inventarse
 una caída. El servidor consulta `max(fecha_hecho)` y lo advierte.
 
 **13. `cantidad` no vale uno.** Un hecho puede tener varias víctimas: homicidio
-tiene 342.971 filas y 343.680 víctimas. Se suma `cantidad`, nunca se cuentan
-filas. Y **«HURTO A COMERCIO» y «HURTO A RESIDENCIAS» son el mismo dato** con dos
-títulos: sumarlos duplica la cifra.
+tiene 345.195 filas y 345.917 víctimas. Se suma `cantidad`, nunca se cuentan
+filas. Y la serie de los dos hurtos **se rompe en 2017**, cuando ambas cifras más
+que se duplican y el homicidio se queda plano: comparar contra 2016 mide la
+ruptura, no el delito.
 
 Y una que el servidor sí garantiza: **cero filas nunca es lo mismo que fuente
 caída.** Son mensajes distintos a propósito. Un `[FUENTE_CAIDA]` no significa
@@ -449,11 +581,15 @@ esquema, pero los de incautación y erradicación miden otra cosa: en
 con personas, así que no están en el registro.
 
 **Se suma `cantidad`, nunca se cuentan filas.** Un hecho puede tener varias
-víctimas: homicidio tiene 342.971 filas y 343.680 víctimas.
+víctimas: homicidio tiene 345.195 filas y 345.917 víctimas.
 
-**«HURTO A COMERCIO» y «HURTO A RESIDENCIAS» son el mismo dato**, con cifras
-idénticas año por año. Uno de los dos títulos está mal en la fuente. Sumarlos
-duplicaría la cifra, y el registro lo advierte.
+**Los dos hurtos fueron el mismo dato hasta octubre de 2026.** «HURTO A
+COMERCIO» servía la serie de «HURTO A RESIDENCIAS» —cifras idénticas año por
+año— y el registro advertía de no sumarlos. MinDefensa recargó la familia el
+21-oct-2026 y hoy son dos series sin un año en común, así que sumarlos es
+legítimo; una descarga anterior a esa fecha, no. Lo que sí queda en pie es que
+las dos series **se rompen en 2017**: más que se duplican en un año mientras el
+homicidio se queda plano.
 
 ### El año base no es neutral
 
@@ -627,12 +763,27 @@ Explícito para que nadie lo dé por hecho:
 
 - **No degrada entre niveles de detalle.** Ante una respuesta grande recorta
   filas; no baja de `completo` a `resumen` por su cuenta.
-- **No tiene motor de privacidad**, y por tanto no incluye los módulos de
-  seguridad y DDHH que dependían de él.
+- **No da tasas por 100.000 habitantes**, porque no hay población municipal
+  total: el DANE no publica las proyecciones por API y bajo su atribución en
+  `datos.gov.co` hay exactamente dos datasets, los dos de DIVIPOLA. Lo más
+  cercano es la población de 5 a 16 años del MinEducación, que no sirve de
+  denominador. Hay prueba de contrato que vigila si eso cambia.
+- **No deflacta.** Ni el DANE ni el Banco de la República publican el IPC por
+  API REST abierta. `co_macro_convertir` da una segunda unidad verificable
+  —dólares de la fecha del contrato— y la respuesta aclara que convertir no es
+  deflactar: el dólar también cambia de valor.
+- **No consulta procesos judiciales, Registraduría, RUNT, SIMIT ni el Boletín de
+  Deudores Morosos**: solo se consultan por formulario web con captcha, y este
+  servidor se define como «sin credenciales».
+- **No expide certificados de antecedentes.** Las fuentes de sanciones son
+  incompletas y con rezago; un cero en ellas no limpia a nadie.
 - **No cubre Banco de la República ni IGAC / MGN del DANE**: faltan los
   adaptadores SDMX y ArcGIS.
-- `ESQUEMA_CAMBIADO`, `FUERA_DE_JURISDICCION` y `PRIVACIDAD` están definidos como
-  errores pero **ningún camino de código los lanza todavía**.
+- `ESQUEMA_CAMBIADO` y `FUERA_DE_JURISDICCION` están definidos como errores pero
+  **ningún camino de código los lanza todavía**. `PRIVACIDAD` sí, desde 0.16.0.
+
+Todo esto está también en el *resource* `co://sin-fuente-abierta`, para que el
+modelo lo pueda leer en vez de buscar un sustituto que no lo es.
 
 Detalle en [docs/arquitectura.md](docs/arquitectura.md#lo-que-todavía-no-hace).
 
@@ -658,11 +809,11 @@ pip install -e ".[dev]"
 ```
 
 ```bash
-pytest              # 149 pruebas, sin red
+pytest              # 351 pruebas, sin red
 ```
 
 ```bash
-pytest -m contrato  # 20 pruebas contra la API viva (~7 min)
+pytest -m contrato  # 48 pruebas contra la API viva (~15 min)
 ```
 
 Las fixtures son respuestas **reales** capturadas de la API el 18-ago-2026, con
@@ -681,9 +832,9 @@ esquema.**
 
 | Documento | Para qué |
 |---|---|
-| [docs/herramientas.md](docs/herramientas.md) | Las 19 herramientas: parámetros, valores por defecto y topes. |
+| [docs/herramientas.md](docs/herramientas.md) | Las 34 herramientas: parámetros, valores por defecto y topes. |
 | [docs/recetas.md](docs/recetas.md) | Secuencias que funcionan, con las trampas de cada una y cómo leer el sobre. |
-| [docs/fuentes.md](docs/fuentes.md) | Los 34 datasets: unidad de análisis, campos clave, joins y atribuciones. |
+| [docs/fuentes.md](docs/fuentes.md) | Los 52 datasets: unidad de análisis, campos clave, joins y atribuciones. |
 | [docs/arquitectura.md](docs/arquitectura.md) | Cómo está construido, y qué **no** hace todavía. |
 | [docs/operacion.md](docs/operacion.md) | Diagnóstico: caché, throttling, timeouts, y por qué el servidor no recoge tus cambios. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Las capas de prueba y cómo añadir un dataset o un filtro. |
@@ -708,11 +859,19 @@ no es un entero sino un `Total` que no se construye sin declarar su procedencia,
 de modo que la afirmación sin comprobar dejó de ser expresable. Si algo de esto
 se toca, [CONTRIBUTING](CONTRIBUTING.md) explica qué se espera.
 
-Pendiente: adaptador SDMX para Banco de la República —que es además lo que hoy
-impide deflactar: el servidor advierte que no compares montos entre años, pero no
-puede arreglarlo—, y el motor de privacidad, que el módulo de crimen no necesita
-porque MinDefensa publica ya agregado, pero cualquier fuente con detalle de
-víctima sí exigiría.
+En 0.16.0 el patrón se repitió, y por eso vale la pena nombrarlo: cuatro de las
+quince herramientas nuevas volvieron a declararse completas sin saberlo, esta vez
+en la única forma que `Total` no cubría —una respuesta que junta **varias**
+consultas con su propio `$limit`, donde cada una parecía caber y la que se pasaba
+quedaba escondida dentro de la suma—. Lo atrapó `test_invariantes.py`, no la
+revisión, y el arreglo volvió a ser cerrar la vía de escritura: `Total.union`
+recibe los pares `(devueltos, límite)` y declara desconocido lo que no consta.
+
+Pendiente: adaptador SDMX para Banco de la República y adaptador ArcGIS para el
+IGAC. El SDMX es además lo que impediría seguir sin deflactar, aunque el Banco no
+publica hoy una API REST abierta de sus series: el servidor advierte que no
+compares montos entre años y ofrece la TRM como segunda unidad, que no es lo
+mismo.
 
 **La geometría es la pieza más frágil del servidor.** No hay endpoint oficial
 utilizable: el servicio nacional del IGAC devuelve HTTP 500 y `datos.gov.co` no

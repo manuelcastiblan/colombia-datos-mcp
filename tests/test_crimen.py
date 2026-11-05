@@ -61,12 +61,18 @@ def test_el_registro_solo_trae_delitos_no_operativos():
     assert len(reg.CRIMEN) >= 20
 
 
-def test_los_dos_hurtos_duplicados_estan_advertidos():
-    """«HURTO A COMERCIO» y «HURTO A RESIDENCIAS» son el mismo dato con dos
-    títulos: sumarlos duplicaría la cifra."""
+def test_los_dos_hurtos_ya_no_se_declaran_el_mismo_dato():
+    """Lo fueron hasta que MinDefensa recargó la familia el 21-oct-2026. La nota
+    vieja —«son el mismo dato, nunca los sumes»— hoy desinforma, y no es un
+    comentario: `_avisos_dataset` mete las notas en el sobre de CADA consulta,
+    así que una advertencia caducada llega al modelo con el mismo rango que la
+    cifra. Esto exige que las dos notas lleven la fecha de la corrección y la
+    ruptura de 2017, que es la trampa que sí queda viva."""
     for clave in ("hurto_comercio", "hurto_residencias"):
-        notas = " ".join(reg.CRIMEN[clave].notas).lower()
-        assert "mismo dato" in notas or "idéntico" in notas
+        notas = " ".join(reg.CRIMEN[clave].notas)
+        assert "21-oct-2026" in notas, clave
+        assert "2017" in notas, clave
+        assert "nunca los sumes" not in notas.lower(), clave
 
 
 def test_cada_delito_declara_su_unidad_de_analisis():
@@ -77,8 +83,8 @@ def test_cada_delito_declara_su_unidad_de_analisis():
 
 # --------------------------------------------------------------- serie ----
 async def test_la_serie_suma_cantidad_y_no_cuenta_filas(monkeypatch):
-    """Un hecho puede tener varias víctimas: homicidio tiene 342.971 filas y
-    343.680 víctimas."""
+    """Un hecho puede tener varias víctimas: homicidio tiene 345.195 filas y
+    345.917 víctimas."""
     red = _instala(monkeypatch)
     await crimen.serie("homicidio", desde=2017)
     sel = [p["$select"] for _, p in red.llamadas if "sum(cantidad)" in p.get("$select", "")]
@@ -171,9 +177,13 @@ async def test_por_municipio_advierte_que_no_son_tasas(monkeypatch):
 
 
 async def test_departamento_inexistente_no_consulta(monkeypatch):
+    """El nombre de la prueba promete que no se consulta, así que eso es lo que
+    se comprueba: un filtro que no puede dar resultados se resuelve contra el
+    dominio ya cacheado y no gasta una llamada de datos."""
     red = _instala(monkeypatch)
     salida = await crimen.por_municipio("homicidio", 2025, departamento="Narnia")
     assert "no corresponde a ningún departamento" in salida["texto"]
+    assert not [p for _, p in red.llamadas if "sum(cantidad)" in p.get("$select", "")]
 
 
 # ------------------------------------------------------------ comparar ----

@@ -33,12 +33,89 @@ dominio nunca llama a `httpx` y el adaptador nunca sabe qué es un contrato.
 | `core/format.py` | Markdown, moneda es-CO, fechas, mojibake. |
 | `core/texto.py` | Plegado y comparación de nombres contra fuentes acentuadas. |
 | `core/nit.py` | Las dos formas de un NIT —con y sin dígito de verificación— y por qué una cédula no se pliega nunca. |
+| `core/privacidad.py` | El guardarraíl de las tres fuentes que traen personas: política, finalidad, clasificación del documento y enmascarado. |
 | `registry/datasets.py` | IDs, unidad de análisis, campos clave, alias, atribuciones. |
 | `adapters/geometria.py` | Límites del MGN, con validación de forma y caché en disco. |
 | `domain/analisis.py` | Series temporales y perfilado de calidad, para cualquier dataset. |
 | `domain/crimen.py` | 23 datasets de MinDefensa: series, municipios y comparación entre años. |
 | `domain/exportar.py` | La única operación que escribe: descarga paginada a disco. |
 | `domain/agregacion.py` | Cuántos grupos hay de verdad. Lo usan las seis herramientas que agrupan; existe porque el mismo error apareció seis veces por separado. |
+| `domain/empresas.py` | RUES y Supersociedades: matrícula, establecimientos, estados financieros y ranking. |
+| `domain/integridad.py` | Las cinco fuentes de sanciones, y las cifras que explican por qué tres de ellas no sirven para lo que parece. |
+| `domain/dossier.py` | La vista por entidad en vez de por dataset: un documento contra siete fuentes, enumerando lo que miró. |
+| `domain/educacion.py` | Saber 11 solo agregado, e indicadores municipales del MinEducación. |
+| `domain/territorio.py` | Índice de Desempeño Municipal del DNP. |
+| `domain/macro.py` | TRM por rango de vigencia y conversión a dólares, que no es deflactar. |
+
+---
+
+## El motor de privacidad
+
+Tres de las fuentes traen personas identificadas: RUES (6.962.889 personas
+naturales), SIRI (42.124 sanciones con nombre y cédula) y Saber 11 (7.109.704
+registros individuales). `ErrorPrivacidad` estaba definido desde el principio y
+ningún camino lo lanzaba, porque hasta 0.16.0 ninguna fuente lo necesitaba.
+
+```mermaid
+flowchart TD
+    consulta["Una herramienta recibe una consulta"] --> agrega{"¿agrega?"}
+    agrega -->|sí| libre["Pasa sin finalidad<br/>panorama · saber11"]
+    agrega -->|no| clase{"clase_documento()"}
+    clase -->|nit| juridica["Persona jurídica:<br/>pasa, y el NIT NO se enmascara"]
+    clase -->|"cedula · indeterminado"| puerta{"¿finalidad declarada?"}
+    juridica --> rues{"¿el RUES dice<br/>PERSONA NATURAL?"}
+    rues -->|sí| puerta
+    rues -->|no| salida
+    puerta -->|no| bloqueo["[PRIVACIDAD]<br/>+ la alternativa agregada"]
+    puerta -->|sí| redacta["Documentos enmascarados<br/>+ finalidad en el sobre"]
+    redacta --> salida["Respuesta"]
+    libre --> salida
+```
+
+Dos detalles que el diagrama hace evidentes:
+
+- **La forma del número no es la última palabra.** `clase_documento` es una
+  conjetura sobre el documento; lo que diga `categoria_matricula` en el RUES es
+  un hecho. 517.527 personas naturales figuran con clase de identificación
+  `NIT`, así que `co_empresas_ficha` y `co_dossier_documento` vuelven a pedir
+  finalidad cuando la fuente contradice la conjetura — aunque el número
+  pareciera un NIT de empresa.
+- **`indeterminado` cuenta como persona.** Equivocarse hacia «es una empresa»
+  expone a alguien; equivocarse hacia «es una persona» solo pide una finalidad
+  de más.
+
+La política se lee del entorno en **cada llamada**, no al importar, y cualquier
+valor distinto de `permisiva` es `estricta`: un error de dedo del operador tiene
+que fallar hacia el lado que protege. Ninguna herramienta recibe un parámetro
+que afloje la política, de modo que ningún prompt puede pedirlo.
+
+**Lo que no hace:** no anonimiza. Enmascarar un documento no impide
+reidentificar a alguien cuyo nombre, cargo y municipio van en la misma fila.
+Sirve para que el número no quede escrito en un historial de conversación, que
+es un riesgo distinto y real.
+
+---
+
+## El total de una respuesta compuesta
+
+`Total` existe para que no se pueda afirmar un total sin declarar su
+procedencia, y funcionó: el defecto de `len(filas)` dejó de poder escribirse en
+una consulta. Pero quedaba una vía, y 0.16.0 la encontró cuatro veces.
+
+Cuando una respuesta junta **varias** consultas, cada una con su propio
+`$limit`, `Total.completo(len(filas))` vuelve a ser una afirmación sin
+comprobar — y cuesta más verla, porque cada consulta por separado parecía caber
+y la que se pasó queda escondida dentro de la suma. Pasó en la ficha de empresa,
+los estados financieros, el screening y las sanciones de contratación.
+
+`Total.union` recibe los pares `(devueltos, límite)` y decide: si **ninguna**
+llenó el suyo, no había más en ninguna fuente y la suma es exacta; si alguna lo
+llenó, el total no consta. Es el mismo patrón de `cupo_entero`, aplicado a la
+forma compuesta: **el constructor que se usaría por descuido decide él, en vez
+de aceptar el número que alguien habría puesto.**
+
+Lo destapó `tests/test_invariantes.py`, que obliga a clasificar cada herramienta
+nueva. Al clasificar las quince, cuatro no pasaron.
 
 ---
 
@@ -216,13 +293,15 @@ el modelo pueda **distinguir siempre «no hay resultados» de «la fuente falló
 | `FUENTE_CAIDA` | Error de red, respuesta no-JSON, circuito abierto, 5xx agotado. | Reintentar; otras fuentes siguen vivas. |
 | `TIMEOUT` | Se agotó el tiempo. | Reducir el rango o añadir filtros: las agregaciones sin filtro hacen full scan. |
 | `CONFIG` | 403 con token configurado: el token es inválido. | Verificar o quitar el token. |
+| `PRIVACIDAD` | La consulta identifica a una persona natural y no se declaró `finalidad`. | Declarar la finalidad —preguntándosela al usuario, no suponiéndola— o usar la herramienta agregada que el propio error nombra. |
 
 Un `FUENTE_CAIDA` **nunca** significa cero resultados, y cero resultados nunca
 se presenta como fallo.
 
-`ESQUEMA_CAMBIADO`, `FUERA_DE_JURISDICCION` y `PRIVACIDAD` están definidos pero
-**ningún camino de código los lanza todavía**: pertenecen a fases no
-implementadas (motor de privacidad y guardarraíl de gestor catastral).
+`ESQUEMA_CAMBIADO` y `FUERA_DE_JURISDICCION` están definidos pero **ningún
+camino de código los lanza todavía**: pertenecen al guardarraíl de gestor
+catastral, no implementado. `PRIVACIDAD` sí se lanza desde 0.16.0 — ver
+[el motor de privacidad](#el-motor-de-privacidad).
 
 ---
 
@@ -248,8 +327,11 @@ Ser explícito aquí evita que alguien dé por implementado lo que no está:
   sola respuesta. Para eso está `co_datos_exportar`, que pagina a disco.
 - **Sin adaptador SDMX** (Banco de la República) ni **ArcGIS** (IGAC, MGN del
   DANE) con descubrimiento del corte vigente.
-- **Sin motor de privacidad**, y por tanto sin los módulos de seguridad y DDHH
-  que dependen de él.
+- **Sin tasas por habitante**: no hay población municipal total con fuente
+  abierta, así que el servidor no puede dividir por nada. Declarado en
+  `registry.SIN_FUENTE_ABIERTA`.
+- **Sin deflactor**: no hay IPC con API abierta. `domain/macro.py` ofrece la TRM
+  como segunda unidad y declara que no es lo mismo.
 - **La degradación automática entre niveles de detalle** existe en
   `budget.siguiente_nivel` pero no se usa: hoy se recortan filas, no se baja de
   `completo` a `resumen`.

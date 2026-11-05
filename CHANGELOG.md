@@ -2,6 +2,276 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [0.16.0] — 2026-11-05
+
+Registro mercantil, sanciones, educación, desempeño municipal y TRM: cinco
+familias de fuentes nuevas y **el motor de privacidad**, que llevaba desde el
+principio definido como error y sin implementar.
+
+El criterio para elegir qué añadir fue el inventario de fuentes oficiales
+colombianas que publica Croma. De sus 59 fuentes, la mayoría se consulta por
+formulario web con captcha y queda fuera de un servidor que se define como «sin
+credenciales». Pero sus tres piezas centrales —RUES, antecedentes de la
+Procuraduría y estados financieros de Supersociedades— **están publicadas como
+datasets abiertos en `datos.gov.co`**, así que se pueden servir sin pedirle una
+llave a nadie. Verificado contra la API en vivo el 05-nov-2026.
+
+### Añadido
+
+**Motor de privacidad (`core/privacidad.py`).** `ErrorPrivacidad` existía en
+`core/errors.py` desde el principio y ningún camino de código lo lanzaba, porque
+hasta ahora ninguna fuente traía personas. Las nuevas sí: 6.962.889 de las
+9.436.330 matrículas del RUES son de personas naturales, las 42.124 sanciones del
+SIRI llevan nombre y cédula, y Saber 11 son 7.109.704 registros individuales con
+estrato y escolaridad de los padres.
+
+Tres reglas:
+
+- **Agregar nunca pide permiso.** `co_integridad_panorama` y
+  `co_educacion_saber11` responden sobre poblaciones y no pasan por el motor.
+  Que el camino barato sea también el que no identifica a nadie es deliberado.
+- **Identificar a una persona natural exige declarar `finalidad`**
+  —investigación, periodismo, control fiscal o debida diligencia—, que viaja al
+  sobre y queda en la respuesta: la consulta es auditable por quien la lea
+  después. El error de bloqueo nombra siempre la herramienta agregada que
+  responde la misma pregunta sin identificar a nadie, porque un bloqueo que no
+  dice qué hacer en su lugar enseña a reintentar con otras palabras.
+- **Quién relaja la política es el operador, no el modelo.** `CO_PRIVACIDAD` es
+  variable de entorno y ninguna herramienta recibe un parámetro que la afloje,
+  así que ningún prompt puede pedirlo. Un valor mal escrito cae del lado que
+  protege.
+
+Los números de documento salen enmascarados conservando los dos primeros y los
+dos últimos dígitos, lo que deja comprobar que dos filas hablan de la misma
+persona sin escribir el número. El NIT de una sociedad no se enmascara: es
+información mercantil pública y ocultarlo dejaría la respuesta inútil para
+cruzarla con SECOP.
+
+**15 herramientas nuevas**, de 19 a 34:
+
+| Familia | Herramientas |
+|---|---|
+| Empresas | `co_empresas_buscar`, `co_empresas_ficha`, `co_empresas_estados_financieros`, `co_empresas_ranking` |
+| Cruzada | `co_dossier_documento` |
+| Integridad | `co_integridad_screening`, `co_integridad_disciplinarias`, `co_integridad_panorama`, `co_integridad_sanciones_contratacion` |
+| Educación | `co_educacion_saber11`, `co_educacion_indicadores` |
+| Territorio | `co_territorio_desempeno` |
+| Macro | `co_macro_trm`, `co_macro_convertir`, `co_macro_tasas` |
+
+Y tres *resources*: `co://privacidad/politica`, `co://fuentes/familias` y
+`co://sin-fuente-abierta`.
+
+**`co_dossier_documento` es la vista que faltaba.** El servidor estaba
+organizado por dataset, que es como están los datos, no como están las
+preguntas: «qué publica el Estado sobre este NIT» exigía cinco llamadas y saber
+de antemano en qué dataset mirar. El dossier las hace de una vez y, sobre todo,
+**enumera lo que miró**. Su valor no está en lo que encuentra —muchas veces casi
+nada— sino en que el alcance de la búsqueda quede escrito junto al resultado, de
+modo que un cero se pueda interpretar. Cada bloque falla por su cuenta.
+
+**`Total.union`** para las respuestas que juntan varias consultas con su propio
+`$limit`. Ver más abajo: salió de un defecto.
+
+**18 datasets nuevos** en el registro, con sus trampas verificadas, y
+`SIN_FUENTE_ABIERTA`, que declara por escrito lo que el servidor no puede
+responder y por qué.
+
+### Corregido
+
+**Cuatro herramientas nuevas afirmaban ser completas sin saberlo, y lo atrapó
+la prueba de invariantes, no la revisión.** `co_empresas_ficha`,
+`co_empresas_estados_financieros`, `co_integridad_screening` y
+`co_integridad_sanciones_contratacion` declaraban `Total.completo(len(filas))`
+sobre filas traídas con `$limit`: es exactamente el defecto que `Total` vino a
+hacer inexpresable, reaparecido en la única forma que el tipo no cubría.
+
+En una respuesta **compuesta** cuesta más verlo: cada consulta por separado
+parecía caber, y la que se pasaba quedaba escondida dentro de la suma. Ahora hay
+`Total.union`, que recibe los pares `(devueltos, límite)` de cada consulta y
+declara el total desconocido si alguna llenó el suyo. El patrón se repite: donde
+había un cálculo intermedio, tenía que haber una medición.
+
+`tests/test_invariantes.py` hizo su trabajo dos veces: obligó a clasificar las
+quince herramientas nuevas y, al clasificarlas, destapó el defecto en cuatro.
+
+**El motor de privacidad bloqueaba la ficha de Bancolombia.** La primera
+versión pedía `finalidad` en cuanto **una** matrícula del RUES dijera `PERSONA
+NATURAL`, por quedarse del lado que protege. El efecto real fue dejar
+`co_empresas_ficha` y `co_dossier_documento` inútiles para su caso central:
+el NIT 890903938 tiene dos matrículas, la de Medellín como sociedad anónima y
+**la de Cali clasificada como persona natural**, con la razón social del banco
+escrita en la fila. Es un error de la fuente, no un caso límite.
+
+Ahora las dos señales se cruzan en un sitio (`privacidad.resuelve_persona`):
+manda `categoria_matricula`, salvo que el documento tenga forma inequívoca de
+NIT de empresa —nueve dígitos empezando por 8 o 9, un rango al que la
+numeración de cédulas no llegó nunca—. Y la discrepancia **no se resuelve en
+silencio**: la fila se conserva y el sobre declara que la fuente la tiene mal
+clasificada. Lo encontró la primera llamada contra la fuente viva; con red
+simulada no se veía.
+
+**Una columna duplicada en el `$select` tumbaba la ficha.** `campos_resumen`
+del RUES ya trae `categoria_matricula`, así que concatenarle las columnas
+extra la repetía y Socrata rechazaba la consulta entera con
+`query.soql.invalid`. Una columna duplicada no es un aviso, es un 400, y la red
+simulada no valida SoQL.
+
+**El screening anunciaba «5 filas de 0 coincidencias».** Su respuesta son dos
+tablas en una —cinco filas de resumen, una por fuente, más los detalles—, así
+que contarlas juntas daba un pie verdadero por separado y absurdo leído
+seguido. Ahora usa `mostrar_conteo=False`, como las otras respuestas donde «N
+filas» no significa nada.
+
+**Una fecha en formato colombiano se aceptaba como ISO.** `_normaliza_fecha`
+partía por guiones y comprobaba que los tres trozos fueran numéricos, así que
+`20-01-2024` pasaba, se mandaba a Socrata como si fuera ISO y volvía sin filas:
+el usuario veía «sin TRM para esa fecha», un diagnóstico falso sobre la fuente
+cuando el error estaba en la entrada. Ahora valida con `date.fromisoformat`, que
+además rechaza los días que no existen.
+
+**La conversión a dólares rompía el separador decimal.**
+`f"{v:,.2f}".replace(",", ".")` convertía también el punto de los decimales, así
+que 250.000,00 salía como «250.000.00» — la misma cifra leída como doscientos
+cincuenta mil con dos decimales o como algo sin sentido, según quien lo lea.
+
+**`ToolResult` dejó de importarse donde ya no está.** fastmcp 4 lo reexporta en
+`fastmcp.tools` y el servidor lo pedía en `fastmcp.tools.tool`, así que con la
+versión actual no arrancaba: `ModuleNotFoundError`. El `pyproject` pedía
+`fastmcp>=2.0` y no acotaba por arriba. Ahora el import prueba las dos rutas.
+
+### Trampas nuevas que el servidor absorbe
+
+Cada una se verificó contra la fuente y tiene prueba de contrato:
+
+- **El literal de persona jurídica del RUES lleva la `ó` acentuada**
+  (`SOCIEDAD ó PERSONA JURIDICA PRINCIPAL ó ESAL`). Escribirlo con una `o`
+  normal devuelve cero filas.
+- **`clase_identificacion` no discrimina personas**: 517.527 personas naturales
+  figuran con clase `NIT`. Si el motor de privacidad se hubiera apoyado en la
+  clase, medio millón de personas habrían pasado por empresas. El discriminador
+  fiable es `categoria_matricula`.
+- **El NIT del RUES vive en dos columnas y a veces en ninguna.** En 485.630
+  sociedades la columna `nit` está vacía y el número solo aparece en
+  `numero_identificacion`: SECOLINSA S A S tiene estados financieros en
+  Supersociedades y su `nit` en RUES está en blanco. Toda consulta por documento
+  mira las dos.
+- **`nit` es `text` en el RUES y `number` en los demás datasets.** La misma
+  columna, el mismo nombre, dos tipos: sin comillas en el RUES la consulta falla
+  con `type-mismatch`, y con comillas en los otros, también.
+- **Los conceptos con tilde de los estados financieros no se pueden pedir por
+  igualdad.** El byte guardado es el carácter de reemplazo U+FFFD, así que
+  `concepto = 'Ganancia (pérdida)'` devuelve 0 filas habiendo 627.932. Se piden
+  con `like` y un comodín de un carácter en el hueco.
+- **Los importes del ranking son texto con signo de peso** («$ 100.59») y están
+  en **billones**. `ingresos_operacionales::number` falla con `invalid input
+  syntax for type numeric`, y ordenar por el texto tal cual es peor porque es
+  silencioso: «$ 9.03» quedaría por encima de «$ 100.59». Hay que quitar el
+  signo con dos `replace` antes de castear.
+- **«10.000 Empresas más Grandes» son 50.000 filas**: 10.000 por año, de 2021 a
+  2025. Sin fijar el año cada empresa sale cinco veces.
+- **`periodo` en los estados financieros es relativo**, no un año: vale «Periodo
+  Actual» o «Periodo Anterior» respecto al radicado. El año está en
+  `fecha_corte`.
+- **Una TRM rige varios días.** La del viernes vale sábado y domingo, y
+  preguntar por `vigenciadesde = '2024-01-21'` —un domingo— devuelve cero
+  habiendo tasa vigente. Se busca el rango que contiene la fecha.
+- **`periodo` de Saber 11 mezcla dos poblaciones.** Los periodos acabados en 4
+  son la aplicación masiva de octubre (~1,1 M de estudiantes) y los acabados en
+  1 la de marzo (~15 mil, sobre todo repitentes y validantes). `max(periodo)`
+  devolvía a veces la de marzo presentada como «el último año», que es un error
+  de población, no de fecha.
+- **Los nombres de campo del MinEducación tienen la tilde comida por el slug**:
+  `a_o`, `deserci_n`, `poblaci_n_5_16`, `c_digo_municipio`.
+
+### Tres fuentes que se exponen para poder decir que no sirven
+
+Es lo contrario de lo que haría un catálogo comercial, y es el punto:
+
+- **SECOP II «Multas y Sanciones» no es un registro de sanciones.** De sus 588
+  filas, **533 son «Comentarios positivos»** y 55 negativos; y solo 145 están
+  publicadas, frente a 379 a la espera de aprobación, 33 rechazadas y 31 en
+  borrador. Es la tabla de retroalimentación de proveedores. Además,
+  `as_codigo_proveedor_objeto` es un código interno de la plataforma, no el NIT,
+  así que no se puede cruzar por documento.
+- **SIRI casi no tiene contratistas.** De 42.124 sanciones, 26.091 son a
+  miembros de la fuerza pública y 15.736 a servidores públicos; **18 a
+  contratistas** y 8 a particulares. Para verificar a un proveedor del Estado,
+  está vacío en la práctica.
+- **La Responsabilidad Fiscal de la Contraloría tiene 60 filas** y está parada
+  desde el 23-mar-2022. No es el Boletín de Responsables Fiscales: su cero no
+  informa de nada.
+
+Ninguna consulta de `domain/integridad.py` devuelve un cero desnudo. Cada
+respuesta sin coincidencias lo dice con estas cifras, porque una tabla en blanco
+se lee como una absolución y no lo es.
+
+### Una nota del registro que caducó, y la suite de contrato lo destapó
+
+**«HURTO A COMERCIO» y «HURTO A RESIDENCIAS» ya no son el mismo dato.** Lo
+fueron: hasta agosto de 2026 los dos servían 613.637 filas y 614.669 casos,
+idénticos año por año, y las notas del registro decían «son el mismo dato, nunca
+los sumes». MinDefensa recargó sus **23** datasets de criminalidad el
+**21-oct-2026** —`rowsUpdatedAt` lo marca en los 23— y la duplicación se
+deshizo: hoy son 682.898 casos en comercio contra 619.378 en residencias, sin un
+solo año en que coincidan.
+
+Nadie tocó una línea de código y la advertencia pasó de verdadera a falsa. Eso
+es lo que hace la suite de contrato: la prueba que comprobaba que los dos
+totales eran idénticos empezó a fallar. Y una nota del registro va al sobre de
+**cada** consulta
+vía `_avisos_dataset`, de modo que el servidor llevaba desde octubre diciéndole
+al modelo que no sumara dos series distintas. Una advertencia caducada llega con
+el mismo rango que la cifra, y es peor que ninguna.
+
+**El que estaba mal era `HURTO A COMERCIO`.** No lo dice la fuente —la recarga
+no viene con changelog— sino el crecimiento de cada serie entre el recuento del
+18-ago-2026 y el del 05-nov-2026: los otros 22 datasets subieron menos del 4 %
+(homicidio, +0,65 %; residencias, +0,77 %), lo que cabe en tres meses de
+registros nuevos, y comercio subió **11 %**. Ninguna acumulación explica eso; sí
+lo explica que la serie sea otra. Así que hasta octubre `HURTO A COMERCIO`
+servía los hurtos a residencias, y **cualquier cifra de hurto a comercio
+publicada antes del 21-oct-2026 es en realidad de residencias**.
+
+**La trampa que queda viva es otra: la serie se rompe en 2017.** Comercio pasa
+de 23.060 casos en 2016 a 60.311; residencias, de 24.191 a 46.550. Más que se
+duplican las dos en un año, mientras el homicidio se queda plano (12.045 y
+11.957) y los vehículos suben 6 %: el salto es de esos dos datasets, no del
+registro. «Los hurtos a comercio se triplicaron desde 2016» mide la ruptura, no
+el delito. Las notas nuevas lo advierten en cada consulta.
+
+- El contrato que comprobaba la identidad ahora comprueba lo contrario **año por
+  año**, no por totales: dos series podrían diferir en el total por filas nuevas
+  y seguir siendo la misma.
+- Hay contrato nuevo que vigila el salto de 2017 —y que el homicidio siga plano
+  en esos años, que es lo que lo atribuye a los datasets y no a la fuente—. Si
+  algún día se alisa, las notas sobran.
+- `test_crimen.py` exige ahora que las dos notas lleven la fecha de la
+  corrección y la ruptura, y que no digan «nunca los sumes».
+- Los 23 totales de la tabla de `docs/fuentes.md` se recontaron el 05-nov-2026.
+  Todos habían subido; la serie llega al 30-sep-2026. Las cifras citadas en
+  prosa —homicidio, 345.195 filas y 345.917 víctimas; violencia intrafamiliar,
+  675.813 y 1.651.032— se actualizaron con ellos, y donde el README y
+  `docs/recetas.md` fijaban el corte en «finales de julio de 2026» ahora dicen
+  que cambia con cada recarga: una fecha escrita a mano al lado de un
+  `max(fecha_hecho)` que se consulta en vivo solo puede envejecer mal.
+
+### Lo que sigue sin tener fuente abierta
+
+Declarado en el *resource* `co://sin-fuente-abierta` y en el playbook, para que
+la respuesta correcta sea decirlo y no buscar un sustituto que no lo es:
+
+- **No hay población municipal total, así que no hay tasas por 100.000
+  habitantes.** El DANE no publica las proyecciones por API: bajo su atribución
+  en `datos.gov.co` hay exactamente dos datasets, los dos de DIVIPOLA, y el
+  resto son republicaciones de alcaldías sueltas. Lo más cercano es la población
+  de 5 a 16 años del MinEducación, que no sirve de denominador. Hay prueba de
+  contrato que vigila si eso cambia.
+- **No hay IPC, así que los montos siguen sin deflactar.** Ni el DANE ni el
+  Banco de la República publican sus series por API REST abierta. `co_macro_
+  convertir` da una segunda unidad verificable —dólares de la fecha del
+  contrato— y la respuesta aclara que convertir no es deflactar.
+- **No hay procesos judiciales, Registraduría, RUNT ni SIMIT.**
+
 ## [0.15.0] — 2026-10-28
 
 Cuatro arreglos salidos de auditar el servidor con él mismo: tres se notan en
