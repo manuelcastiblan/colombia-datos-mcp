@@ -32,6 +32,15 @@ async def test_inventario_de_herramientas():
         "co_geo_divipola", "co_geo_cotejar_coordenadas", "co_datos_exportar",
         "co_crimen_serie", "co_crimen_por_municipio", "co_crimen_comparar",
         "co_datos_serie", "co_datos_perfilar", "co_geo_limites",
+        # 0.16.0: registro mercantil, sanciones, educación, territorio y macro.
+        "co_empresas_buscar", "co_empresas_ficha",
+        "co_empresas_estados_financieros", "co_empresas_ranking",
+        "co_dossier_documento",
+        "co_integridad_screening", "co_integridad_disciplinarias",
+        "co_integridad_panorama", "co_integridad_sanciones_contratacion",
+        "co_educacion_saber11", "co_educacion_indicadores",
+        "co_territorio_desempeno",
+        "co_macro_trm", "co_macro_convertir", "co_macro_tasas",
     }
     # Exportar es la ÚNICA que escribe, y no puede anunciarse como solo lectura:
     # el cliente decide con esa anotación si pedir confirmación al usuario.
@@ -53,7 +62,9 @@ async def test_playbook_presente():
 
 async def test_recursos_publicados():
     uris = {str(r.uri) for r in await mcp.list_resources()}
-    assert uris == {"co://secop/datasets", "co://secop/joins", "co://atribuciones"}
+    assert uris == {"co://secop/datasets", "co://secop/joins", "co://atribuciones",
+                    "co://privacidad/politica", "co://fuentes/familias",
+                    "co://sin-fuente-abierta"}
 
 
 async def test_llamada_completa_devuelve_markdown_con_procedencia(monkeypatch):

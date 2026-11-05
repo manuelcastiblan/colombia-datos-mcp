@@ -9,7 +9,7 @@ pero **no son la misma cosa**, y ahí está el trabajo de este módulo:
   `unidad` trae valores como `0.002`. Sumarlos junto a homicidios sería sumar
   kilos con personas, así que se quedan fuera del registro.
 * **`cantidad` no siempre es uno.** Un hecho puede tener varias víctimas: en
-  homicidio hay 342.971 filas y 343.680 víctimas. Se suma `cantidad`, nunca se
+  homicidio hay 345.195 filas y 345.917 víctimas. Se suma `cantidad`, nunca se
   cuentan filas.
 * **Casos registrados no son delitos cometidos.** Una subida en extorsión o en
   violencia intrafamiliar puede ser más denuncia y no más delito. El sobre lo
@@ -17,6 +17,13 @@ pero **no son la misma cosa**, y ahí está el trabajo de este módulo:
 * **El año base decide el titular.** El secuestro subió 259 % contra 2017 y bajó
   67 % contra 2003: la misma serie. `comparar` obliga a declarar los dos años y
   el sobre recuerda que la elección no es neutral.
+* **Las notas del registro caducan.** `_avisos_dataset` las mete en el sobre de
+  cada consulta, así que valen lo que vale un dato: hasta octubre de 2026 las de
+  los dos hurtos decían «son el mismo dato, nunca los sumes», y era verdad —los
+  dos datasets servían la misma serie— hasta que MinDefensa recargó la familia
+  el 21-oct-2026 y dejó de serlo. Una advertencia falsa llega al modelo con el
+  mismo rango que la cifra, y es peor que ninguna: por eso cada nota que importa
+  tiene una prueba de contrato que la contrasta contra la API viva.
 """
 
 from __future__ import annotations

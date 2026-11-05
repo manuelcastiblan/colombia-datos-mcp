@@ -70,6 +70,30 @@ class Total:
         return cls(int(n), "completo")
 
     @classmethod
+    def union(cls, trozos) -> "Total":
+        """El total de una respuesta que junta VARIAS consultas con `$limit`.
+
+        Cada trozo es `(devueltos, limite_pedido)`. Si ninguna consulta llenó
+        su límite, no había más en ninguna fuente y la suma es exacta. Si
+        alguna lo llenó, el total **no consta**: a esa fuente le faltan filas, y
+        sumar lo devuelto las daría por todas.
+
+        Existe porque `Total.completo(len(filas))` sobre una concatenación es
+        exactamente el error que `cupo_entero` vino a hacer inexpresable, y en
+        una respuesta compuesta cuesta más verlo: cada consulta por separado
+        parecía caber, y la que se pasó queda escondida dentro de la suma.
+        Apareció en cuatro de las herramientas nuevas de 0.16.0 —ficha de
+        empresa, estados financieros, screening y sanciones de contratación— y
+        la atrapó la prueba de invariantes, no la revisión.
+        """
+        trozos = list(trozos)
+        if not trozos:
+            return cls(0, "completo")
+        if any(int(devueltos) >= int(limite) for devueltos, limite in trozos):
+            return cls(None, "desconocido")
+        return cls(sum(int(d) for d, _ in trozos), "cabia_entero")
+
+    @classmethod
     def desconocido(cls) -> "Total":
         return cls(None, "desconocido")
 

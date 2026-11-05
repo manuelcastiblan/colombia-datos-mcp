@@ -1,6 +1,6 @@
 # Referencia de herramientas
 
-19 herramientas contra `datos.gov.co`, todas de solo lectura salvo
+34 herramientas contra `datos.gov.co`, todas de solo lectura salvo
 `co_datos_exportar`, la única que escribe.
 
 Los parámetros y sus valores por defecto salen del esquema que el servidor
@@ -23,6 +23,11 @@ Convenios que se repiten:
   extraer. El cuerpo sale en un bloque cercado y el sobre sigue debajo.
 - **Contenido estructurado** — al margen del formato, TODA respuesta lleva
   `datos` y `_meta` por el canal estructurado del protocolo.
+- **`finalidad`** — solo en las herramientas que pueden identificar a una
+  persona natural: `investigacion`, `periodismo`, `control_fiscal` o
+  `debida_diligencia`. **No la supongas ni la elijas por descarte**:
+  pregúntasela a quien hizo la petición. Queda escrita en la respuesta, así que
+  es auditable. Ver [datos de personas](../README.md#datos-de-personas).
 
 ---
 
@@ -492,7 +497,7 @@ Tres avisos van en **todas** las respuestas del módulo, y no son decorativos:
 - **Son casos registrados, no delitos cometidos.** Una subida puede ser más
   denuncia y no más delito. El homicidio es el indicador menos sensible a eso.
 - **Se suma `cantidad`, nunca se cuentan filas.** Un hecho puede tener varias
-  víctimas: homicidio tiene 342.971 filas y 343.680 víctimas.
+  víctimas: homicidio tiene 345.195 filas y 345.917 víctimas.
 - **Cada dataset corta por su cuenta.** Se consulta `max(fecha_hecho)` y se
   avisa de que el último año está incompleto.
 
@@ -663,6 +668,304 @@ advierte.
 
 ---
 
+## Registro mercantil y societario
+
+### `co_dossier_documento`
+
+**Empieza por aquí cuando te pregunten por una empresa.** Cruza siete fuentes
+con un solo documento y devuelve una fila por ámbito.
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `documento` | — | NIT sin dígito de verificación, o cédula. Solo números. |
+| `finalidad` | `""` | Obligatoria si el documento es de una persona natural. |
+| `formato` | `"tabla"` | |
+
+Lo que mira, y en este orden: matrícula en el RUES, contratos en SECOP II,
+estados financieros de Supersociedades, presencia en las 10.000 más grandes,
+multas de SECOP I, antecedentes del SIRI, sanciones a contadores y
+responsabilidad fiscal.
+
+**Su valor no está en lo que encuentra** —muchas veces casi nada— sino en que
+enumera lo que miró, de modo que un cero se pueda interpretar. Y dice
+explícitamente lo que **no** sabe mirar: procesos judiciales, Registraduría,
+RUNT, SIMIT y el Boletín de Deudores Morosos no tienen API abierta.
+
+Cada bloque falla por su cuenta: si Supersociedades no responde, esa línea dice
+«no consultable» y el resto sale igual. «No consultable» y «0 registros» son
+informaciones distintas y no se confunden.
+
+**Si el RUES dice que el documento es de una persona natural, pide finalidad
+aunque el número parezca un NIT de empresa.** 517.527 personas naturales figuran
+con clase de identificación `NIT`, así que la forma del número no decide.
+
+### `co_empresas_buscar`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `nombre` | `""` | Razón social; texto libre, tolerante a acentos. |
+| `documento` | `""` | Se busca en `nit` **y** en `numero_identificacion`. |
+| `estado` | `""` | `ACTIVA`, `CANCELADA`… resuelto contra los valores reales. |
+| `camara` | `""` | Va sin la palabra «Cámara»: `MEDELLIN PARA ANTIOQUIA`. |
+| `solo_juridicas` | `True` | A `False` abre las personas naturales y **exige `finalidad`**. |
+| `limite` | 20 | Tope 100. |
+| `detalle` | `"resumen"` | |
+
+Hace falta `nombre` o `documento`: sin ninguno, el error manda a
+`co_datos_agregar` sobre `c82u-588k`, que explora sin identificar a nadie.
+
+**Filtra `estado="ACTIVA"` si lo que quieres son empresas vivas.** Una fila es
+una matrícula y 5.091.481 de 9.436.330 están canceladas.
+
+### `co_empresas_ficha`
+
+| Parámetro | Defecto |
+|---|---|
+| `documento` | — |
+| `finalidad` | `""` |
+
+Matrícula, forma jurídica, estado, cámara y fecha, más dos extras calculados:
+cuántos establecimientos hay a su nombre y en qué años apareció en las 10.000
+más grandes. Los extras son de cortesía: si fallan, la ficha sale sin ellos.
+
+Si el documento no tiene matrícula, **no concluye que no exista**: puede ser una
+entidad pública, que no se matricula en cámara de comercio. La respuesta manda a
+comprobarlo en SECOP.
+
+### `co_empresas_estados_financieros`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `documento` | — | |
+| `anio` | 0 | Sin año, todos los cortes disponibles. |
+| `limite` | 30 | Tope 100 **por cada uno de los dos datasets**. |
+
+Pide solo los conceptos agregados —activos, pasivos, patrimonio, ingresos,
+ganancia bruta y resultado— de los cientos que tiene la taxonomía, y fija
+`periodo = 'Periodo Actual'` para que cada corte no salga duplicado con su
+comparativo.
+
+**Un resultado vacío no significa que la empresa no opere.** Los bancos y las
+aseguradoras reportan a la Superfinanciera: Bancolombia no tiene una sola fila
+aquí, y la respuesta lo dice con ese ejemplo.
+
+**La fuente no declara la escala de los importes.** Parecen miles de pesos, pero
+es una inferencia y la respuesta la marca como tal.
+
+### `co_empresas_ranking`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `anio` | 0 | Sin año toma el más reciente **y lo dice**. |
+| `metrica` | `"ingresos"` | `ingresos`, `activos`, `patrimonio`, `ganancia`. |
+| `macrosector` | `""` | |
+| `departamento` | `""` | Departamento del domicilio. |
+| `limite` | 20 | Tope 100. |
+
+**Los importes están en billones de pesos** y vienen como texto («$ 100.59»).
+El orden se hace sobre el importe limpiado, no sobre el texto: ordenar por el
+texto tal cual pondría «$ 9.03» por encima de «$ 100.59», y en silencio.
+
+**No es la lista de las empresas más grandes del país**, sino de las que
+reportan a Supersociedades.
+
+---
+
+## Sanciones y antecedentes
+
+Las cinco fuentes juntas suman menos de 46.000 filas, y tres de ellas no sirven
+para lo que su título sugiere. Cada respuesta lleva las cifras que lo explican.
+**Ninguna consulta de esta familia devuelve un cero desnudo.**
+
+### `co_integridad_screening`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `documento` | — | |
+| `finalidad` | `""` | Obligatoria si no es un NIT de persona jurídica. |
+| `limite` | 10 | Tope 50 por fuente. |
+
+Devuelve dos tablas: **las fuentes consultadas**, con cuántas coincidencias hay
+en cada una, y **las coincidencias**. La primera es el punto: deja escrito el
+alcance de la búsqueda.
+
+SECOP II aparece en la lista marcado como «no cruzable por documento», porque su
+tabla de sanciones publica un código interno de la plataforma y no el NIT. Para
+mirarla hace falta el nombre, con
+`co_integridad_sanciones_contratacion`.
+
+### `co_integridad_disciplinarias`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `documento` | `""` | |
+| `nombre` | `""` | Se busca en las cuatro columnas de nombre del SIRI. |
+| `entidad` | `""` | Entidad donde ocurrió la sanción. |
+| `finalidad` | `""` | **Siempre obligatoria.** |
+| `limite` | 20 | Tope 100. |
+
+Buscar por nombre **devuelve homónimos** y sin el documento no hay forma de
+distinguirlos. Confundir a dos personas aquí es grave, así que la respuesta lo
+advierte en vez de dejarlo implícito.
+
+De 42.124 sanciones, 18 son a contratistas: para verificar a un proveedor del
+Estado, esta fuente está vacía en la práctica.
+
+### `co_integridad_panorama`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `agrupar_por` | `"calidad"` | `calidad`, `entidad`, `departamento`, `sancion`, `autoridad`, `inhabilidad`, `cargo`. |
+| `limite` | 20 | Tope 100. |
+
+**No pide finalidad.** Es la alternativa que el motor de privacidad ofrece
+cuando bloquea una consulta nominal, y existe para que esa alternativa sea real:
+la pregunta «qué sanciona la Procuraduría y a quién» se responde aquí entera,
+sin devolver un solo nombre.
+
+Una fila es una **sanción**, no una persona: una misma persona puede tener
+varias.
+
+### `co_integridad_sanciones_contratacion`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `documento` | `""` | Solo sirve para SECOP I. |
+| `nombre` | `""` | **Sin él no se mira SECOP II**, y se avisa. |
+| `finalidad` | `""` | Si el documento es de una persona natural. |
+| `limite` | 20 | Tope 50 por plataforma. |
+
+Las dos plataformas publican cosas distintas: SECOP I trae el documento del
+contratista y SECOP II solo el nombre. En SECOP II se filtran los comentarios
+negativos y publicados, que son 55 y 145 de 588 filas respectivamente.
+
+SECOP I ya no es la plataforma vigente, así que sus 1.716 multas no recogen nada
+reciente. Un cero no es constancia de nada.
+
+---
+
+## Educación
+
+### `co_educacion_saber11`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `agrupar_por` | `"departamento"` | `departamento`, `municipio`, `colegio`, `naturaleza`, `jornada`, `estrato`, `educacion_madre`. |
+| `periodo` | `""` | Año+semestre pegados (`20224`). Sin él, la última aplicación masiva. |
+| `area` | `"global"` | `global`, `lectura`, `matematicas`, `sociales`, `naturales`, `ingles`. |
+| `departamento` | `""` | Departamento del colegio. |
+| `minimo_estudiantes` | 20 | Grupos más pequeños se descartan. |
+| `limite` | 20 | Tope 100. |
+
+**Solo agregado.** La fuente es microdato individual con género, fecha de
+nacimiento, estrato y escolaridad de los padres; aquí no existe el camino para
+pedir la fila de un estudiante.
+
+`minimo_estudiantes` no es cosmética: un promedio sobre tres personas no es
+comparable con uno sobre mil, y además se acerca a identificar a quien lo
+compone.
+
+**Los periodos acabados en 4 y en 1 son poblaciones distintas**: octubre con
+~1,1 M de estudiantes y marzo con ~15 mil, sobre todo repitentes y validantes.
+Promediarlos juntos mezcla las dos.
+
+Y una advertencia que no es técnica: **agrupar por `estrato` o
+`educacion_madre`** hace visible en una llamada que el puntaje mide sobre todo
+origen social, así que ordenar colegios por promedio no los ordena por calidad.
+
+### `co_educacion_indicadores`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `municipio` | `""` | |
+| `departamento` | `""` | |
+| `anio` | 0 | Sin año, el más reciente, y lo dice. |
+| `indicador` | `""` | Con él, ranking de municipios; sin él, ficha completa. |
+| `limite` | 25 | Tope 100. |
+
+Indicadores válidos: `cobertura_neta`, `cobertura_bruta`, `desercion`,
+`aprobacion`, `reprobacion`, `repitencia`, `poblacion_5_16`,
+`tasa_matriculacion`, `tamano_grupo`.
+
+**La cobertura bruta pasa de 100 % con normalidad** —Medellín 2023 estaba en
+107,16 %— porque cuenta matriculados de cualquier edad sobre la población del
+rango teórico. La neta es la que no puede pasar de 100.
+
+`poblacion_5_16` es la única población municipal del servidor y **no sirve de
+denominador** para tasas de criminalidad: no es población total y el rango de
+edad no coincide.
+
+---
+
+## Territorio
+
+### `co_territorio_desempeno`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `municipio` | `""` | |
+| `departamento` | `""` | |
+| `anio` | 0 | Sin año, el último con datos (2020). |
+| `indicador` | `"mdm"` | `mdm`, `gestion`, `resultados`, `dotaciones`. |
+| `limite` | 25 | Tope 100. |
+
+**El MDM solo se compara dentro del mismo grupo de dotaciones iniciales.** Un
+municipio con hospital y universidad no parte de donde parte uno sin acueducto,
+así que un ranking nacional mezcla cosas que el índice no pretende comparar.
+`indicador="dotaciones"` devuelve el grupo de cada municipio.
+
+**La serie se paró en 2020** aunque la ficha del dataset diga que se actualizó en
+2022.
+
+---
+
+## Macro
+
+### `co_macro_trm`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `fecha` | `""` | Excluyente con el rango. |
+| `desde` / `hasta` | `""` | |
+
+Sin argumentos, la última TRM certificada. Con `fecha`, **busca el rango de
+vigencia que la contiene**: una TRM rige varios días cuando hay fin de semana o
+festivo, así que preguntar por un domingo devuelve la tasa del viernes y la
+respuesta lo aclara.
+
+### `co_macro_convertir`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `monto` | — | Número, sin separadores. |
+| `fecha` | — | `YYYY-MM-DD`, con el año primero. |
+| `hacia` | `"usd"` | `usd` o `cop`. |
+
+Es la segunda unidad para los montos de SECOP, que son nominales. **No es
+deflactar**: el dólar también cambia de valor, así que dos cifras en dólares de
+años distintos siguen sin ser comparables en poder de compra. El IPC del DANE no
+tiene API abierta; la respuesta lo dice cada vez.
+
+La fecha importa: mil millones de pesos son 271 mil dólares en 2015 y 229 mil en
+2024, y la diferencia no dice nada del contrato.
+
+### `co_macro_tasas`
+
+| Parámetro | Defecto | Notas |
+|---|---|---|
+| `descripcion` | `""` | Producto; resuelto contra los valores reales. |
+| `desde` / `hasta` | `""` | |
+| `limite` | 20 | Tope 100. |
+
+**Hace falta al menos `desde` o `descripcion`**: la fuente tiene 2.102.178 filas
+y sin filtro la agregación hace un recorrido completo y agota el tiempo.
+
+La tasa es un **promedio simple** de lo que reportó cada entidad, no la tasa del
+sistema: esa se pondera por el monto captado, que va en la columna de al lado.
+Una entidad pequeña con tasa alta pesa aquí lo mismo que un banco grande.
+
+---
+
 ## Recursos MCP
 
 | URI | Contenido |
@@ -670,3 +973,6 @@ advierte.
 | `co://secop/datasets` | Los 8 datasets de SECOP del registro, con su unidad de análisis y notas. |
 | `co://secop/joins` | Joins verificados entre datasets. |
 | `co://atribuciones` | Cadenas de atribución exactas que exige el facet de Socrata. |
+| `co://privacidad/politica` | La política vigente, las finalidades admitidas y qué fuentes traen personas. Se puede leer **sin provocar un error**. |
+| `co://fuentes/familias` | Las siete familias del registro con la unidad de análisis de cada dataset. |
+| `co://sin-fuente-abierta` | Lo que el servidor **no** puede responder y por qué: población municipal, IPC, Rama Judicial. |

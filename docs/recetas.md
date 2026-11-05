@@ -428,10 +428,167 @@ que buscas es el reparto dentro de una región.
   intrafamiliar puede ser más denuncia. El homicidio es el menos sensible a eso.
 - **`HURTO A COMERCIO` y `HURTO A RESIDENCIAS` son el mismo dato.** Sumarlos
   duplica la cifra. Ambos llevan la advertencia.
-- **Cada dataset corta por su cuenta**, en general a finales de julio de 2026. El
+- **Cada dataset corta por su cuenta**, y la fecha cambia con cada recarga. El
   último año está incompleto y compararlo con años cerrados inventa caídas.
 
 ---
+
+## Qué publica el Estado sobre una empresa
+
+Una sola llamada antes de cualquier otra cosa:
+
+```
+co_dossier_documento(documento="899999068")
+```
+
+```
+**Documento 899999068** — ECOPETROL S A · DV 1
+
+| ámbito                      | fuente                       | hallazgo |
+|---|---|---|
+| Registro mercantil          | RUES · c82u-588k             | ECOPETROL S A · SOCIEDAD ANONIMA · matrícula ACTIVA en BOGOTA desde 2003-07-18 |
+| Contratación estatal        | SECOP II · jbjy-vk9h         | 7 contratos · $8.137.440.199 · de 2020-10-19 a 2025-11-04 |
+| Estados financieros         | Supersociedades · pfdp-zks5  | no reporta — los bancos y aseguradoras reportan a la Superfinanciera |
+| 10.000 más grandes          | Supersociedades · 6cat-2gcs  | sí, en 2025, 2024, 2023, 2022, 2021 · macrosector MINERO |
+| Multas de contratación      | SECOP I · 4n4q-k399          | 0 registros |
+| Antecedentes disciplinarios | Procuraduría · iaeu-rcn6     | 0 registros |
+| Sanciones a contadores      | JCC · fs36-azrv              | 0 registros |
+| Responsabilidad fiscal      | Contraloría · jr8e-e8tu      | 0 registros |
+```
+
+**Los ceros son el punto, no el relleno.** La tabla deja escrito qué se miró,
+así que un cero se puede interpretar: sin esa lista, «no encontré sanciones» y
+«no busqué sanciones» se leen igual. Y la respuesta añade lo que **no** sabe
+mirar —procesos judiciales, Registraduría, RUNT, SIMIT, Boletín de Deudores
+Morosos—, que es justo lo que alguien supondría incluido.
+
+Fíjate en que Ecopetrol **no reporta a Supersociedades**: ausencia ahí no es
+ausencia de actividad, y el dossier lo dice en vez de dejar la celda vacía.
+
+Después se baja al detalle: `co_empresas_ficha` para la matrícula y los
+establecimientos, `co_empresas_estados_financieros` para las cifras,
+`co_secop_perfil_proveedor` para la contratación, `co_integridad_screening`
+para el detalle de las sanciones.
+
+## Antecedentes de una persona, sin arrastrar su cédula
+
+Lo primero es la pregunta de verdad. Si es «qué sanciona la Procuraduría y a
+quién», no hace falta ninguna persona:
+
+```
+co_integridad_panorama(agrupar_por="calidad")
+```
+
+```
+| calidad                               | sanciones |
+|---|---|
+| MIEMBRO DE LA FUERZA PÚBLICA          |    26.091 |
+| SERVIDOR PÚBLICO                      |    15.736 |
+| PARTICULAR QUE EJERCE FUNCIÓN PÚBLICA |       143 |
+| NA                                    |       128 |
+| CONTRATISTA                            |        18 |
+| PARTICULAR                            |         8 |
+```
+
+Esa tabla responde entera sin pedir finalidad y sin devolver un nombre. Y
+cambia cómo se lee todo lo demás: **18 contratistas de 42.124 sanciones**
+significa que para verificar a un proveedor del Estado esta fuente está vacía
+en la práctica.
+
+Si la pregunta sí es por una persona concreta, hay que declarar para qué:
+
+```
+co_integridad_disciplinarias(documento="1023456789")
+→ [PRIVACIDAD] ... hay que declarar `finalidad`. No la supongas: pregúntasela
+  a quien te lo pidió.
+```
+
+```
+co_integridad_disciplinarias(documento="1023456789", finalidad="periodismo")
+```
+
+La finalidad queda escrita en la respuesta, los documentos salen enmascarados
+(`10••••••89`) y el sobre repite que **esto no es un certificado de
+antecedentes**: son extracciones incompletas y con rezago, así que un cero no
+limpia a nadie.
+
+Buscar por nombre devuelve homónimos y sin el documento no hay forma de
+distinguirlos. Confundir a dos personas aquí es grave, y la respuesta lo dice.
+
+## Comparar montos de años distintos
+
+No se puede deflactar: el IPC del DANE no tiene API abierta. Lo que hay es una
+segunda unidad, a la TRM de la fecha del contrato:
+
+```
+co_macro_convertir(monto=1000000000, fecha="2024-01-21")
+```
+
+```
+| monto (COP)      | TRM      | fecha de la TRM | monto (USD)   |
+|---|---|---|---|
+| $1.000.000.000   | 3.916,39 | 2024-01-20      | US$ 255.337,19 |
+```
+
+Dos cosas que la respuesta aclara y conviene no saltarse:
+
+**La TRM del 21 es la del 20.** Era domingo, y una TRM rige varios días cuando
+hay fin de semana o festivo. Preguntar por igualdad de fecha habría devuelto
+cero habiendo tasa vigente.
+
+**Convertir no es deflactar.** El dólar también cambia de valor, así que dos
+cifras en dólares de años distintos siguen sin ser comparables en poder de
+compra. Es una unidad más, verificable, no un índice de precios.
+
+## Saber 11 sin caer en el ranking de colegios
+
+La tentación es ordenar colegios por promedio. Antes de eso, una llamada que
+cambia la lectura:
+
+```
+co_educacion_saber11(agrupar_por="estrato", periodo="20224")
+co_educacion_saber11(agrupar_por="educacion_madre", periodo="20224")
+```
+
+Las dos están en la **misma fuente** que el puntaje, así que la correlación se
+ve sin salir de ella. Después, si aún hace falta el ranking:
+
+```
+co_educacion_saber11(agrupar_por="colegio", periodo="20224", limite=20)
+```
+
+Tres cosas que el módulo ya absorbe:
+
+- **Solo sale agregado.** La fuente es microdato individual con género, fecha de
+  nacimiento y escolaridad de los padres; no existe el camino para pedir un
+  estudiante.
+- **Los grupos de menos de 20 estudiantes se descartan.** Un promedio sobre
+  tres personas no es comparable con uno sobre mil, y se acerca a identificar a
+  quien lo compone.
+- **El periodo elegido es una población.** Los acabados en 4 son octubre (~1,1 M
+  de estudiantes); los acabados en 1, marzo (~15 mil, sobre todo repitentes y
+  validantes). Sin indicar periodo, el servidor toma la última aplicación
+  masiva y lo dice.
+
+## Lo que no se puede pedir, y qué contestar
+
+```
+co_crimen_por_municipio(delito="homicidio", anio=2024)
+```
+
+devuelve conteos absolutos, y la siguiente pregunta es siempre la tasa por
+100.000 habitantes. **No hay forma de calcularla aquí.** El DANE no publica las
+proyecciones de población por API: bajo su atribución en `datos.gov.co` hay
+exactamente dos datasets, los dos de DIVIPOLA.
+
+La población de 5 a 16 años del MinEducación (`co_educacion_indicadores`) **no
+sirve de denominador**: ni es población total ni el rango de edad coincide con
+el de las víctimas. Usarla produciría una cifra con aspecto de tasa y sin
+significado.
+
+El *resource* `co://sin-fuente-abierta` lo dice por escrito, con el IPC y las
+fuentes con captcha, para que la respuesta correcta sea decirlo y no buscar un
+sustituto que no lo es.
 
 ## Leer el sobre
 

@@ -11,16 +11,23 @@ import sys
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from fastmcp.tools.tool import ToolResult
+
+try:                                     # fastmcp >= 4 lo reexporta en el paquete
+    from fastmcp.tools import ToolResult
+except ImportError:                      # fastmcp 2.x y 3.x
+    from fastmcp.tools.tool import ToolResult
 
 from . import __version__
 from .adapters import socrata
 from .core.errors import CoDatosError
-from .domain import analisis, catalogo, crimen, exportar, geo, secop
+from .core import privacidad
+from .domain import (analisis, catalogo, crimen, dossier, educacion, empresas,
+                     exportar, geo, integridad, macro, secop, territorio)
 from .registry import datasets as reg
 
 PLAYBOOK = """
-Servidor de datos públicos de Colombia (datos.gov.co / SECOP / DIVIPOLA).
+Servidor de datos públicos de Colombia: catálogo nacional, contratación,
+criminalidad, territorio, registro mercantil, sanciones, educación y macro.
 
 CÓMO TRABAJAR AQUÍ
 
@@ -46,6 +53,44 @@ CÓMO TRABAJAR AQUÍ
 10. Escribe los nombres como quieras, con tilde o sin ella: el servidor los
    resuelve contra los valores reales de la fuente. Si un término no existe
    allí, te lo dice explícitamente en vez de devolver una tabla vacía.
+11. Para una empresa, empieza por co_dossier_documento: cruza RUES, SECOP,
+   Supersociedades y cuatro fuentes de sanciones en una llamada, y enumera lo
+   que miró. Después baja al detalle con la herramienta de la fuente concreta.
+12. En el RUES una fila es una MATRÍCULA, no una empresa: 5.091.481 de las
+   9.436.330 están canceladas. Y el número puede estar en `nit` o solo en
+   `numero_identificacion`; las herramientas del servidor miran las dos.
+
+DATOS DE PERSONAS
+
+Tres fuentes traen personas identificadas: RUES (6.962.889 personas naturales),
+SIRI de la Procuraduría (42.124 sanciones con nombre y cédula) y Saber 11 (7,1 M
+de registros individuales).
+
+- Agregar NUNCA pide permiso. co_integridad_panorama y co_educacion_saber11
+  responden sobre poblaciones y no identifican a nadie.
+- Identificar a una persona natural EXIGE declarar `finalidad`:
+  investigacion, periodismo, control_fiscal o debida_diligencia. NO te la
+  inventes ni elijas una por descarte: pregúntasela a quien te lo pidió, con
+  sus palabras. Si no te la da, usa la herramienta agregada.
+- Un error [PRIVACIDAD] no es un fallo ni una negativa definitiva: es la
+  petición de un dato que falta. Explícalo así y nombra la alternativa que el
+  propio error te sugiere.
+- Los números de documento salen enmascarados. Es decisión del operador, no un
+  parámetro: no hay forma de pedir que no lo estén.
+
+LO QUE ESTE SERVIDOR NO PUEDE HACER
+
+Dilo cuando te lo pidan, en vez de buscar un sustituto que no lo es:
+
+- NO hay población municipal total, así que NO hay tasas por 100.000
+  habitantes. El DANE no publica las proyecciones por API. Lo único parecido es
+  la población de 5 a 16 años del MinEducación, que no sirve de denominador.
+- NO hay IPC, así que los montos siguen sin deflactar. Lo que sí hay es la TRM
+  (co_macro_convertir), que da una segunda unidad, no un deflactor.
+- NO hay procesos judiciales, Registraduría, RUNT, SIMIT ni Boletín de
+  Deudores Morosos: solo se consultan por formulario web con captcha.
+- Las fuentes de sanciones son INCOMPLETAS y un cero en ellas no es un
+  certificado de antecedentes limpio. Dilo siempre que devuelvas un cero.
 
 CÓMO LEER LAS RESPUESTAS
 
@@ -396,6 +441,286 @@ async def co_crimen_comparar(anio_a: int, anio_b: int, delitos: str = "",
                                           formato=formato))
 
 
+# ------------------------------------------------------------- empresas ----
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_empresas_buscar(nombre: str = "", documento: str = "",
+                             estado: str = "", camara: str = "",
+                             solo_juridicas: bool = True, limite: int = 20,
+                             offset: int = 0, detalle: str = "resumen",
+                             formato: str = "tabla",
+                             finalidad: str = "") -> ToolResult:
+    """Busca en el RUES por razón social o por documento (9,4 M de matrículas).
+
+    Una fila es una MATRÍCULA, no una empresa: 5.091.481 están canceladas, así
+    que filtra `estado="ACTIVA"` si lo que quieres son empresas vivas.
+
+    `solo_juridicas=True` (el valor por defecto) restringe a sociedades y ESAL
+    y no identifica a ninguna persona natural. Bajarlo abre los 6.962.889
+    comerciantes matriculados a título personal y exige `finalidad`.
+
+    Busca el documento en `nit` y en `numero_identificacion`: en 485.630
+    sociedades la primera está vacía.
+    """
+    return await _ejecuta(empresas.buscar(
+        nombre=nombre or None, documento=documento or None, estado=estado or None,
+        camara=camara or None, solo_juridicas=solo_juridicas, limite=limite,
+        offset=offset, detalle=detalle, formato=formato,
+        finalidad=finalidad or None))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_empresas_ficha(documento: str, finalidad: str = "") -> ToolResult:
+    """Ficha del registro mercantil de un documento: matrícula, forma jurídica,
+    estado, cámara, establecimientos a su nombre y si está en las 10.000 más
+    grandes.
+
+    Si el documento resulta ser de una persona natural, pide `finalidad` antes
+    de devolver nada.
+    """
+    return await _ejecuta(empresas.ficha(documento, finalidad=finalidad or None))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_empresas_estados_financieros(documento: str, anio: int = 0,
+                                          limite: int = 30,
+                                          formato: str = "tabla") -> ToolResult:
+    """Activos, pasivos, patrimonio, ingresos y resultado reportados a
+    Supersociedades, por año de corte.
+
+    Son estados financieros NIIF en formato largo XBRL: se piden solo los
+    conceptos agregados. **No todas las empresas están**: los bancos y las
+    aseguradoras reportan a la Superfinanciera, y Bancolombia no tiene una sola
+    fila aquí. La fuente no declara la escala de los importes.
+    """
+    return await _ejecuta(empresas.estados_financieros(
+        documento, anio=anio, limite=limite, formato=formato))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_empresas_ranking(anio: int = 0, macrosector: str = "",
+                              departamento: str = "", metrica: str = "ingresos",
+                              limite: int = 20, formato: str = "tabla",
+                              grafica: bool = True) -> ToolResult:
+    """Las empresas más grandes por ingresos, activos, patrimonio o ganancia.
+
+    `metrica`: "ingresos", "activos", "patrimonio" o "ganancia". Los importes
+    están en BILLONES de pesos y vienen como texto («$ 100.59»).
+
+    El dataset se llama «10.000 Empresas» y tiene 50.000 filas: son 10.000 por
+    año, de 2021 a 2025. Sin `anio` se usa el más reciente y se dice.
+    """
+    return await _ejecuta(empresas.ranking(
+        anio=anio, macrosector=macrosector or None,
+        departamento=departamento or None, metrica=metrica, limite=limite,
+        formato=formato, grafica=grafica))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_dossier_documento(documento: str, finalidad: str = "",
+                               formato: str = "tabla") -> ToolResult:
+    """TODO lo que este servidor sabe de un NIT o una cédula, en una llamada.
+
+    Cruza registro mercantil (RUES), contratación estatal (SECOP II), estados
+    financieros y ranking (Supersociedades) y cuatro fuentes de sanciones, y
+    **enumera lo que miró**: el alcance de la búsqueda queda escrito junto al
+    resultado, así que un cero se puede interpretar.
+
+    Empieza por aquí cuando te pregunten por una empresa, y baja al detalle
+    después. Cada bloque falla por su cuenta: si una fuente cae, el resto sale.
+    """
+    return await _ejecuta(dossier.de_documento(
+        documento, finalidad=finalidad or None, formato=formato))
+
+
+# ------------------------------------------------------------ integridad ----
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_integridad_screening(documento: str, finalidad: str = "",
+                                  limite: int = 10,
+                                  formato: str = "tabla") -> ToolResult:
+    """Busca un documento en las cinco fuentes de sanciones y antecedentes.
+
+    SIRI (Procuraduría), multas de SECOP I, sanciones a contadores y
+    responsabilidad fiscal de la Contraloría. Devuelve una fila por fuente con
+    cuántas coincidencias hay, más el detalle.
+
+    **NO es un certificado de antecedentes.** Las fuentes son incompletas y con
+    rezago: en SIRI solo 18 de 42.124 sanciones son a contratistas, y la de la
+    Contraloría tiene 60 filas parada desde 2022. Un cero aquí no limpia a
+    nadie, y la respuesta lo dice.
+    """
+    return await _ejecuta(integridad.screening(
+        documento, finalidad=finalidad or None, limite=limite, formato=formato))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_integridad_disciplinarias(documento: str = "", nombre: str = "",
+                                       entidad: str = "", finalidad: str = "",
+                                       limite: int = 20, offset: int = 0,
+                                       formato: str = "tabla") -> ToolResult:
+    """Sanciones disciplinarias del SIRI por documento, nombre o entidad.
+
+    Exige `finalidad` siempre: las 42.124 filas traen nombre, cédula y cargo.
+    Buscar por nombre devuelve homónimos y no hay forma de distinguirlos sin el
+    documento.
+
+    Para el reparto de sanciones sin identificar a nadie usa
+    co_integridad_panorama, que no pide finalidad.
+    """
+    return await _ejecuta(integridad.disciplinarias(
+        documento=documento or None, nombre=nombre or None,
+        entidad=entidad or None, finalidad=finalidad or None, limite=limite,
+        offset=offset, formato=formato))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_integridad_panorama(agrupar_por: str = "calidad", limite: int = 20,
+                                 formato: str = "tabla",
+                                 grafica: bool = True) -> ToolResult:
+    """El reparto de las sanciones del SIRI, sin una sola persona identificada.
+
+    `agrupar_por`: "calidad", "entidad", "departamento", "sancion",
+    "autoridad", "inhabilidad" o "cargo". No pide finalidad, porque responde
+    sobre poblaciones y no sobre personas: es la alternativa que el motor de
+    privacidad ofrece cuando bloquea una consulta nominal.
+    """
+    return await _ejecuta(integridad.panorama(
+        agrupar_por=agrupar_por, limite=limite, formato=formato, grafica=grafica))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_integridad_sanciones_contratacion(documento: str = "", nombre: str = "",
+                                               finalidad: str = "", limite: int = 20,
+                                               formato: str = "tabla") -> ToolResult:
+    """Multas y sanciones de SECOP I y II a contratistas del Estado.
+
+    Las dos plataformas publican cosas distintas: SECOP I trae el documento del
+    contratista y SECOP II solo el nombre, así que **sin `nombre` no se mira
+    SECOP II**.
+
+    De las 588 filas de SECOP II, 533 son «Comentarios positivos» y solo 145
+    están publicadas: aquí se filtran los negativos publicados.
+    """
+    return await _ejecuta(integridad.sanciones_contratacion(
+        documento=documento or None, nombre=nombre or None,
+        finalidad=finalidad or None, limite=limite, formato=formato))
+
+
+# -------------------------------------------------------------- educación ----
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_educacion_saber11(agrupar_por: str = "departamento", periodo: str = "",
+                               area: str = "global", departamento: str = "",
+                               minimo_estudiantes: int = 20, limite: int = 20,
+                               formato: str = "tabla",
+                               grafica: bool = True) -> ToolResult:
+    """Promedios de Saber 11 agregados. La fuente es microdato individual y
+    aquí solo sale agregada: no existe el camino para pedir un estudiante.
+
+    `agrupar_por`: "departamento", "municipio", "colegio", "naturaleza",
+    "jornada", "estrato" o "educacion_madre". Las dos últimas son las que hacen
+    visible que el puntaje mide sobre todo origen social.
+
+    `area`: "global", "lectura", "matematicas", "sociales", "naturales",
+    "ingles". `punt_global` no es la suma de las cinco.
+
+    `periodo` es año y semestre pegados (20224). Los que acaban en 4 son la
+    aplicación masiva de octubre y los que acaban en 1 la de marzo, con quince
+    mil estudiantes: promediarlos juntos mezcla dos poblaciones.
+    """
+    return await _ejecuta(educacion.saber11(
+        agrupar_por=agrupar_por, periodo=periodo, area=area,
+        departamento=departamento or None,
+        minimo_estudiantes=minimo_estudiantes, limite=limite, formato=formato,
+        grafica=grafica))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_educacion_indicadores(municipio: str = "", departamento: str = "",
+                                   anio: int = 0, indicador: str = "",
+                                   limite: int = 25, formato: str = "tabla",
+                                   grafica: bool = True) -> ToolResult:
+    """Cobertura, deserción, aprobación y repitencia por municipio y año.
+
+    Con `indicador` devuelve el ranking de municipios; sin él, la ficha
+    completa. Válidos: cobertura_neta, cobertura_bruta, desercion, aprobacion,
+    reprobacion, repitencia, poblacion_5_16, tasa_matriculacion, tamano_grupo.
+
+    La cobertura BRUTA pasa de 100 % con normalidad; la NETA no puede.
+    `poblacion_5_16` es la única población municipal del servidor y NO sirve de
+    denominador para tasas de criminalidad.
+    """
+    return await _ejecuta(educacion.indicadores(
+        municipio=municipio or None, departamento=departamento or None,
+        anio=anio, indicador=indicador, limite=limite, formato=formato,
+        grafica=grafica))
+
+
+# ------------------------------------------------------------- territorio ----
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_territorio_desempeno(municipio: str = "", departamento: str = "",
+                                  anio: int = 0, indicador: str = "mdm",
+                                  limite: int = 25, formato: str = "tabla",
+                                  grafica: bool = True) -> ToolResult:
+    """Índice de Desempeño Municipal del DNP, por municipio y año.
+
+    `indicador`: "mdm", "gestion", "resultados" o "dotaciones". El MDM solo se
+    compara DENTRO del mismo grupo de dotaciones iniciales: un ranking nacional
+    mezcla municipios que no parten del mismo sitio.
+
+    La serie va de 2016 a 2020 y se paró ahí, aunque la ficha del dataset diga
+    que se actualizó en 2022.
+    """
+    return await _ejecuta(territorio.desempeno(
+        municipio=municipio or None, departamento=departamento or None,
+        anio=anio, indicador=indicador, limite=limite, formato=formato,
+        grafica=grafica))
+
+
+# ------------------------------------------------------------------ macro ----
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_macro_trm(fecha: str = "", desde: str = "", hasta: str = "",
+                       formato: str = "tabla") -> ToolResult:
+    """TRM de una fecha, de un rango, o la última certificada.
+
+    Con `fecha` busca el rango de vigencia que la contiene, así que un domingo
+    devuelve la tasa que rige ese domingo —la del viernes— en vez de nada.
+    Fechas en YYYY-MM-DD.
+    """
+    return await _ejecuta(macro.trm(fecha=fecha, desde=desde, hasta=hasta,
+                                    formato=formato))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_macro_convertir(monto: float, fecha: str,
+                             hacia: str = "usd") -> ToolResult:
+    """Pasa un monto entre pesos y dólares a la TRM de una fecha concreta.
+
+    Es la segunda unidad para los montos de SECOP, que son nominales. **No es
+    deflactar**: el dólar también cambia de valor, así que dos cifras en
+    dólares de años distintos siguen sin ser comparables en poder de compra. El
+    IPC del DANE no tiene API abierta.
+
+    `hacia`: "usd" (de pesos a dólares) o "cop" (al revés).
+    """
+    return await _ejecuta(macro.convertir(monto, fecha, hacia=hacia))
+
+
+@mcp.tool(annotations=SOLO_LECTURA)
+async def co_macro_tasas(descripcion: str = "", desde: str = "", hasta: str = "",
+                         limite: int = 20, formato: str = "tabla",
+                         grafica: bool = True) -> ToolResult:
+    """Tasas de captación por producto, promediadas sobre un periodo.
+
+    Hace falta al menos `desde` o `descripcion`: la fuente tiene 2,1 M de filas
+    y sin filtro la agregación agota el tiempo.
+
+    La tasa es un promedio SIMPLE de lo que reportó cada entidad, no la tasa del
+    sistema: esa se pondera por el monto captado, que va al lado.
+    """
+    return await _ejecuta(macro.tasas(
+        descripcion=descripcion or None, desde=desde, hasta=hasta,
+        limite=limite, formato=formato, grafica=grafica))
+
+
 # ----------------------------------------------------------- resources ----
 @mcp.resource("co://secop/datasets")
 def recurso_datasets() -> str:
@@ -419,6 +744,52 @@ def recurso_atribuciones() -> str:
     """Cadenas de atribución exactas. El facet de Socrata solo acepta el
     literal completo: `attribution=DANE` devuelve cero."""
     return json.dumps(reg.ATRIBUCIONES, ensure_ascii=False, indent=2)
+
+@mcp.resource("co://privacidad/politica")
+def recurso_privacidad() -> str:
+    """La política de privacidad vigente y las finalidades admitidas.
+
+    Se expone como recurso para que el cliente pueda leerla sin provocar un
+    error: cuáles son las finalidades válidas, qué fuentes traen personas y qué
+    hace el servidor con los documentos.
+    """
+    return json.dumps({
+        "politica": privacidad.politica(),
+        "configurable_por": "CO_PRIVACIDAD (variable de entorno del operador, "
+                            "no un parámetro de herramienta)",
+        "finalidades": privacidad.FINALIDADES,
+        "fuentes_con_personas": {
+            "c82u-588k": "RUES · 6.962.889 personas naturales de 9.436.330 matrículas",
+            "iaeu-rcn6": "SIRI · 42.124 sanciones con nombre, cédula y cargo",
+            "fs36-azrv": "Contadores · 1.451 sanciones con nombre y cédula",
+            "kgxf-xxbe": "Saber 11 · 7.109.704 registros individuales (solo agregado)",
+        },
+        "enmascarado": "dos primeros y dos últimos dígitos del documento",
+        "sin_finalidad": "las herramientas agregadas (co_integridad_panorama, "
+                         "co_educacion_saber11) nunca la piden",
+    }, ensure_ascii=False, indent=2)
+
+
+@mcp.resource("co://fuentes/familias")
+def recurso_familias() -> str:
+    """Las familias de datasets del registro, con su unidad de análisis."""
+    return json.dumps(
+        {familia: {clave: {"id": d.id, "nombre": d.nombre, "unidad": d.unidad}
+                   for clave, d in miembros.items()}
+         for familia, miembros in reg.FAMILIAS.items()},
+        ensure_ascii=False, indent=2)
+
+
+@mcp.resource("co://sin-fuente-abierta")
+def recurso_sin_fuente() -> str:
+    """Lo que este servidor NO puede responder, y por qué.
+
+    Está como recurso porque la pregunta se hace sola al ver el resto del
+    catálogo, y porque la respuesta correcta a «dame la tasa de homicidios por
+    100.000» es decir que no hay denominador, no inventarse uno.
+    """
+    return json.dumps(reg.SIN_FUENTE_ABIERTA, ensure_ascii=False, indent=2)
+
 
 
 # ----------------------------------------------------------------- CLI ----
