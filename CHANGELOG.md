@@ -205,6 +205,81 @@ Ninguna consulta de `domain/integridad.py` devuelve un cero desnudo. Cada
 respuesta sin coincidencias lo dice con estas cifras, porque una tabla en blanco
 se lee como una absolución y no lo es.
 
+### Trece defectos que encontró una revisión externa del PR
+
+Cuatro patrones, no trece despistes. Los cuatro consisten en lo mismo: la regla
+se escribió en un sitio y la vía de acceso era otra.
+
+**1. La política de privacidad vivía en la herramienta, no en la fuente.**
+`co_datos_consultar` acepta cualquier `dataset_id`, así que pedir `iaeu-rcn6`
+con `detalle="completo"` devolvía las 42.124 sanciones del SIRI con nombre y
+cédula **sin finalidad ni enmascarado**, y `co_datos_exportar` escribía en disco
+el microdato de Saber 11 fila por fila. El motor entero se eludía cambiando de
+herramienta. Ahora `core/privacidad.py` declara `MICRODATO` —Saber 11, Pro y
+TyT, nunca fila a fila por ninguna vía— y `PERSONALES` —RUES, SIRI, multas de
+SECOP I, contadores y responsabilidad fiscal: filas solo con finalidad y
+enmascaradas—, y las tres vías genéricas pasan por la misma puerta. Agrupar por
+documento también: devuelve una fila por persona, así que no es agregar.
+
+**2. El enmascarado cubría las celdas y no el texto.** La misma respuesta
+ocultaba el documento en la tabla y lo escribía completo en el título del
+dossier, en los avisos y en la consulta reproducible del pie. `etiqueta_
+documento` y `redacta_consulta` lo cierran. La URL publicada deja de ser
+ejecutable tal cual en una consulta nominal, y la respuesta lo advierte: se
+conserva el dataset, el resto del filtro y la forma; se va el número, que lo
+tiene quien preguntó.
+
+**3. Decisiones por página donde el dato es por fila.** Una sola persona natural
+en una página del RUES enmascaraba también los NIT de las sociedades que la
+acompañaban, que son justo los que sirven para cruzar con SECOP; `redacta_filas`
+acepta ahora un predicado por fila. Y una búsqueda de sanciones por nombre se
+daba por jurídica sin mirar nada, publicando las cédulas de los contratistas
+personas naturales de SECOP I: ahora se decide con los documentos que volvieron,
+que es la regla de `resuelve_persona` otra vez.
+
+**4. Cifras que afirmaban más de lo que se midió.**
+
+- `Total.cupo_entero` no conocía el `offset`. Una página corta no dice que el
+  total sea lo que trajo, dice que no hay nada **después**: con 25
+  coincidencias, `offset=20` y `limite=20` el sobre anunciaba «5 fila(s) de 5
+  coincidencias». `agregacion` ya lo corregía a mano en su propio sitio, y por
+  eso el descuido reapareció en `buscar` y en `disciplinarias`; ahora el offset
+  va al constructor. Una página vacía con offset no autoriza a afirmar nada.
+- El dossier anunciaba «3 matrículas» con `limite=3`: el tamaño de la muestra
+  presentado como el del documento. Dice «3 o más».
+- **`en_ranking` se tragaba toda excepción y devolvía `""`**, así que `_seguro`
+  nunca veía el fallo y el dossier publicaba «no figura» cuando la fuente había
+  dado timeout: una ausencia atribuida a una fuente que no se pudo consultar,
+  que es el error que este servidor está entero construido para no cometer. Ya
+  propaga. La ficha, que sí quiere tolerancia, la pone en su propio llamador y
+  **dice** que no pudo mirar, en vez de omitir la línea.
+
+**Y tres consultas mal escritas, una de ellas grave:**
+
+- **SIRI guarda el nombre en cuatro columnas y ninguna tiene el completo**, y se
+  buscaba la cadena entera dentro de cada una: `nombre="ANA PEREZ"` no casaba
+  con `primer_nombre="ANA"` ni con `primer_apellido="PEREZ"` y devolvía **cero**
+  con la persona dentro del dataset. Un falso cero en una consulta de
+  antecedentes es el peor fallo posible aquí. Ahora cada término se exige en
+  alguna de las cuatro columnas: contra la fuente viva, «ANA PEREZ» pasó de 0 a
+  **29 coincidencias**.
+- El rango de TRM filtraba por `vigenciadesde >= desde` y perdía el intervalo
+  que ya regía al empezar: `desde=hasta=2024-01-21` devolvía vacío aunque la
+  TRM de ese día es la certificada el 20 y vigente hasta el 22, que
+  `trm(fecha=…)` sí encontraba. La misma fecha daba dos respuestas según por
+  dónde se preguntara. Ahora se seleccionan los intervalos que **se solapan**.
+- `co_macro_tasas` exigía `desde` o `descripcion` comprobando que hubiera
+  salido un filtro, y `hasta` producía filtro: un límite superior posterior al
+  último reporte no descarta nada, así que la agregación recorría los 2,1 M de
+  filas. Es la consulta que la validación existía para evitar.
+- El ranking devolvía el NIT como `"899999068.00"` —la fuente lo sirve así
+  aunque esté declarado `Number`—. Encadenado a `co_empresas_ficha`,
+  `solo_digitos` lo convertía en `89999906800` y consultaba otro documento: la
+  ficha de Ecopetrol salía vacía sin que nada avisara de por qué.
+
+26 pruebas nuevas en `tests/test_revision_pr1.py`, una por defecto, y las dos
+tablas de la revisión comprobadas contra la API viva.
+
 ### Una nota del registro que caducó, y la suite de contrato lo destapó
 
 **«HURTO A COMERCIO» y «HURTO A RESIDENCIAS» ya no son el mismo dato.** Lo

@@ -186,7 +186,7 @@ respuesta, así que la consulta es auditable por quien la lea después.
 
 ```
 co_empresas_ficha(documento="1023456789")
-→ [PRIVACIDAD] La ficha de 1023456789 identifica a una persona natural, así que
+→ [PRIVACIDAD] La ficha de 10••••••89 identifica a una persona natural, así que
   hay que declarar `finalidad`. No la supongas: pregúntasela a quien te lo pidió.
   Sugerencia: declara una de control_fiscal, debida_diligencia, investigacion,
   periodismo, o responde sin identificar a nadie con co_empresas_buscar con
@@ -206,6 +206,39 @@ dígitos (`1023456789` → `10••••••89`), lo que deja comprobar que 
 hablan de la misma persona sin escribir el número. **El NIT de una sociedad no
 se enmascara**: es información mercantil pública y ocultarlo dejaría la
 respuesta inútil para cruzarla con SECOP.
+
+La máscara cubre las celdas, el **texto** —títulos, avisos, mensajes de error— y
+la **consulta reproducible** del pie. Las tres cosas, porque enmascarar la
+columna y escribir el número completo cuatro líneas más abajo no protege nada.
+En una consulta nominal la URL publicada deja por eso de ser ejecutable tal
+cual, y la respuesta lo dice: se conserva el dataset, el resto del filtro y la
+forma de la consulta, y se va el número, que lo tiene quien preguntó.
+
+Y se decide fila por fila: una página del RUES con una persona natural y cuatro
+sociedades enmascara una cédula y deja los cuatro NIT visibles.
+
+### La política la impone la fuente, no la herramienta
+
+Las personas están en el dataset, no en la vía de acceso. `co_datos_consultar`,
+`co_datos_agregar` y `co_datos_exportar` aceptan cualquier `dataset_id`, así que
+si el motor viviera solo en las herramientas especializadas bastaría con venir
+por ahí: pedir `iaeu-rcn6` con `detalle="completo"` devolvía el SIRI entero con
+nombre y cédula. Las tres vías genéricas pasan ahora por la misma puerta y
+aceptan `finalidad`.
+
+Dos consecuencias que conviene conocer:
+
+- **Saber 11, Saber Pro y Saber TyT no salen fila a fila por ninguna vía**, y no
+  hay finalidad que lo abra: una fila es un estudiante con su estrato y la
+  escolaridad de sus padres. Agregados, sin límite.
+- **Agrupar por documento cuenta como identificar.** `agrupar_por="numero_
+  identificacion"` devuelve una fila por persona, así que pide finalidad y la
+  clave de grupo sale enmascarada. Agrupar por entidad, departamento o año no
+  pide nada.
+
+Lo que esta puerta **no** cubre: los contratos de SECOP, donde el proveedor de
+una prestación de servicios es una persona natural con su cédula. Son fuentes
+anteriores al motor y las exponen diecinueve herramientas.
 
 ### Cómo se decide si un documento es de una persona
 

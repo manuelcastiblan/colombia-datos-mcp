@@ -52,15 +52,32 @@ class Total:
         return cls(int(n), "contado")
 
     @classmethod
-    def cupo_entero(cls, filas, limite: int) -> "Total":
+    def cupo_entero(cls, filas, limite: int, offset: int = 0) -> "Total":
         """El total cuando la respuesta cabía entera.
 
-        Si la fuente devolvió MENOS de lo que se le pidió, no hay más y
-        `len(filas)` sí es el total, exacto y sin coste. Si llenó el límite, no
-        consta: eso es justo lo que se afirmaba a la ligera.
+        Si la fuente devolvió MENOS de lo que se le pidió, no hay más detrás y
+        el total es exacto sin coste. Si llenó el límite, no consta: eso es
+        justo lo que se afirmaba a la ligera.
+
+        **`offset` no es decorativo.** Una página corta no dice que el total
+        sea `len(filas)`, dice que no hay nada DESPUÉS de ella: las filas
+        saltadas también cuentan, así que el total es `offset + len(filas)`.
+        Sin este argumento, pedir 20 filas con `offset=20` de 25 coincidencias
+        devolvía cinco y el sobre anunciaba «5 fila(s) de 5 coincidencias»,
+        que es la paginación negándose a sí misma. `agregacion` ya había
+        tropezado con esto y lo corregía en su propio sitio; que el tipo lo
+        sepa es lo que evita descubrirlo una tercera vez.
+
+        Y una página VACÍA con `offset` no permite afirmar nada: el offset
+        puede estar más allá del final, así que `offset + 0` sería un total
+        inventado. Ahí no consta, y quien llame puede contar.
         """
-        return (cls(len(filas), "cabia_entero") if len(filas) < limite
-                else cls(None, "desconocido"))
+        n = len(filas)
+        if n >= int(limite):
+            return cls(None, "desconocido")
+        if int(offset) and not n:
+            return cls(None, "desconocido")
+        return cls(int(offset) + n, "cabia_entero")
 
     @classmethod
     def completo(cls, n: int) -> "Total":

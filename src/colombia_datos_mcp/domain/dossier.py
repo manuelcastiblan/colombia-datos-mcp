@@ -43,6 +43,25 @@ def _literales_numero(documento: str) -> str:
     return ", ".join(nit_mod.equivalentes(nit_mod.solo_digitos(documento)))
 
 
+# El bloque del RUES pide tres matrículas: suficiente para ver que hay varias,
+# no una colección cerrada.
+TOPE_MATRICULAS = 3
+
+
+def _cuantas_matriculas(n: int) -> str:
+    """«3 matrículas» con `limite=3` no es el total, es el cupo de la consulta.
+
+    Anunciar el tamaño de la muestra como si fuera el del documento es el mismo
+    error que `Total` persigue en el sobre, aquí dentro de una frase. Cuando la
+    consulta llena su límite no se sabe cuántas hay, así que se dice.
+    """
+    if n <= 1:
+        return ""
+    if n >= TOPE_MATRICULAS:
+        return f" · {n} o más matrículas"
+    return f" · {n} matrículas"
+
+
 async def _seguro(corrutina, etiqueta: str):
     """Ejecuta un bloque del dossier sin dejar que su fallo tumbe los demás.
 
@@ -84,7 +103,7 @@ async def de_documento(documento: str, finalidad: str | None = None,
                     "organizacion_juridica, estado_matricula, camara_comercio, "
                     "fecha_matricula",
         donde=f"(nit in ({texto}) OR numero_identificacion in ({texto}))",
-        ordenar="fecha_matricula DESC", limite=3), "RUES")
+        ordenar="fecha_matricula DESC", limite=TOPE_MATRICULAS), "RUES")
     nombre_rues, es_natural_rues, aviso_clasificacion = "", False, None
     if motivo:
         bloques.append(("Registro mercantil", "RUES · c82u-588k", motivo))
@@ -100,7 +119,7 @@ async def de_documento(documento: str, finalidad: str | None = None,
             f"matrícula {fmt.limpia_texto(m.get('estado_matricula'))} en "
             f"{fmt.limpia_texto(m.get('camara_comercio'))} desde "
             f"{empresas.fecha_rues(m.get('fecha_matricula'))}"
-            + (f" · {len(rues['filas'])} matrículas" if len(rues["filas"]) > 1 else "")))
+            + _cuantas_matriculas(len(rues["filas"]))))
     else:
         consultas.append(rues["consulta"])
         bloques.append((
@@ -190,12 +209,18 @@ async def de_documento(documento: str, finalidad: str | None = None,
     filas = [{"ámbito": a, "fuente": f, "hallazgo": h} for a, f, h in bloques]
     filas = privacidad.redacta_filas(filas, persona_juridica=juridica)
 
-    titulo = (f"**Documento {d}**"
+    # El título se escribía con el documento entero aunque la tabla fuera
+    # enmascarada, así que un dossier autorizado volvía a dejar la cédula en la
+    # conversación una línea antes de avisar de que iba oculta.
+    titulo = (f"**Documento {privacidad.etiqueta_documento(d, persona_juridica=juridica)}**"
               + (f" — {nombre_rues}" if nombre_rues else "")
               + (f" · DV {nit_mod.digito_verificacion(d)}" if juridica and len(d) == 9 else ""))
 
+    consulta = " · ".join(consultas)
+    if not juridica:
+        consulta = privacidad.redacta_consulta(consulta, d)
     sobre = Sobre(datos=filas, total=Total.completo(len(filas)),
-                  mostrar_conteo=False, consulta=" · ".join(consultas),
+                  mostrar_conteo=False, consulta=consulta,
                   fuente=Fuente(id="dossier",
                                 nombre="RUES + SECOP + Supersociedades + 4 fuentes de sanciones",
                                 licencia="CC BY-SA 4.0 (verificar por dataset)"))
@@ -213,5 +238,6 @@ async def de_documento(documento: str, finalidad: str | None = None,
         "contratista registrado con un número mal digitado, no aparece.")
     if not juridica:
         privacidad.avisa(sobre, finalidad=finalidad)
+        sobre.advertir(privacidad.AVISO_CONSULTA_REDACTADA)
     return sobre.render(lambda f: titulo + "\n\n" + fmt.tabla_markdown(f),
                         formato=formato)

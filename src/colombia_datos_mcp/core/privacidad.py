@@ -202,6 +202,24 @@ def enmascara(documento) -> str:
     return d[:2] + "•" * (len(d) - 4) + d[-2:]
 
 
+def etiqueta_documento(documento, *, persona_juridica: bool = False) -> str:
+    """El documento como se escribe en el TEXTO de una respuesta.
+
+    Las celdas de la tabla pasaban por `redacta_filas` y los títulos, avisos y
+    mensajes de error no pasaban por nada, así que la misma respuesta
+    enmascaraba la columna y escribía la cédula completa en su encabezado. El
+    motor no existe para que la tabla quede limpia, existe para que el número
+    no quede escrito en un historial de conversación: si se escapa por el
+    título, no ha servido de nada.
+
+    El NIT de una sociedad sale tal cual, por lo mismo que no se enmascara en
+    las filas: es información mercantil pública.
+    """
+    if persona_juridica or politica() == PERMISIVA:
+        return str(documento)
+    return enmascara(documento)
+
+
 def resuelve_persona(documento, categorias) -> tuple[bool, str | None]:
     """¿Las matrículas del RUES son de una persona natural? Y si las señales
     discrepan, el aviso que hay que poner en el sobre.
@@ -243,24 +261,157 @@ def resuelve_persona(documento, categorias) -> tuple[bool, str | None]:
     )
 
 
-def redacta_filas(filas: list[dict], *, persona_juridica: bool = False) -> list[dict]:
+def juridica_en_rues(fila: dict) -> bool:
+    """¿Esta fila del RUES es de una sociedad? Se pregunta por filas, no por
+    páginas.
+
+    Se comprueba en POSITIVO —que la categoría sea la de sociedad— y no por
+    descarte: hoy la columna tiene exactamente dos valores, pero si la fuente
+    añadiera un tercero, `!= PERSONA NATURAL` lo daría por empresa, que es el
+    lado que expone a alguien. Hay contrato que vigila que sigan siendo dos.
+    Sin la columna no se puede afirmar nada, así que no es jurídica.
+    """
+    return str(fila.get("categoria_matricula") or "") == RUES_JURIDICA
+
+
+def _enmascara_fila(fila: dict, campos: set) -> dict:
+    return {k: (enmascara(v) if k in campos and v not in (None, "") else v)
+            for k, v in fila.items()}
+
+
+def redacta_filas(filas: list[dict], *, persona_juridica: bool = False,
+                  es_juridica=None) -> list[dict]:
     """Enmascara los documentos de las filas que son de personas naturales.
 
     Con `persona_juridica=True` no se toca nada: el NIT de una sociedad es
     información mercantil pública y enmascararlo haría la respuesta inútil para
     cruzarla con SECOP, que es justo para lo que sirve.
 
+    `es_juridica` decide **fila por fila** y manda sobre `persona_juridica`.
+    Existe porque la decisión por página era demasiado gruesa en los dos
+    sentidos: una búsqueda en el RUES con `solo_juridicas=False` que trajera
+    una sola persona natural enmascaraba también los NIT públicos de las
+    sociedades de esa misma página, y esos NIT son justo lo que se necesita
+    para cruzar con SECOP. Una página mezclada es lo normal, no el caso raro.
+
     Respeta `CO_PRIVACIDAD=permisiva` porque esa decisión es del operador.
     """
-    if persona_juridica or politica() == PERMISIVA:
-        return filas
-    if not filas:
+    if politica() == PERMISIVA or not filas:
         return filas
     campos = {c for f in filas for c in f if es_columna_documento(c)}
     if not campos:
         return filas
-    return [{k: (enmascara(v) if k in campos and v not in (None, "") else v)
-             for k, v in f.items()} for f in filas]
+    if es_juridica is None:
+        if persona_juridica:
+            return filas
+        return [_enmascara_fila(f, campos) for f in filas]
+    return [f if es_juridica(f) else _enmascara_fila(f, campos) for f in filas]
+
+
+def redacta_consulta(consulta: str | None, *documentos) -> str | None:
+    """Enmascara los documentos que viajan dentro de la URL reproducible.
+
+    El sobre publica la consulta exacta, y eso es deliberado: una cifra sin su
+    consulta reproducible no sirve para uso periodístico o de control fiscal.
+    Pero en una consulta nominal el filtro ES el documento, así que la
+    respuesta enmascaraba las celdas y escribía el número completo cuatro
+    líneas más abajo, en el pie. El enmascarado no servía para nada.
+
+    Lo que se conserva es lo que da trazabilidad: el dataset, el resto del
+    filtro y la forma de la consulta. Lo que se va es el número. La URL deja
+    de ser ejecutable tal cual, y por eso quien llama debe advertirlo con
+    `AVISO_CONSULTA_REDACTADA`: una URL que no corre y no lo dice sería peor
+    que ninguna.
+    """
+    if not consulta or politica() == PERMISIVA:
+        return consulta
+    for documento in documentos:
+        d = _digitos(documento)
+        if len(d) >= 6:
+            consulta = consulta.replace(d, enmascara(d))
+    return consulta
+
+
+# ------------------------------------------------------- puerta por fuente --
+# Hasta aquí la política vivía en las herramientas especializadas, y eso dejaba
+# la puerta de atrás abierta: `co_datos_consultar` acepta cualquier
+# `dataset_id`, así que pedir `iaeu-rcn6` con detalle="completo" devolvía las
+# sanciones del SIRI con nombre y cédula sin finalidad ni enmascarado, y
+# `co_datos_exportar` escribía en disco el microdato de Saber 11 fila por fila.
+# Una regla que se elude cambiando de herramienta no es una regla. Por eso la
+# política se ancla al DATASET, que es donde están las personas, y no a la
+# herramienta, que es solo la vía de acceso.
+
+# Microdato individual: no se expone fila a fila por ninguna vía. No hay
+# finalidad que lo abra, porque no hay pregunta legítima sobre un estudiante
+# concreto que este servidor deba responder.
+MICRODATO = {
+    "kgxf-xxbe",   # ICFES · Saber 11, 7.109.704 registros individuales
+    "u37r-hjmu",   # ICFES · Saber Pro
+    "iwgf-bkfk",   # ICFES · Saber TyT
+}
+
+# Fuentes cuyas filas pueden identificar a una persona natural. Devolverlas
+# exige finalidad y salen enmascaradas.
+PERSONALES = {
+    "c82u-588k",   # RUES: 6.962.889 de 9.436.330 filas son personas naturales
+    "iaeu-rcn6",   # SIRI: nombre, cédula, cargo y sanción
+    "4n4q-k399",   # SECOP I · Multas y sanciones: documento del contratista
+    "fs36-azrv",   # Junta Central de Contadores: cédula del sancionado
+    "jr8e-e8tu",   # Contraloría · Responsabilidad fiscal: cédula
+}
+
+# Lo que NO cubre: los datasets de contratación de SECOP, donde el proveedor de
+# un contrato de prestación de servicios es una persona natural con su cédula.
+# Son fuentes anteriores al motor, las exponen diecinueve herramientas y
+# cerrarlas aquí cambiaría el comportamiento de todas. Queda dicho, no hecho.
+
+
+def exige_agregado(dataset_id: str, *, que: str) -> None:
+    """Bloquea las filas de un microdato individual, por cualquier vía."""
+    if str(dataset_id) in MICRODATO:
+        raise ErrorPrivacidad(
+            f"{que} devolvería filas de {dataset_id}, que es microdato "
+            "individual: una fila es una persona.",
+            "Agrégalo: co_educacion_saber11 responde por municipio, "
+            "departamento, estrato o año, y co_datos_agregar admite cualquier "
+            "agrupación sobre este dataset.",
+        )
+
+
+def es_dataset_personal(dataset_id: str) -> bool:
+    return str(dataset_id) in PERSONALES
+
+
+def hay_personas(dataset_id: str, filas: list[dict]) -> bool:
+    """¿La página devuelta identifica a alguna persona natural?
+
+    En el RUES se pregunta a la fila, porque tres cuartas partes del dataset
+    son personas y la otra cuarta no: una consulta de sociedades no tiene por
+    qué pedir permiso. En las demás fuentes personales toda fila es una
+    persona, así que basta con que haya filas.
+    """
+    if not es_dataset_personal(dataset_id) or not filas:
+        return False
+    if str(dataset_id) == "c82u-588k":
+        return any(not juridica_en_rues(f) for f in filas)
+    return True
+
+
+def revisa_filas(dataset_id: str, filas: list[dict], finalidad: str | None, *,
+                 que: str, alternativa: str) -> tuple[list[dict], str | None]:
+    """La puerta de las vías genéricas: finalidad si hay personas, y máscara.
+
+    Se decide con las filas YA traídas, no con el filtro, por la misma razón
+    que `resuelve_persona`: lo que manda es lo que la fuente devolvió, no lo
+    que la forma de la consulta sugería.
+    """
+    if not hay_personas(dataset_id, filas):
+        return filas, None
+    normal = exige_finalidad(finalidad, que=que, alternativa=alternativa)
+    if str(dataset_id) == "c82u-588k":
+        return redacta_filas(filas, es_juridica=juridica_en_rues), normal
+    return redacta_filas(filas), normal
 
 
 # ---------------------------------------------------------------- avisos --
@@ -276,6 +427,11 @@ AVISO_DATO_PERSONAL = (
     "consultar y no libres de cualquier uso: la Ley 1581 de 2012 pide finalidad "
     "legítima y no autoriza a recopilarlos, cruzarlos ni redifundirlos para "
     "otra cosa."
+)
+AVISO_CONSULTA_REDACTADA = (
+    "La consulta reproducible lleva el documento enmascarado, así que no corre "
+    "tal cual: el dataset, el resto del filtro y su forma sí son exactos. Quien "
+    "necesite reejecutarla tiene el número, porque es el que preguntó."
 )
 AVISO_SOLO_AGREGADO = (
     "Esta fuente es microdato individual, así que este servidor solo la expone "

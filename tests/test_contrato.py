@@ -13,7 +13,7 @@ el código. Si una deja de cumplirse, hay que cambiar el código, no la prueba.
 import pytest
 
 from colombia_datos_mcp.adapters import socrata
-from colombia_datos_mcp.core import texto
+from colombia_datos_mcp.core import privacidad, texto
 from colombia_datos_mcp.domain import geo, secop
 from colombia_datos_mcp.registry import datasets as reg
 
@@ -547,3 +547,52 @@ async def test_el_rues_tiene_matriculas_mal_clasificadas():
     # Y la regla la resuelve del lado correcto.
     natural, aviso = privacidad.resuelve_persona("890903938", categorias)
     assert natural is False and aviso
+
+
+# ------------------------------------------- supuestos de la revisión del PR 1 --
+async def test_el_rues_sigue_teniendo_exactamente_dos_categorias():
+    """`juridica_en_rues` comprueba en POSITIVO que la categoría sea la de
+    sociedad, en vez de descartar «PERSONA NATURAL». La diferencia solo importa
+    si aparece un tercer valor: con el descarte, ese tercero se daría por
+    empresa y el documento saldría sin enmascarar. Esto vigila el supuesto."""
+    r = await socrata.consultar("c82u-588k",
+                                seleccionar="categoria_matricula, count(*) as n",
+                                agrupar="categoria_matricula", limite=10)
+    categorias = {f["categoria_matricula"] for f in r["filas"]}
+    assert categorias == {privacidad.RUES_JURIDICA, privacidad.RUES_NATURAL}, categorias
+
+
+async def test_un_nombre_de_dos_terminos_encuentra_personas_en_siri():
+    """El falso cero que destapó la revisión: SIRI guarda el nombre en cuatro
+    columnas y ninguna tiene el completo, así que buscar la cadena entera en
+    cada una devolvía cero con la persona dentro. Si esto vuelve a dar cero, el
+    filtro por términos se rompió."""
+    donde = " AND ".join(
+        "(" + " OR ".join(socrata.filtro_texto_libre(c, t) for c in
+                          ("primer_nombre", "segundo_nombre", "primer_apellido",
+                           "segundo_apellido")) + ")"
+        for t in ("ANA", "PEREZ"))
+    r = await socrata.consultar("iaeu-rcn6", seleccionar="count(*) as n", donde=donde,
+                                limite=1)
+    assert int(r["filas"][0]["n"]) > 0
+
+
+async def test_la_trm_de_un_dia_sin_certificacion_esta_en_un_intervalo_anterior():
+    """La TRM del 21-ene-2024 es la certificada el 20, vigente hasta el 22.
+    Filtrar por `vigenciadesde >= desde` la perdía, y entonces la misma fecha
+    daba dos respuestas según se preguntara por `fecha` o por rango."""
+    r = await socrata.consultar(
+        "32sa-8pi3",
+        donde=("vigenciahasta >= '2024-01-21T00:00:00' AND "
+               "vigenciadesde <= '2024-01-21T23:59:59'"),
+        ordenar="vigenciadesde DESC", limite=5)
+    assert r["filas"], "el rango que solapa el 21-ene-2024 quedó vacío"
+    assert r["filas"][0]["vigenciadesde"][:10] < "2024-01-21"
+
+
+async def test_el_ranking_sigue_sirviendo_el_nit_con_decimales():
+    """`"899999068.00"` en una columna declarada Number. Si la fuente lo
+    arreglara, `_nit_entero` sobra; mientras no lo haga, es lo que evita que el
+    NIT del ranking encadenado a la ficha consulte otro documento."""
+    r = await socrata.consultar("6cat-2gcs", seleccionar="nit", limite=1)
+    assert "." in str(r["filas"][0]["nit"])

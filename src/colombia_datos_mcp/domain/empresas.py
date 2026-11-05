@@ -128,7 +128,8 @@ async def buscar(nombre: str | None = None, documento: str | None = None,
         avisos.append(AVISO_DOS_COLUMNAS)
         if not privacidad.es_persona_juridica(documento) and solo_juridicas:
             avisos.append(
-                f"El documento {documento} no tiene forma de NIT de sociedad "
+                f"El documento {privacidad.etiqueta_documento(documento)} no "
+                f"tiene forma de NIT de sociedad "
                 f"(clase: {privacidad.clase_documento(documento)}). Con "
                 "`solo_juridicas=True` la búsqueda puede salir vacía aunque la "
                 "persona esté matriculada."
@@ -169,15 +170,24 @@ async def buscar(nombre: str | None = None, documento: str | None = None,
                                 ordenar="razon_social", limite=tope, offset=offset)
     filas = [{k: fmt.limpia_texto(v) if isinstance(v, str) else v
               for k, v in f.items()} for f in r["filas"]]
-    hay_naturales = any(
-        str(f.get("categoria_matricula") or "") == privacidad.RUES_NATURAL
-        for f in filas)
-    filas = privacidad.redacta_filas(
-        filas, persona_juridica=juridica_segura or not hay_naturales)
+    hay_naturales = any(not privacidad.juridica_en_rues(f) for f in filas)
+    if juridica_segura:
+        # El SoQL ya restringió a sociedades: no hay nada que enmascarar.
+        hay_naturales = False
+    else:
+        # Fila por fila, y no por página: una sola persona natural en la página
+        # enmascaraba también los NIT de las sociedades que la acompañaban, que
+        # son justo los que sirven para cruzar con SECOP.
+        filas = privacidad.redacta_filas(
+            filas, es_juridica=privacidad.juridica_en_rues)
 
+    consulta = r["consulta"]
+    if documento and hay_naturales:
+        consulta = privacidad.redacta_consulta(consulta, documento)
+        avisos.append(privacidad.AVISO_CONSULTA_REDACTADA)
     sobre = Sobre(datos=filas, offset=offset, orden="razon_social",
-                  consulta=r["consulta"], fuente=_fuente(RUES, _ATRIB_RUES))
-    sobre.total = Total.cupo_entero(r["filas"], tope)
+                  consulta=consulta, fuente=_fuente(RUES, _ATRIB_RUES))
+    sobre.total = Total.cupo_entero(r["filas"], tope, offset=offset)
     if not sobre.total.consta:
         sobre.total = Total.contado(await socrata.contar(RUES.id, donde=donde))
     sobre.advertir(AVISO_MATRICULA)
@@ -230,7 +240,7 @@ async def ficha(documento: str, finalidad: str | None = None):
     if es_natural or (not matriculas and not privacidad.es_persona_juridica(documento)):
         finalidad = privacidad.exige_finalidad(
             finalidad,
-            que=f"La ficha de {documento}",
+            que=f"La ficha de {privacidad.etiqueta_documento(documento)}",
             alternativa="co_empresas_buscar con solo_juridicas=True si lo que "
                         "buscas es una sociedad",
         )
@@ -252,8 +262,12 @@ async def ficha(documento: str, finalidad: str | None = None):
         })
     filas = privacidad.redacta_filas(filas, persona_juridica=not es_natural)
 
+    consulta = (privacidad.redacta_consulta(r["consulta"], documento)
+                if es_natural else r["consulta"])
     sobre = Sobre(datos=filas, orden="fecha_matricula DESC",
-                  consulta=r["consulta"], fuente=_fuente(RUES, _ATRIB_RUES))
+                  consulta=consulta, fuente=_fuente(RUES, _ATRIB_RUES))
+    if es_natural:
+        sobre.advertir(privacidad.AVISO_CONSULTA_REDACTADA)
     # Diez matrículas es un tope, no una colección cerrada: hay documentos con
     # más. `Total.completo(len(filas))` habría dicho «10 de 10» habiendo doce.
     sobre.total = Total.cupo_entero(matriculas, TOPE_MATRICULAS)
@@ -261,7 +275,8 @@ async def ficha(documento: str, finalidad: str | None = None):
         sobre.total = Total.contado(await socrata.contar(RUES.id, donde=donde))
     if not filas:
         sobre.advertir(
-            f"El documento {documento} no tiene matrícula en el RUES. Puede ser "
+            f"El documento {privacidad.etiqueta_documento(documento, persona_juridica=not es_natural)} "
+            "no tiene matrícula en el RUES. Puede ser "
             "una entidad pública —que no se matricula en cámara de comercio— o "
             "un número que no existe. Compruébalo en SECOP con "
             "co_secop_perfil_proveedor antes de concluir que no existe."
@@ -269,14 +284,22 @@ async def ficha(documento: str, finalidad: str | None = None):
         return sobre.render(lambda _f: "_Sin matrícula en el RUES._")
 
     # Establecimientos y ranking son extras: si fallan, la ficha sale igual.
+    # Pero el fallo se DICE. Omitir la línea en silencio deja al lector sin
+    # saber si el dato es que no hay, o que no se pudo mirar.
     extras = []
     cuantos = await _cuenta(ESTABLECIMIENTOS.id,
                             f"nit_propietario in ({_literales(documento)})")
-    if cuantos is not None:
-        extras.append(f"**Establecimientos a su nombre:** {fmt.numero(cuantos)}")
-    grandes = await en_ranking(documento)
-    if grandes:
-        extras.append("**En las 10.000 más grandes:** " + grandes)
+    extras.append(f"**Establecimientos a su nombre:** {fmt.numero(cuantos)}"
+                  if cuantos is not None else
+                  "**Establecimientos a su nombre:** no consultable (la fuente no respondió)")
+    try:
+        grandes = await en_ranking(documento)
+    except Exception as exc:                                      # noqa: BLE001
+        extras.append("**En las 10.000 más grandes:** no consultable "
+                      f"({type(exc).__name__})")
+    else:
+        if grandes:
+            extras.append("**En las 10.000 más grandes:** " + grandes)
 
     sobre.advertir(AVISO_MATRICULA)
     sobre.advertir(AVISO_DOS_COLUMNAS)
@@ -330,14 +353,16 @@ async def en_ranking(documento: str) -> str:
     d = nit_mod.solo_digitos(documento)
     if not d:
         return ""
-    try:
-        r = await socrata.consultar(
-            MAS_GRANDES.id,
-            seleccionar="a_o_de_corte, ingresos_operacionales, macrosector",
-            donde=f"nit in ({', '.join(nit_mod.equivalentes(d))})",
-            ordenar="a_o_de_corte DESC", limite=6)
-    except Exception:
-        return ""
+    # Aquí NO se captura el fallo. Se capturaba, y devolver "" ante un timeout
+    # hacía que el dossier escribiera «no figura»: una ausencia atribuida a una
+    # fuente que no se pudo consultar, que es el error que este servidor está
+    # entero construido para no cometer. Quien quiera tolerancia la pone en su
+    # propio llamador, donde además sabe qué decir en su lugar.
+    r = await socrata.consultar(
+        MAS_GRANDES.id,
+        seleccionar="a_o_de_corte, ingresos_operacionales, macrosector",
+        donde=f"nit in ({', '.join(nit_mod.equivalentes(d))})",
+        ordenar="a_o_de_corte DESC", limite=6)
     if not r["filas"]:
         return ""
     anios = [str(fmt.a_numero(f.get("a_o_de_corte")) or "")[:4] for f in r["filas"]]
@@ -499,7 +524,7 @@ async def ranking(anio: int = 0, macrosector: str | None = None,
 
     crudos = [fmt.a_numero(f.get(campo)) or 0 for f in r["filas"]]
     filas = [{"empresa": fmt.limpia_texto(f.get("raz_n_social")),
-              "NIT": f.get("nit"),
+              "NIT": _nit_entero(f.get("nit")),
               "macrosector": fmt.limpia_texto(f.get("macrosector")),
               "departamento": fmt.limpia_texto(f.get("departamento_domicilio")),
               "ingresos": fmt.numero(f.get("ingresos_operacionales")),
@@ -525,6 +550,24 @@ async def ranking(anio: int = 0, macrosector: str | None = None,
     )
     sobre.advertir(AVISO_ESCALA_RANKING)
     return sobre.render(lambda f: fmt.tabla_markdown(f), formato=formato)
+
+
+def _nit_entero(valor) -> str:
+    """El NIT del ranking, servido como `"899999068.00"`, como entero.
+
+    La columna está declarada `Number` y la fuente la sirve con dos decimales.
+    Devolverla tal cual rompía el encadenamiento silenciosamente: el modelo
+    copiaba `899999068.00` a `co_empresas_ficha`, donde `solo_digitos` lo
+    convierte en `89999906800` y consulta otro documento, de modo que la ficha
+    de Ecopetrol salía vacía sin que nada avisara de por qué.
+    """
+    d = str(valor or "").strip()
+    if not d:
+        return ""
+    try:
+        return str(int(float(d)))
+    except (TypeError, ValueError):
+        return d
 
 
 def _orden_importe(campo: str) -> str:

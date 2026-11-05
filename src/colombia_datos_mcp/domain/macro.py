@@ -114,9 +114,17 @@ async def trm(fecha: str = "", desde: str = "", hasta: str = "",
                 "varios días cuando hay fin de semana o festivo.")
         return sobre.render(lambda x: fmt.tabla_markdown(x), formato=formato)
 
+    # Una fila de esta fuente es un INTERVALO de vigencia, no un día. Filtrar
+    # por `vigenciadesde >= desde` descartaba la tasa que ya regía al empezar el
+    # rango: con desde=hasta=2024-01-21 se perdía la certificada el 20 y vigente
+    # hasta el 22, que es justamente la TRM de ese día. Peor que incompleto:
+    # `trm(fecha="2024-01-21")` sí la devolvía, así que la misma fecha daba dos
+    # respuestas distintas según por dónde se preguntara. Se seleccionan los
+    # intervalos que SE SOLAPAN con el rango, que es lo que significa la
+    # pregunta.
     partes = []
     if desde:
-        partes.append(f"vigenciadesde >= '{_normaliza_fecha(desde, 'desde')}'")
+        partes.append(f"vigenciahasta >= '{_normaliza_fecha(desde, 'desde')}T00:00:00'")
     if hasta:
         partes.append(f"vigenciadesde <= '{_normaliza_fecha(hasta, 'hasta')}T23:59:59'")
     donde = " AND ".join(partes) or None
@@ -223,12 +231,18 @@ async def tasas(descripcion: str | None = None, desde: str = "", hasta: str = ""
                 "No es un fallo.")
             return sobre.render(lambda _f: "_Sin coincidencias._")
         partes.append(cat.filtro)
-    donde = " AND ".join(partes) or None
-    if not donde:
+    # Se comprueba lo que de verdad acota, no que haya SALIDO un filtro: con
+    # solo `hasta` había filtro —y por tanto pasaba—, pero un límite superior
+    # posterior al último reporte no descarta nada, así que la agregación
+    # recorría los 2,1 M de filas: exactamente la consulta que esta validación
+    # existe para evitar.
+    if not (desde or descripcion):
         raise ErrorValidacion(
             "Hace falta al menos `desde` o `descripcion`.",
             "La fuente tiene 2.102.178 filas: sin filtro la agregación hace un "
-            "recorrido completo y agota el tiempo.")
+            "recorrido completo y agota el tiempo. `hasta` por sí solo no "
+            "acota nada: pasa también `desde`.")
+    donde = " AND ".join(partes) or None
 
     tope = min(int(limite), 100)
     SELECT = ("descripcion, count(*) as reportes, avg(tasa) as tasa_promedio, "

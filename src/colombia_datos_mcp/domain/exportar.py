@@ -20,6 +20,7 @@ from pathlib import Path
 
 from ..adapters import socrata
 from ..core import format as fmt
+from ..core import privacidad
 from ..core.envelope import Fuente, Sobre
 from ..core.errors import ErrorValidacion
 
@@ -74,7 +75,7 @@ def _escribe(ruta: Path, filas: list[dict], formato: str) -> None:
 
 async def exportar(dataset_id: str, nombre_archivo: str, donde=None, seleccionar=None,
                    ordenar=None, formato: str = "csv", max_filas: int = 50_000,
-                   agrupar_por=None, metricas=None, teniendo=None):
+                   agrupar_por=None, metricas=None, teniendo=None, finalidad=None):
     """Descarga un dataset filtrado y lo guarda. Devuelve la ruta y el conteo.
 
     Con `agrupar_por` lo que se exporta es la **tabla de grupos**, no las filas.
@@ -92,6 +93,12 @@ async def exportar(dataset_id: str, nombre_archivo: str, donde=None, seleccionar
     nombre = _nombre_seguro(nombre_archivo, formato)
 
     agrupando = bool(str(agrupar_por or "").strip())
+    # Escribir en disco es la operación menos reversible del servidor: lo que
+    # sale por aquí ya no pasa por ninguna advertencia. Así que la puerta se
+    # cierra arriba, antes incluso de contar: a un dataset que no se va a
+    # exportar no hay por qué preguntarle nada.
+    if not agrupando:
+        privacidad.exige_agregado(dataset_id, que="Una exportación de filas")
     grupos = None
     if agrupando:
         from .catalogo import grupos_soql
@@ -130,11 +137,45 @@ async def exportar(dataset_id: str, nombre_archivo: str, donde=None, seleccionar
             agotada = True
             break
 
+    personas = False
+    if agrupando:
+        from .catalogo import _campos_citados as _citados
+
+        if (privacidad.es_dataset_personal(dataset_id)
+                and any(privacidad.es_columna_documento(c)
+                        for c in _citados(agrupar_por))):
+            personas = True
+            finalidad = privacidad.exige_finalidad(
+                finalidad,
+                que=f"Exportar {dataset_id} agrupado por documento",
+                alternativa="agrupar por entidad, departamento, año o tipo",
+            )
+            filas = privacidad.redacta_filas(filas)
+    elif privacidad.hay_personas(dataset_id, filas):
+        personas = True
+        finalidad = privacidad.exige_finalidad(
+            finalidad,
+            que=f"Exportar filas de {dataset_id} a disco",
+            alternativa="co_datos_exportar con agrupar_por, que vuelca la tabla "
+                        "de grupos sin identificar a nadie",
+        )
+        filas = privacidad.redacta_filas(
+            filas,
+            es_juridica=(privacidad.juridica_en_rues
+                         if str(dataset_id) == "c82u-588k" else None))
+
     # Sin `total_coincidencias`: el sobre diría "0 fila(s) de N" y añadiría el
     # aviso de "estás viendo una parte", que aquí es justo lo contrario de lo
     # que pasó. Las cifras van en el cuerpo, que es donde se leen.
     sobre = Sobre(datos=[], orden=ordenar, fuente=Fuente(id=dataset_id),
                   mostrar_conteo=False)
+    if personas:
+        privacidad.avisa(sobre, finalidad=finalidad)
+        sobre.advertir(
+            "El fichero escrito lleva los documentos enmascarados, igual que la "
+            "respuesta: un volcado a disco es la copia que sobrevive a la "
+            "conversación, así que es el último sitio donde conviene aflojar."
+        )
     unidad = "grupo(s)" if agrupando else "fila(s)"
     if not filas:
         sobre.advertir(
