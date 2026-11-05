@@ -23,11 +23,14 @@ Convenios que se repiten:
   extraer. El cuerpo sale en un bloque cercado y el sobre sigue debajo.
 - **Contenido estructurado** — al margen del formato, TODA respuesta lleva
   `datos` y `_meta` por el canal estructurado del protocolo.
-- **`finalidad`** — solo en las herramientas que pueden identificar a una
-  persona natural: `investigacion`, `periodismo`, `control_fiscal` o
+- **`finalidad`** — solo cuando la respuesta puede identificar a una persona
+  natural: `investigacion`, `periodismo`, `control_fiscal` o
   `debida_diligencia`. **No la supongas ni la elijas por descarte**:
   pregúntasela a quien hizo la petición. Queda escrita en la respuesta, así que
-  es auditable. Ver [datos de personas](../README.md#datos-de-personas).
+  es auditable. Lo que decide si hace falta es la **fuente**, no la
+  herramienta: las tres vías genéricas también la piden cuando el dataset trae
+  personas, porque si no bastaría con venir por ahí. Ver
+  [datos de personas](../README.md#datos-de-personas).
 
 ---
 
@@ -91,6 +94,7 @@ rechazaba como «columna inexistente: entidad».
 | `offset` | int | `0` | |
 | `detalle` | string | `"resumen"` | |
 | `formato` | string | `"tabla"` | `tabla`, `csv` o `json`. |
+| `finalidad` | string | `""` | Solo si la respuesta identifica a personas naturales: `investigacion`, `periodismo`, `control_fiscal`, `debida_diligencia`. La fuente manda, no la herramienta. |
 
 Una columna inexistente se rechaza con `[VALIDACION]` listando las válidas, en
 vez de dejar que Socrata devuelva un 400 opaco.
@@ -129,6 +133,7 @@ Agrupa del lado del servidor: devuelve grupos, no filas.
 | `offset` | int | `0` | Pagina los grupos. Para la tabla entera, `co_datos_exportar`. |
 | `formato` | string | `"tabla"` | `tabla`, `csv` o `json`. |
 | `grafica` | bool | `true` | Añade la columna de barras. Se ignora si `formato` no es tabla. |
+| `finalidad` | string | `""` | Solo si la respuesta identifica a personas naturales: `investigacion`, `periodismo`, `control_fiscal`, `debida_diligencia`. La fuente manda, no la herramienta. |
 
 El orden se toma del primer `as <alias>` de `metricas`: con
 `sum(valor_del_contrato) as valor` ordena por `valor DESC`. Sin alias, ordena
@@ -573,6 +578,7 @@ que sirve para volúmenes que no caben en una respuesta.
 | `agrupar_por` | string | `""` | Exporta la **tabla de grupos** en vez de las filas. |
 | `metricas` | string | `""` | Con `agrupar_por`; por defecto `count(*) as total`. |
 | `teniendo` | string | `""` | `$having` sobre los grupos. |
+| `finalidad` | string | `""` | Solo si la respuesta identifica a personas naturales: `investigacion`, `periodismo`, `control_fiscal`, `debida_diligencia`. La fuente manda, no la herramienta. |
 
 **Es la única herramienta que escribe**, y está anotada con
 `readOnlyHint: false` para que el cliente pueda pedir confirmación al usuario.

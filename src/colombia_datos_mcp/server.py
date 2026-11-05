@@ -158,7 +158,8 @@ async def co_datos_describir_dataset(dataset_id: str) -> ToolResult:
 @mcp.tool(annotations=SOLO_LECTURA)
 async def co_datos_consultar(dataset_id: str, seleccionar: str = "", donde: str = "",
                              ordenar: str = "", limite: int = 20, offset: int = 0,
-                             detalle: str = "resumen", formato: str = "tabla") -> ToolResult:
+                             detalle: str = "resumen", formato: str = "tabla",
+                             finalidad: str = "") -> ToolResult:
     """Consulta SoQL sobre cualquier dataset de datos.gov.co.
 
     `detalle`: "conteo" (solo el número, sin filas), "resumen" (campos
@@ -166,11 +167,15 @@ async def co_datos_consultar(dataset_id: str, seleccionar: str = "", donde: str 
 
     `formato`: "tabla" para leer, "csv" o "json" para extraer. Las filas van
     además en el contenido estructurado de la respuesta.
+
+    `finalidad` solo hace falta si la respuesta identifica a personas naturales
+    —investigacion, periodismo, control_fiscal o debida_diligencia—. La fuente
+    manda, no la herramienta: venir por aquí no evita el motor de privacidad.
     """
     return await _ejecuta(catalogo.consultar(
         dataset_id, seleccionar=seleccionar or None, donde=donde or None,
         ordenar=ordenar or None, limite=limite, offset=offset, detalle=detalle,
-        formato=formato))
+        formato=formato, finalidad=finalidad or None))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
@@ -178,7 +183,8 @@ async def co_datos_agregar(dataset_id: str, agrupar_por: str,
                            metricas: str = "count(*) as total", donde: str = "",
                            teniendo: str = "", luego: str = "", ordenar: str = "",
                            limite: int = 20, offset: int = 0,
-                           formato: str = "tabla", grafica: bool = True) -> ToolResult:
+                           formato: str = "tabla", grafica: bool = True,
+                           finalidad: str = "") -> ToolResult:
     """Agrega del lado del servidor: agrupa y devuelve grupos, no filas.
 
     `agrupar_por` acepta columnas y también expresiones, con alias opcional:
@@ -210,7 +216,8 @@ async def co_datos_agregar(dataset_id: str, agrupar_por: str,
     return await _ejecuta(catalogo.agregar(
         dataset_id, agrupar_por, metricas=metricas, donde=donde or None,
         teniendo=teniendo or None, luego=luego or None, ordenar=ordenar or None,
-        limite=limite, offset=offset, formato=formato, grafica=grafica))
+        limite=limite, offset=offset, formato=formato, grafica=grafica,
+        finalidad=finalidad or None))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)
@@ -353,7 +360,7 @@ async def co_datos_exportar(dataset_id: str, nombre_archivo: str, donde: str = "
                             seleccionar: str = "", ordenar: str = "",
                             formato: str = "csv", max_filas: int = 50000,
                             agrupar_por: str = "", metricas: str = "",
-                            teniendo: str = "") -> ToolResult:
+                            teniendo: str = "", finalidad: str = "") -> ToolResult:
     """Descarga un dataset filtrado ENTERO y lo guarda en disco.
 
     Es la única herramienta que escribe. Pagina hasta agotar el filtro, así que
@@ -375,7 +382,8 @@ async def co_datos_exportar(dataset_id: str, nombre_archivo: str, donde: str = "
         dataset_id, nombre_archivo, donde=donde or None,
         seleccionar=seleccionar or None, ordenar=ordenar or None,
         formato=formato, max_filas=max_filas, agrupar_por=agrupar_por or None,
-        metricas=metricas or None, teniendo=teniendo or None))
+        metricas=metricas or None, teniendo=teniendo or None,
+        finalidad=finalidad or None))
 
 
 @mcp.tool(annotations=SOLO_LECTURA)

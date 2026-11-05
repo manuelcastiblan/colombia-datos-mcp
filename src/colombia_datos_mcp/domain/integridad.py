@@ -92,6 +92,32 @@ def _literales(documento: str) -> str:
 
 
 # -------------------------------------------------------------- screening --
+def _contratista_juridico(fila: dict) -> bool:
+    """¿La fila es de una empresa? Se mira el documento que trae, no la consulta.
+
+    Una fila sin dígitos en el documento —todas las de SECOP II, que no lo
+    publica— cuenta como jurídica porque no hay nada que enmascarar:
+    enmascararla convertiría «(SECOP II no lo publica)» en una cadena vacía.
+    """
+    d = str(fila.get("documento") or "")
+    if not any(c.isdigit() for c in d):
+        return True
+    return privacidad.es_persona_juridica(d)
+
+
+def _clave_fecha(fila: dict) -> str:
+    """La fecha de una fila ya formateada, como cadena ordenable.
+
+    `fmt.fecha` devuelve dd-mm-aaaa, que ordenado alfabéticamente no es
+    cronológico: hay que darle la vuelta a los trozos. Sin fecha va al final.
+    """
+    valor = str(fila.get("fecha") or "")
+    trozos = valor.replace("/", "-").split("-")
+    if len(trozos) == 3 and len(trozos[0]) == 2:
+        return f"{trozos[2]}-{trozos[1]}-{trozos[0]}"
+    return valor
+
+
 async def screening(documento: str, finalidad: str | None = None,
                     limite: int = 10, formato: str = "tabla"):
     """Busca un documento en las cinco fuentes de sanciones, de una vez.
@@ -105,7 +131,8 @@ async def screening(documento: str, finalidad: str | None = None,
     if not juridica:
         finalidad = privacidad.exige_finalidad(
             finalidad,
-            que=f"Buscar antecedentes del documento {documento}",
+            que=("Buscar antecedentes del documento "
+                 f"{privacidad.etiqueta_documento(documento)}"),
             alternativa="co_integridad_panorama, que agrega SIRI por entidad, "
                         "departamento o tipo de sanción sin identificar a nadie",
         )
@@ -168,10 +195,15 @@ async def screening(documento: str, finalidad: str | None = None,
     # «5 fila(s) de 0 coincidencias», que es verdad por separado y absurdo
     # leído seguido. El `Total` se conserva para poder avisar si alguna fuente
     # llenó su límite, que es lo único que de verdad hace falta declarar aquí.
+    consulta = " · ".join(consultas)
+    if not juridica:
+        consulta = privacidad.redacta_consulta(consulta, documento)
     sobre = Sobre(datos=resumen + detalles, total=Total.union(trozos),
-                  mostrar_conteo=False, consulta=" · ".join(consultas),
+                  mostrar_conteo=False, consulta=consulta,
                   fuente=Fuente(id="screening", nombre="Cinco fuentes de sanciones",
                                 licencia=_LIC))
+    if not juridica:
+        sobre.advertir(privacidad.AVISO_CONSULTA_REDACTADA)
     if not sobre.total.consta:
         sobre.advertir(
             f"Alguna fuente devolvió el máximo de {tope} coincidencias, así que "
@@ -232,20 +264,31 @@ async def disciplinarias(documento: str | None = None, nombre: str | None = None
     if documento:
         partes.append(f"numero_identificacion in ({_literales(documento)})")
     if nombre:
-        # Cuatro columnas separadas y ninguna con el nombre completo: hay que
-        # buscar el término en cada una, porque no se sabe si lo que llega es
-        # un nombre o un apellido.
+        # Cuatro columnas separadas y ninguna con el nombre completo. Buscar la
+        # cadena entera en cada columna era un falso cero garantizado: con
+        # nombre="ANA PEREZ", ninguna columna contiene "ANA PEREZ" —una tiene
+        # "ANA" y otra "PEREZ"—, así que la persona estaba en SIRI y la
+        # respuesta decía que no. Un cero falso es el peor fallo posible aquí.
+        #
+        # Se parte en términos: CADA término tiene que aparecer en ALGUNA de
+        # las cuatro columnas. Un término suelto se comporta como antes.
         campos = ("primer_nombre", "segundo_nombre", "primer_apellido",
                   "segundo_apellido")
-        trozos = [socrata.filtro_texto_libre(c, nombre) for c in campos]
-        trozos = [t for t in trozos if t]
-        if trozos:
-            partes.append("(" + " OR ".join(trozos) + ")")
+        terminos = [t for t in str(nombre).split() if t.strip()]
+        por_termino = []
+        for termino in terminos:
+            trozos = [socrata.filtro_texto_libre(c, termino) for c in campos]
+            trozos = [t for t in trozos if t]
+            if trozos:
+                por_termino.append("(" + " OR ".join(trozos) + ")")
+        if por_termino:
+            partes.append("(" + " AND ".join(por_termino) + ")")
         avisos.append(
             "SIRI guarda el nombre en cuatro columnas y ninguna tiene el nombre "
-            "completo, así que el término se busca en las cuatro: un apellido "
-            "común devuelve homónimos. Sin el documento no hay forma de "
-            "distinguirlos, y confundir a dos personas aquí es grave."
+            f"completo, así que {'cada término se busca' if len(terminos) > 1 else 'el término se busca'} "
+            "en las cuatro: un apellido común devuelve homónimos. Sin el "
+            "documento no hay forma de distinguirlos, y confundir a dos "
+            "personas aquí es grave."
         )
     if entidad:
         cat = await socrata.filtro_categorico(SIRI.id, "entidad_sancionado", entidad)
@@ -275,9 +318,14 @@ async def disciplinarias(documento: str | None = None, nombre: str | None = None
              for f in r["filas"]]
     filas = privacidad.redacta_filas(filas)
 
+    # SIRI es nominal por definición: toda fila es una persona, así que el
+    # documento no viaja nunca en la consulta publicada.
     sobre = Sobre(datos=filas, offset=offset, orden="fecha_efectos_juridicos DESC",
-                  consulta=r["consulta"], fuente=_fuente(SIRI))
-    sobre.total = Total.cupo_entero(r["filas"], tope)
+                  consulta=privacidad.redacta_consulta(r["consulta"], documento or ""),
+                  fuente=_fuente(SIRI))
+    if documento:
+        sobre.advertir(privacidad.AVISO_CONSULTA_REDACTADA)
+    sobre.total = Total.cupo_entero(r["filas"], tope, offset=offset)
     if not sobre.total.consta:
         sobre.total = Total.contado(await socrata.contar(SIRI.id, donde=donde))
     if not filas:
@@ -363,11 +411,13 @@ async def sanciones_contratacion(documento: str | None = None,
         raise ErrorValidacion(
             "Hace falta `documento` o `nombre` del contratista.",
             "Para el panorama de la contratación usa co_secop_agregar.")
+    # Con `documento`, la forma del número decide antes de consultar.
     juridica = privacidad.es_persona_juridica(documento) if documento else True
     if documento and not juridica:
         finalidad = privacidad.exige_finalidad(
             finalidad,
-            que=f"Buscar sanciones de contratación del documento {documento}",
+            que=("Buscar sanciones de contratación de "
+                 f"{privacidad.etiqueta_documento(documento)}"),
             alternativa="el nombre de la empresa, si lo que buscas es una "
                         "persona jurídica",
         )
@@ -423,9 +473,37 @@ async def sanciones_contratacion(documento: str | None = None,
             "documento del contratista, solo el nombre. Pasa el nombre para "
             "incluirla.")
 
-    filas = privacidad.redacta_filas(filas, persona_juridica=juridica)
+    # Cada plataforma venía ordenada por su propia fecha y luego se
+    # concatenaban, así que el sobre anunciaba `fecha DESC` y entregaba todo
+    # SECOP I primero: una sanción de 2024 en SECOP II salía debajo de una de
+    # 2012. El orden se aplica a la lista mezclada, que es la que se lee.
+    filas.sort(key=_clave_fecha, reverse=True)
+
+    # Una búsqueda por nombre se daba por jurídica sin comprobar nada, y SECOP I
+    # contrata con personas naturales: devolvía su cédula completa sin finalidad.
+    # Pero exigirla por el hecho de buscar un nombre bloquearía el caso común
+    # —el nombre de una empresa—, así que se decide con lo que la fuente
+    # devolvió, igual que en `resuelve_persona`: si entre las filas hay algún
+    # documento con forma de cédula, eso es una persona y hay que pedir permiso.
+    hay_personas = any(not _contratista_juridico(f) for f in filas)
+    if hay_personas:
+        finalidad = privacidad.exige_finalidad(
+            finalidad,
+            que=(f"La búsqueda por «{nombre}» devuelve contratistas que son "
+                 "personas naturales, con su documento, así que"),
+            alternativa="co_secop_agregar para el panorama de la contratación, "
+                        "que no identifica a nadie",
+        )
+        filas = privacidad.redacta_filas(filas, es_juridica=_contratista_juridico)
+        avisos.append(privacidad.AVISO_CONSULTA_REDACTADA)
+    elif not juridica:
+        filas = privacidad.redacta_filas(filas)
+        avisos.append(privacidad.AVISO_CONSULTA_REDACTADA)
+    consulta = " · ".join(consultas)
+    if hay_personas or not juridica:
+        consulta = privacidad.redacta_consulta(consulta, documento or "")
     sobre = Sobre(datos=filas, total=Total.union(trozos),
-                  orden="fecha DESC", consulta=" · ".join(consultas),
+                  orden="fecha DESC", consulta=consulta,
                   fuente=Fuente(id=f"{SECOP1.id} + {SECOP2.id}",
                                 nombre="SECOP I + II · Multas y Sanciones",
                                 licencia=_LIC, atribucion=_ATRIB[SECOP1.id]))

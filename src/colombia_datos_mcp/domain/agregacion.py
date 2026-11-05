@@ -48,12 +48,11 @@ async def anota_total(
        total ignorado se advierte; uno inventado contamina lo que toque.
     """
     sobre.aviso_parcial = AVISO_PARCIAL
-    sobre.total = Total.cupo_entero(filas, limite)
+    # El offset va al constructor: la página corta cierra el recuento, pero el
+    # total incluye los grupos saltados. Antes se corregía aquí, y por eso el
+    # mismo descuido reapareció en `buscar` y en `disciplinarias`.
+    sobre.total = Total.cupo_entero(filas, limite, offset=offset)
     if sobre.total.consta:
-        if offset:
-            # Con `offset` la página corta cierra el recuento, pero el total es
-            # todo lo que hay detrás: las filas saltadas también son grupos.
-            sobre.total = Total.contado(offset + len(filas))
         return                       # cabía entero: exacto y sin una petición más
     if contable:
         contados = await socrata.contar_grupos(dataset_id, seleccionar, agrupar,

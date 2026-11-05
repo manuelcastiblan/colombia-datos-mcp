@@ -89,6 +89,70 @@ valor distinto de `permisiva` es `estricta`: un error de dedo del operador tiene
 que fallar hacia el lado que protege. Ninguna herramienta recibe un parámetro
 que afloje la política, de modo que ningún prompt puede pedirlo.
 
+### La política está anclada a la fuente, no a la herramienta
+
+La primera versión puso el motor en las herramientas especializadas, y eso dejó
+la puerta de atrás abierta: `co_datos_consultar` acepta **cualquier**
+`dataset_id`, así que pedir `iaeu-rcn6` con `detalle="completo"` devolvía las
+sanciones del SIRI con nombre y cédula sin finalidad ni enmascarado, y
+`co_datos_exportar` escribía el microdato de Saber 11 en disco fila por fila.
+Una regla que se elude cambiando de herramienta no es una regla.
+
+Las personas están en el **dataset**, no en la vía de acceso, así que ahí vive
+ahora la política. `core/privacidad.py` declara dos conjuntos:
+
+| Conjunto | Qué impone | Fuentes |
+|---|---|---|
+| `MICRODATO` | Nunca fila a fila, por ninguna vía y con ninguna finalidad | Saber 11, Saber Pro, Saber TyT |
+| `PERSONALES` | Filas solo con finalidad, y enmascaradas | RUES, SIRI, multas SECOP I, contadores, responsabilidad fiscal |
+
+Las tres vías genéricas —`co_datos_consultar`, `co_datos_agregar` y
+`co_datos_exportar`— aceptan ahora `finalidad` y pasan por la misma puerta.
+Añadir ese parámetro no afloja nada: es la misma declaración que piden las
+especializadas, y lo que no existe sigue siendo un parámetro para desactivar la
+política.
+
+Tres decisiones dentro de esa puerta:
+
+- **Se decide con las filas devueltas, no con el filtro.** Es la regla de
+  `resuelve_persona` otra vez: manda lo que la fuente trajo. En el RUES tres
+  cuartas partes de las filas son personas y una cuarta no, así que una
+  consulta de sociedades no tiene por qué pedir permiso; una que devuelva una
+  sola persona natural, sí.
+- **Agrupar por documento no es agregar.** «Agregar nunca pide permiso» vale
+  porque agregar pregunta por poblaciones. `agrupar_por="numero_identificacion"`
+  devuelve una fila por persona con su conteo al lado, así que pasa por la
+  puerta y la clave de grupo sale enmascarada.
+- **En exportación la puerta se cierra arriba**, antes incluso de contar: lo que
+  se escribe en disco es la copia que sobrevive a la conversación, y ya no pasa
+  por ninguna advertencia.
+
+**Lo que esta puerta NO cubre:** los datasets de contratación de SECOP, donde el
+proveedor de un contrato de prestación de servicios es una persona natural con
+su cédula. Son fuentes anteriores al motor, las exponen diecinueve herramientas
+y cerrarlas aquí cambiaría el comportamiento de todas. Queda dicho, no hecho.
+
+### El enmascarado tiene que cubrir el texto, no solo las celdas
+
+`redacta_filas` limpiaba las columnas y nada más, así que la misma respuesta
+ocultaba el documento en la tabla y lo escribía completo en el título del
+dossier, en los avisos y en la **consulta reproducible** del pie, cuatro líneas
+más abajo. El motor no existe para que la tabla quede limpia; existe para que el
+número no quede escrito en un historial. Si se escapa por el título, no ha
+servido de nada.
+
+Dos piezas lo cierran: `etiqueta_documento`, para el documento que se escribe en
+prosa, y `redacta_consulta`, para el que viaja dentro de la URL. La segunda tiene
+un coste real y declarado: la consulta publicada deja de ser ejecutable tal cual,
+y la respuesta lo advierte. Se conserva lo que da trazabilidad —el dataset, el
+resto del filtro, la forma de la consulta—; se va el número, que lo tiene quien
+preguntó. Publicar una URL que no corre sin decirlo sería peor que no publicarla.
+
+Y la máscara se decide **fila por fila**, no por página: una búsqueda en el RUES
+con una sola persona natural enmascaraba también los NIT de las sociedades que
+la acompañaban, que son justo los que sirven para cruzar con SECOP. Una página
+mezclada es lo normal, no el caso raro.
+
 **Lo que no hace:** no anonimiza. Enmascarar un documento no impide
 reidentificar a alguien cuyo nombre, cargo y municipio van en la misma fila.
 Sirve para que el número no quede escrito en un historial de conversación, que
@@ -116,6 +180,23 @@ de aceptar el número que alguien habría puesto.**
 
 Lo destapó `tests/test_invariantes.py`, que obliga a clasificar cada herramienta
 nueva. Al clasificar las quince, cuatro no pasaron.
+
+### Y el mismo tipo tenía un segundo hueco: el offset
+
+`cupo_entero` daba el total por `len(filas)` cuando la página no llenaba su
+límite. Eso es exacto solo en la primera página: en cualquier otra, una página
+corta no dice que el total sea lo que trajo, dice que no hay nada **después** de
+ella. Con 25 coincidencias, `offset=20` y `limite=20` llegaban cinco filas y el
+sobre anunciaba «5 fila(s) de 5 coincidencias», que es la paginación negándose a
+sí misma.
+
+`agregacion` ya había tropezado con esto y lo corregía en su propio sitio,
+sumando el offset a mano. Que el constructor reciba el `offset` es lo que evita
+descubrirlo una tercera vez: el defecto reapareció en `buscar` y en
+`disciplinarias` precisamente porque la corrección vivía en un llamador y no en
+el tipo. Y una página **vacía** con offset no permite afirmar nada —el offset
+puede estar más allá del final—, así que ahí el total no consta y quien llama
+cuenta.
 
 ---
 

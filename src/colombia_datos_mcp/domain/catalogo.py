@@ -10,12 +10,19 @@ from ..core import format as fmt
 from ..core.budget import Detalle
 from ..core.envelope import Fuente, Sobre, Total
 from ..core.errors import ErrorNoEncontrado, ErrorValidacion
+from ..core import privacidad
 from ..registry import datasets as reg
 
 AVISO_SIN_TOKEN = (
     "Sin SOCRATA_APP_TOKEN configurado: sujeto a throttling por IP. "
     "El servidor funciona igual, pero con token es más estable."
 )
+
+
+# El RUES es el único dataset personal donde una fila puede ser de una
+# sociedad: ahí la máscara se decide fila por fila.
+def _ES_RUES(dataset_id) -> bool:
+    return str(dataset_id) == "c82u-588k"
 
 
 def _fuente_de(esq: dict | None, dataset_id: str) -> Fuente:
@@ -124,13 +131,24 @@ async def describir_dataset(dataset_id: str):
 
 
 async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
-                    limite=20, offset=0, detalle="resumen", formato="tabla"):
-    """SoQL con allow-list de columnas derivada del esquema vivo."""
+                    limite=20, offset=0, detalle="resumen", formato="tabla",
+                    finalidad=None):
+    """SoQL con allow-list de columnas derivada del esquema vivo.
+
+    Esta es la vía genérica, y por eso pasa por el motor de privacidad igual
+    que las herramientas especializadas: la política está anclada al dataset,
+    no a la herramienta, porque si no bastaba con venir por aquí.
+    """
     nivel = Detalle(detalle)
     esq = await socrata.esquema(dataset_id)
     fuente = _fuente_de(esq, dataset_id)
 
     await socrata.valida_campos(dataset_id, _campos_citados(seleccionar, donde, ordenar))
+
+    # Un conteo no devuelve filas, así que el microdato solo se bloquea cuando
+    # la respuesta llevaría personas dentro.
+    if nivel is not Detalle.CONTEO:
+        privacidad.exige_agregado(dataset_id, que="Una consulta de filas")
 
     if nivel is Detalle.CONTEO:
         total = await socrata.contar(dataset_id, donde=donde)
@@ -151,19 +169,38 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
                           ordenar=ordenar, limite=limite, offset=offset),
     )
     filas = r["filas"]
+    # Se decide con las filas crudas: la proyección del resumen puede quitar
+    # justo la columna que dice si la fila es de una sociedad o de una persona.
+    personas = privacidad.hay_personas(dataset_id, filas)
+    if personas:
+        finalidad = privacidad.exige_finalidad(
+            finalidad,
+            que=f"Traer filas de {dataset_id}",
+            alternativa="co_datos_agregar sobre este mismo dataset, que "
+                        "responde por grupos sin identificar a nadie",
+        )
     aviso_resumen = None
     if nivel is Detalle.RESUMEN:
         conocido = reg.por_id(dataset_id)
         columnas = list(conocido.campos_resumen) if conocido and conocido.campos_resumen else None
+        if personas and columnas and _ES_RUES(dataset_id):
+            columnas = list(dict.fromkeys(columnas + ["categoria_matricula"]))
         # Sin campos curados y sin `seleccionar`, el resumen no resumía nada.
         # Quien pasa `seleccionar` ya eligió: ahí no se toca.
         if columnas is None and not seleccionar:
             columnas, aviso_resumen = _resumen_heuristico(filas)
         filas = _proyecta(filas, columnas)
 
+    if personas:
+        filas = privacidad.redacta_filas(
+            filas,
+            es_juridica=privacidad.juridica_en_rues if _ES_RUES(dataset_id) else None)
+
     sobre = Sobre(datos=filas, total=Total.contado(total), offset=offset,
                   orden=r.get("orden") or ordenar, detalle=nivel,
                   consulta=r["consulta"], fuente=fuente)
+    if personas:
+        privacidad.avisa(sobre, finalidad=finalidad)
     if aviso_resumen:
         sobre.advertir(aviso_resumen)
     if limite < pedido:
@@ -182,7 +219,8 @@ async def consultar(dataset_id, seleccionar=None, donde=None, ordenar=None,
 
 async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
                   donde=None, teniendo=None, luego=None, ordenar=None,
-                  limite=20, offset=0, formato="tabla", grafica=True):
+                  limite=20, offset=0, formato="tabla", grafica=True,
+                  finalidad=None):
     """Agregación del lado del servidor: 20 grupos en vez de 10.000 filas.
 
     `agrupar_por` admite expresiones además de columnas —`date_trunc_ym(fecha)`,
@@ -208,6 +246,20 @@ async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
         )
     seleccion_grupos, grupos, claves = grupos_soql(agrupar_por)
     await socrata.valida_campos(dataset_id, _campos_citados(agrupar_por, metricas))
+
+    # «Agregar nunca pide permiso» vale porque agregar es preguntar por
+    # poblaciones. Agrupar por el número de documento no lo es: devuelve una
+    # fila por persona, con su conteo al lado. La regla se mantiene; lo que se
+    # corrige es dar por agregada una consulta que identifica.
+    por_documento = (privacidad.es_dataset_personal(dataset_id)
+                     and any(privacidad.es_columna_documento(c) for c in claves))
+    if por_documento:
+        finalidad = privacidad.exige_finalidad(
+            finalidad,
+            que=f"Agrupar {dataset_id} por el número de documento",
+            alternativa="agrupar por cualquier otra columna: entidad, "
+                        "departamento, año o tipo de sanción",
+        )
 
     esq = await socrata.esquema(dataset_id)
     seleccionar = f"{seleccion_grupos}, {metricas}"
@@ -243,8 +295,18 @@ async def agregar(dataset_id, agrupar_por, metricas="count(*) as total",
         for fila, dibujo in zip(filas, dibujos):
             fila["gráfica"] = dibujo
 
+    if por_documento:
+        filas = privacidad.redacta_filas(filas)
+
     sobre = Sobre(datos=filas, orden=orden, offset=offset, consulta=r["consulta"],
                   fuente=_fuente_de(esq, dataset_id))
+    if por_documento:
+        privacidad.avisa(sobre, finalidad=finalidad)
+        sobre.advertir(
+            "Agrupar por documento devuelve una fila por persona, así que los "
+            "números van enmascarados. Para el NIT completo de una sociedad, "
+            "co_empresas_buscar: ese sí es un dato mercantil público."
+        )
     # `contable=not luego`: contar las filas de una 2.ª etapa exigiría una 3.ª.
     await agregacion.anota_total(sobre, r["filas"], limite, dataset_id=dataset_id,
                                  seleccionar=seleccionar, agrupar=grupos,
