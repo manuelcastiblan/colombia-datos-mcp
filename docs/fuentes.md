@@ -123,6 +123,85 @@ el caso que `core/coords.py` absorbe y que la suite de contrato vigila.
 
 33 valores. Sin campos clave registrados: se usa como catálogo.
 
+## Geometría
+
+La única fuente que **no** está en `datos.gov.co`, y la única que no es oficial.
+Merece su propio apartado porque es la pieza más frágil del servidor y porque la
+razón por la que no es oficial cambió el 05-nov-2026.
+
+### Réplica del MGN 2018 del DANE — fuente única
+
+    https://raw.githubusercontent.com/caticoa3/colombia_mapa/master/
+        co_2018_MGN_MPIO_POLITICO.geojson
+
+Marco Geoestadístico Nacional 2018, capa municipal política, simplificada.
+1.122 rasgos, 1.122 códigos `MPIO_CCNCT` únicos, 33 `DPTO_CCDGO`. Se descarga
+una vez y se cachea en disco 24 h; el país entero llega en **0,9 s**.
+Configurable con `CO_GEOMETRIA_URL`.
+
+| Campo | Qué es |
+|---|---|
+| `MPIO_CCNCT` | Código DIVIPOLA de 5 dígitos, texto con ceros a la izquierda. La clave de join |
+| `MPIO_CNMBR` | Nombre del municipio, en MAYÚSCULAS y acentuado |
+| `DPTO_CCDGO` | Código de departamento, 2 dígitos |
+| `DPTO_CNMBR` | Nombre del departamento, en MAYÚSCULAS |
+
+Dos límites que hay que declarar siempre que se dibuje: es un **corte de 2018**
+—falta Nuevo Belén de Bajirá, que en DIVIPOLA sí existe— y está **muy
+simplificada**, mediana de 10 vértices por municipio. Sirve para colorear un
+mapa nacional, no para medir áreas ni para resolver si un punto cae dentro cerca
+de un límite.
+
+### IGAC `atlas/politicoadministrativo` — responde, y no sirve
+
+    https://mapas.igac.gov.co/server/rest/services/
+        atlas/politicoadministrativo/MapServer
+
+Volvió el 05-nov-2026 tras meses de HTTP 500: 200, ArcGIS Server 11.3, Atlas de
+Colombia Edición 2024. Sondeado a fondo, no reemplaza a la réplica:
+
+| Supuesto | Hallazgo |
+|---|---|
+| Hay capa municipal | **No.** Seis capas: transporte, distritos, capitales, áreas metropolitanas y `Departamento` |
+| Hay `FeatureServer` | **No.** La extensión no está instalada, y lo dice con un HTTP 200 y el error en el cuerpo. Solo `MapServer`, sobre caché de teselas |
+| Las consultas responden | **A veces.** 2 aciertos de 5 volcando la capa entera (33 MB en ~9 s); 1 de 5 paginando. El resto, 503 «Wait timeout for the request exceeded» a los 60 s |
+| Soporta `f=geojson` y `outSR=4326` | **Sí**, cuando responde |
+| Pagina con `resultOffset` | Declarado sí; en la práctica `resultOffset>0` **no funcionó ni una vez** |
+| Devuelve 1.122 territorios | **No.** Su capa más fina son 33 registros departamentales |
+| Usa los campos del MGN | **No.** `DeCodigo`/`DeNombre`, y nombres en Title Case |
+| Sus 33 son los 33 de DIVIPOLA | **No, y los totales cuadran.** Sobra «Area en Litigio Cauca - Huila» (`00`) y falta **Bogotá D.C. (`11`)**. Intersección: 32 |
+
+Ese último es el hallazgo que más caro habría salido, y el que habría pasado
+cualquier revisión: 33 registros contra 33 departamentos **cuadra**, así que la
+comprobación que cualquiera escribiría —comparar totales— da la migración por
+buena. Pero el IGAC no considera Bogotá un departamento sino un distrito, así
+que unir por código habría dejado **la capital del país sin contorno** y metido
+a cambio un polígono de un área en litigio, sin que ningún total lo delatara.
+
+Y una trampa de forma, para quien escriba el adaptador algún día: **el fallo
+llega de dos maneras según el formato que se pida.** Con `f=json` el servicio
+responde **HTTP 200** y mete `{"error": {"code": 503, …}}` en el cuerpo; con
+`f=geojson` devuelve un HTTP 503 de verdad. `core/http.py` juzga por el status,
+así que la primera forma se le cuela como respuesta válida: hay que mirar la
+clave `error` del JSON, no solo el código.
+
+Ni el mensaje es estable. Pedir el `FeatureServer` devuelve «Server object
+extension 'featureserver' not found» en 0,6 s cuando el servicio está
+desahogado, y «Wait timeout for the request exceeded» a los 60 s cuando no: a
+veces ni llega a comprobar si la extensión existe. Lo único que se sostiene es
+el 200 con un `error` dentro, y eso es lo que afirma la prueba de contrato.
+
+Las capas municipales temáticas —`atlas/potmunicipal` (`COD_MPIO`, `NOM_MPIO`) y
+`ordenamientoterritorial/clasificacionsegunley617del2000` (`MpCodigo`,
+`MpNombre`)— tienen los campos que harían falta pero fallaron 6 de 6 consultas,
+incluso pidiendo un municipio suelto sin geometría. `limites` solo publica
+territorios cedidos; de los 952 servicios de `carto`, ninguno es municipal.
+
+Tres pruebas de contrato vigilan esto: que el servicio responda, que **siga sin
+publicar capa municipal** —el día que falle, hay que escribir
+`adapters/arcgis.py`— y que su capa departamental no haya adoptado los nombres
+del MGN.
+
 ## Joins verificados
 
 ```mermaid

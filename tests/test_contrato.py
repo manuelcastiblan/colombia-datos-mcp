@@ -220,9 +220,13 @@ async def test_la_serie_de_los_dos_hurtos_sigue_rota_en_2017():
 
 # ---------------------------------------------------------- geometría ----
 async def test_la_replica_de_geometria_sigue_sirviendo_el_mgn():
-    """La geometría no viene de una fuente oficial: el servicio del IGAC
-    devuelve 500. Si la réplica desaparece o cambia, esto lo detecta antes de
-    que alguien dibuje un mapa con agujeros."""
+    """La geometría no viene de una fuente oficial, y sigue sin venir.
+
+    El servicio del IGAC volvió a responder, pero no publica capa municipal
+    (ver más abajo), así que esta réplica no es un respaldo: es la **única**
+    fuente de los 1.122 polígonos. Si desaparece o cambia, `co_geo_limites` se
+    queda sin geometría, y esto lo detecta antes de que alguien dibuje un mapa
+    con agujeros."""
     from colombia_datos_mcp.adapters import geometria
 
     datos = await geometria.cargar()
@@ -246,14 +250,97 @@ async def test_la_geometria_cruza_con_divipola_por_codigo():
     assert len(faltan) <= 2, f"DIVIPOLA tiene códigos sin geometría: {sorted(faltan)}"
 
 
-async def test_el_servicio_oficial_del_igac_sigue_caido():
-    """Documenta por qué se usa una réplica. Si algún día responde, hay que
-    cambiar CO_GEOMETRIA_URL y quitar esta prueba."""
+# El servicio del IGAC volvió a responder el 05-nov-2026, después de meses de
+# HTTP 500. La prueba que vigilaba su vuelta —`test_el_servicio_oficial_del_igac_
+# sigue_caido`— cumplió su función y se fue: lo que vigila ahora es por qué,
+# habiendo vuelto, la geometría SIGUE sin poder migrar. El motivo no es que el
+# servicio esté caído, es que no publica el dato.
+
+IGAC_SERVICIO = ("https://mapas.igac.gov.co/server/rest/services/"
+                 "atlas/politicoadministrativo/MapServer")
+
+
+def _igac(ruta: str = "", **params):
+    """GET al servicio del IGAC. Lo que se consulta aquí son documentos de
+    metadatos, que el servicio sirve en menos de un segundo. Sus consultas de
+    datos son otra historia y no se piden desde CI."""
     import httpx
 
-    r = httpx.get("https://mapas.igac.gov.co/server/rest/services/"
-                  "atlas/politicoadministrativo/MapServer?f=json", timeout=120)
-    assert "error" in r.json(), "el IGAC ya responde: revisar el adaptador"
+    return httpx.get(f"{IGAC_SERVICIO}{ruta}",
+                     params={"f": "json", **params}, timeout=60).json()
+
+
+async def test_el_igac_responde_pero_no_publica_capa_municipal():
+    """**La prueba que decide si la geometría puede migrar.**
+
+    El servicio responde —ya no da 500— y sin embargo de sus seis capas
+    ninguna es municipal: trae transporte, distritos, capitales, áreas
+    metropolitanas y departamentos. Los 1.122 polígonos municipales sobre los
+    que se sostiene `co_geo_limites` no están ahí.
+
+    El día que el IGAC añada una capa municipal, esta prueba falla, y ESE es el
+    momento de escribir `adapters/arcgis.py`. Que responda no basta; tiene que
+    publicar el dato.
+    """
+    doc = _igac()
+    assert "error" not in doc, f"el IGAC volvió a caerse: {doc.get('error')}"
+    assert doc["mapName"] == "División Político-Administrativa", doc.get("mapName")
+
+    capas = {c["name"]: c["geometryType"] for c in doc["layers"]}
+    assert "Departamento" in capas, capas
+
+    municipales = [n for n in capas
+                   if "municip" in n.lower() or "mpio" in n.lower()]
+    assert not municipales, (
+        f"el IGAC ya publica capa(s) municipal(es) {municipales}: "
+        "toca evaluar la migración y escribir adapters/arcgis.py"
+    )
+
+
+async def test_la_capa_departamental_del_igac_no_usa_los_campos_del_mgn():
+    """Si algún día se migra, el adaptador no puede reutilizar `CAMPOS`.
+
+    La capa departamental del IGAC nombra sus columnas `DeCodigo`/`DeNombre`,
+    no `DPTO_CCDGO`/`DPTO_CNMBR` como el MGN. Apuntar `CO_GEOMETRIA_URL` a esta
+    capa sin tocar el adaptador no daría un mapa raro: daría `KeyError`, y por
+    eso `_valida` lo rechaza antes (ver `test_geometria.py`).
+    """
+    from colombia_datos_mcp.adapters import geometria
+
+    campos = {c["name"] for c in _igac("/5")["fields"]}
+    assert {"DeCodigo", "DeNombre"} <= campos, campos
+    assert not ({geometria.CAMPOS["cod_dpto"],
+                 geometria.CAMPOS["departamento"]} & campos), (
+        "el IGAC adoptó los nombres del MGN: revisar si ya se puede migrar"
+    )
+
+
+async def test_el_igac_falla_con_un_200_y_el_error_en_el_cuerpo():
+    """**La trampa de forma que cualquier `adapters/arcgis.py` futuro heredaría.**
+
+    `FeatureServer` es la vía para consultar por atributo y traer GeoJSON por
+    página, y no está instalado. Lo interesante es cómo lo dice: **HTTP 200 con
+    el fallo dentro del cuerpo.** `core/http.py` decide reintentos y errores por
+    el status, así que una respuesta así se le cuela como válida — hay que mirar
+    la clave `error` del JSON, no el código de la respuesta.
+
+    El mensaje concreto **no** es estable, y por eso se aceptan los dos que da:
+    «Server object extension 'featureserver' not found» en 0,6 s cuando el
+    servicio está desahogado, y «Wait timeout for the request exceeded» a los
+    60 s cuando no — o sea que a veces ni siquiera consigue contarte que la
+    extensión no está. Lo que se afirma aquí es lo que sí se sostiene: 200, y un
+    `error` en el cuerpo. El timeout es holgado a propósito, porque la rama
+    lenta tarda poco más de 60 s.
+    """
+    import httpx
+
+    r = httpx.get(IGAC_SERVICIO.replace("MapServer", "FeatureServer"),
+                  params={"f": "json"}, timeout=90)
+    assert r.status_code == 200, r.status_code
+    cuerpo = r.json()
+    assert "error" in cuerpo, cuerpo
+    mensaje = cuerpo["error"]["message"].lower()
+    assert ("featureserver" in mensaje or "wait timeout" in mensaje), cuerpo["error"]
 
 
 # =========================================================================
