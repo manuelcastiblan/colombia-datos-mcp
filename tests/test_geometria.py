@@ -208,15 +208,41 @@ async def test_apuntar_la_url_a_la_capa_del_igac_falla_con_mensaje_claro(monkeyp
     Alguien leerá que el IGAC ya responde y apuntará la variable a su capa
     departamental. Son los dos un `FeatureCollection` de polígonos, así que el
     cambio parece inocuo: lo que no casa son los nombres de campo. `_valida`
-    tiene que rechazarlo nombrando `MPIO_CCNCT`, no dejar pasar la colección
-    para que `domain/geo.py` reviente luego con un `KeyError` ilegible.
+    tiene que rechazarlo nombrando los campos que faltan, no dejar pasar la
+    colección para que `domain/geo.py` reviente luego con un `KeyError`
+    ilegible.
+
+    La carga real trae 33 rasgos, muy por debajo de 1.122, así que el control
+    de cantidad salta primero. Pero quedarse corto **y** no traer los campos
+    del MGN no es lo mismo que una réplica truncada, y el mensaje lo distingue:
+    culpar a la réplica mandaría a revisar donde no está el problema.
     """
     _instala(monkeypatch, IGAC_DEPARTAMENTOS)
     with pytest.raises(ErrorFuenteCaida) as exc:
         await geometria.cargar()
-    # Falla por el recuento antes que por los campos: 3 rasgos, no 1.122.
-    assert "3" in str(exc.value) and ("1.122" in str(exc.value)
-                                      or "1122" in str(exc.value))
+    mensaje = str(exc.value)
+    assert "3" in mensaje, mensaje
+    assert "no son del MGN" in mensaje, mensaje
+    for campo in geometria.CAMPOS.values():
+        assert campo in mensaje, f"{campo} no se nombra: {mensaje}"
+    # Y la sugerencia señala a CO_GEOMETRIA_URL, no a la réplica.
+    assert "CO_GEOMETRIA_URL" in exc.value.sugerencia
+    assert "réplica" not in exc.value.sugerencia.lower()
+
+
+async def test_una_replica_truncada_si_culpa_a_la_replica(monkeypatch):
+    """El otro camino del mismo control, que no hay que confundir.
+
+    Si la colección se queda corta pero **sí** trae los campos del MGN, lo que
+    pasó es que la réplica cambió de contenido, y eso es lo que dice. Es la
+    distinción que el mensaje de arriba existe para no borrar.
+    """
+    _instala(monkeypatch, _coleccion(n=20))
+    with pytest.raises(ErrorFuenteCaida) as exc:
+        await geometria.cargar()
+    assert "1.122" in str(exc.value) or "1122" in str(exc.value)
+    assert "no son del MGN" not in str(exc.value)
+    assert "réplica" in exc.value.sugerencia.lower()
 
 
 async def test_la_capa_del_igac_no_trae_un_solo_campo_de_los_que_cita_el_adaptador(

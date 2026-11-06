@@ -65,8 +65,18 @@ escribió y la decisión quedó documentada con los números delante.
   La cadena `PROCEDENCIA`, que viaja al sobre de cada respuesta de
   `co_geo_limites`, decía «porque el servicio oficial del IGAC no responde» —una
   afirmación que había dejado de ser cierta— y ahora dice que no publica capa
-  municipal ni permite consultar las que tiene. El código no cambió: cambió lo
-  que afirma, que en este servidor es parte del dato.
+  municipal en `atlas/politicoadministrativo`, y que las capas municipales
+  temáticas de sus otros servicios no respondieron a ninguna de las consultas
+  probadas. Acotar el servicio importa: el IGAC **sí** tiene capas municipales
+  —temáticas, en otros servicios— y su capa departamental **sí** respondió dos
+  veces, así que decir «no permite consultar» habría sido la clase de
+  afirmación de más que este servidor existe para no hacer.
+- **`_valida` distingue por qué se quedó corta la colección.** Antes, cualquier
+  colección con menos de 1.000 rasgos culpaba a la réplica de haber cambiado de
+  contenido. Con la capa del IGAC —33 rasgos y ninguno con los campos del MGN—
+  eso mandaba a revisar donde no estaba el problema. Ahora, cuando además faltan
+  los campos, el error dice que esos rasgos no son del MGN, los enumera y señala
+  `CO_GEOMETRIA_URL`. El camino de la réplica truncada sigue igual.
 - **La réplica dejó de ser «la fuente provisional» para ser lo que es.** No es
   un respaldo: es la única fuente de los 1.122 polígonos, y así se nombra en el
   README, en `docs/fuentes.md`, en `docs/herramientas.md` y en la prueba de
@@ -83,7 +93,7 @@ escribió y la decisión quedó documentada con los números delante.
   que llegó a servir, las dos listas de códigos en el orden en que llegaron y
   los cuerpos de sus dos errores— con sus defectos intactos, el área en litigio
   incluida.
-- **Nueve pruebas sin red** en `tests/test_geometria.py`. La que importa:
+- **Diez pruebas sin red** en `tests/test_geometria.py` (15 -> 25 en el fichero). La que importa:
   apuntar `CO_GEOMETRIA_URL` a la capa del IGAC —que también es un
   FeatureCollection de polígonos, así que el cambio parece inocuo— se rechaza
   con un mensaje que nombra los campos que faltan, en vez de dejar pasar la

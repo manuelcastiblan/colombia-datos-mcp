@@ -680,10 +680,15 @@ tarda en rendirse.
 
 El adaptador **valida la forma antes de fiarse**: que sea un FeatureCollection,
 que traiga ~1.122 municipios y que tenga `MPIO_CCNCT`. Si la réplica cambia,
-falla con un mensaje claro en vez de dibujar un mapa con agujeros. Eso mismo
-protege de la trampa fácil: apuntar `CO_GEOMETRIA_URL` a la capa departamental
-del IGAC —que también es un FeatureCollection de polígonos— se rechaza nombrando
-los campos que faltan, en vez de devolver un mapa vacío.
+falla con un mensaje claro en vez de dibujar un mapa con agujeros.
+
+Y distingue dos formas de quedarse corto, porque llevan a arreglos distintos.
+Si la colección trae pocos rasgos **con** los campos del MGN, la réplica cambió
+de contenido y eso es lo que dice. Si no trae los campos, lo que hay al otro
+lado de `CO_GEOMETRIA_URL` no es el MGN —la trampa fácil es apuntarla a la capa
+departamental del IGAC, que también es un FeatureCollection de polígonos—, y
+entonces el mensaje nombra los campos que faltan y señala la variable en vez de
+culpar a la réplica, que mandaría a revisar donde no está el problema.
 
 Y hay pruebas de contrato: una comprueba la réplica a diario, otra que los
 códigos crucen con DIVIPOLA, y otras tres vigilan al IGAC — **que responda y que

@@ -50,8 +50,8 @@ Geoestadístico Nacional 2018 del DANE**, capa municipal política, simplificada
 No es un respaldo: es la única fuente de los 1.122 polígonos. La URL es
 configurable con `CO_GEOMETRIA_URL` justamente porque una réplica de terceros no
 es una garantía — pero ojo, apuntarla a la capa del IGAC no funciona, y
-`_valida` lo rechaza con un mensaje que nombra los campos que faltan en vez de
-dejar pasar un mapa vacío.
+`_valida` lo rechaza diciendo que esos rasgos no son del MGN y nombrando los
+campos que les faltan, en vez de dejar pasar un mapa vacío.
 
 Se descarga una vez y se guarda en la caché de disco, así que después funciona
 sin red. Cada respuesta declara la procedencia completa, porque un mapa sin
@@ -75,7 +75,9 @@ PROCEDENCIA = (
     "Marco Geoestadístico Nacional 2018 del DANE, capa municipal política "
     "(simplificada), obtenida de una réplica pública porque el servicio oficial "
     "del IGAC —que desde el 05-nov-2026 vuelve a responder— no publica capa "
-    "municipal ni permite consultar las que tiene"
+    "municipal en atlas/politicoadministrativo, y las capas municipales "
+    "temáticas de sus otros servicios no respondieron a ninguna de las "
+    "consultas probadas"
 )
 
 # Nombres de campo del MGN. Se validan al cargar: si cambian, es mejor fallar
@@ -107,12 +109,30 @@ def _valida(datos) -> None:
             f"Revisa CO_GEOMETRIA_URL (ahora {URL_GEOMETRIA}).",
         )
     fs = datos.get("features") or []
+    propiedades = (fs[0].get("properties") or {}) if fs else {}
+    faltan = [c for c in CAMPOS.values() if c not in propiedades]
+
     if len(fs) < 1000:
+        # Quedarse corto tiene dos causas que conviene no confundir, porque
+        # llevan a arreglos distintos. Una réplica que se trunca sigue trayendo
+        # los campos del MGN: ahí el aviso correcto es que cambió de contenido.
+        # Pero si tampoco trae los campos, lo que hay al otro lado de
+        # CO_GEOMETRIA_URL no es el MGN —el error fácil es apuntarla a la capa
+        # departamental del IGAC, que también es un FeatureCollection de
+        # polígonos—, y culpar a la réplica manda a revisar donde no es.
+        if fs and faltan:
+            raise ErrorFuenteCaida(
+                f"La geometría trae {len(fs)} rasgos y no son del MGN: les "
+                f"faltan {', '.join(faltan)}.",
+                "Esto no es la capa municipal del MGN. Si CO_GEOMETRIA_URL "
+                "apunta a otra fuente —la capa departamental del IGAC, por "
+                "ejemplo— no sirve: sin MPIO_CCNCT no se puede unir por "
+                "código DIVIPOLA.",
+            )
         raise ErrorFuenteCaida(
             f"La geometría trae {len(fs)} municipios; se esperaban ~1.122.",
             "La réplica cambió de contenido. Ajusta CO_GEOMETRIA_URL.",
         )
-    faltan = [c for c in CAMPOS.values() if c not in (fs[0].get("properties") or {})]
     if faltan:
         raise ErrorFuenteCaida(
             f"A la geometría le faltan campos: {', '.join(faltan)}.",
