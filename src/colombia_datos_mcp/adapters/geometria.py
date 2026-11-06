@@ -1,18 +1,57 @@
 """Geometría municipal y departamental.
 
-**No hay endpoint oficial utilizable, y conviene decirlo antes que nada.** El
-único servicio nacional del IGAC con límites político-administrativos
-—`atlas/politicoadministrativo`— devuelve HTTP 500 «Wait timeout for the
-request» tanto en MapServer como en FeatureServer; su carpeta `limites` solo
-contiene territorios cedidos, y de las 952 capas de `carto` ninguna es
-municipal. `datos.gov.co` tampoco publica los límites como dataset: la búsqueda
-en el catálogo con `only=map` y `only=geo` devuelve cero.
+**Sigue sin haber endpoint oficial utilizable, pero ya no por la razón de
+antes, y la diferencia importa.** El servicio nacional del IGAC
+—`atlas/politicoadministrativo`— **volvió a responder** el 05-nov-2026 después
+de meses de HTTP 500: contesta 200 con ArcGIS Server 11.3 y se anuncia como
+«División Político-Administrativa» del Atlas de Colombia Edición 2024. Lo que
+volvió, sin embargo, es su documento de metadatos, no el dato que hace falta:
 
-Así que la geometría se descarga de una **réplica del Marco Geoestadístico
-Nacional 2018 del DANE**, capa municipal política, simplificada. La URL es
+- **De sus seis capas ninguna es municipal.** Publica transporte terrestre,
+  distritos, capitales, áreas metropolitanas y departamentos. Los 1.122
+  polígonos municipales no están ahí, y son la granularidad que este módulo
+  existe para servir.
+- **No hay `FeatureServer`**, que es la vía para consultar por atributo y traer
+  GeoJSON paginado: la extensión no está instalada («Server object extension
+  'featureserver' not found») y lo dice **con un HTTP 200 y el error dentro del
+  cuerpo**, que es una trampa aparte — `core/http.py` juzga por el status. Ni el
+  mensaje es estable: cuando el servicio está cargado contesta a los 60 s con el
+  timeout en vez de con eso, o sea que a veces ni comprueba si la extensión
+  existe. Solo
+  `MapServer`, sobre una caché de teselas (`singleFusedMapCache`), y su `/query`
+  es lento y poco de fiar: el volcado entero de la capa departamental acertó
+  **2 de 5** intentos secuenciales —33 MB en ~9 s cuando salió— y paginar fue
+  peor, **1 de 5** páginas, porque `resultOffset>0` no funcionó ni una vez. El
+  resto murió con 503 «Wait timeout for the request exceeded» a los 60 s.
+- **Las capas municipales que sí existen son temáticas** y tampoco se pueden
+  consultar: `atlas/potmunicipal` (`COD_MPIO`, `NOM_MPIO`) y
+  `ordenamientoterritorial/clasificacionsegunley617del2000` (`MpCodigo`,
+  `MpNombre`) fallaron las tres formas de consulta —recuento, atributos sin
+  geometría y dos rasgos con geometría— con el mismo 503, seis de seis, pedidas
+  de una en una con tres segundos entre ellas.
+- La carpeta `limites` sigue teniendo **un solo servicio**, territorios cedidos,
+  y de los 952 de `carto` ninguno casa con municipio ni con límite.
+
+Y aunque la capa departamental respondiera siempre, no serviría de atajo: sus
+campos son `DeCodigo`/`DeNombre`, no los del MGN, y sus nombres vienen en Title
+Case y no en mayúsculas. Pero el defecto que de verdad muerde es el recuento.
+Devuelve **33 registros y DIVIPOLA tiene 33 departamentos**, así que comparar
+totales da la migración por buena — y los conjuntos no son el mismo: sobra
+«Area en Litigio Cauca - Huila» con código `00` y **falta Bogotá D.C. (`11`)**,
+que para el IGAC es un distrito y no un departamento. La intersección son 32.
+Unir por código habría metido un polígono fantasma y perdido la capital, en
+silencio y sin que ningún recuento chistara.
+
+`datos.gov.co` tampoco publica los límites como dataset: la búsqueda en el
+catálogo con `only=map` y `only=geo` devuelve cero.
+
+Así que la geometría se sigue descargando de una **réplica del Marco
+Geoestadístico Nacional 2018 del DANE**, capa municipal política, simplificada.
+No es un respaldo: es la única fuente de los 1.122 polígonos. La URL es
 configurable con `CO_GEOMETRIA_URL` justamente porque una réplica de terceros no
-es una garantía: si desaparece o si algún día el IGAC arregla su servicio, se
-cambia por variable de entorno sin tocar código.
+es una garantía — pero ojo, apuntarla a la capa del IGAC no funciona, y
+`_valida` lo rechaza con un mensaje que nombra los campos que faltan en vez de
+dejar pasar un mapa vacío.
 
 Se descarga una vez y se guarda en la caché de disco, así que después funciona
 sin red. Cada respuesta declara la procedencia completa, porque un mapa sin
@@ -35,7 +74,8 @@ URL_GEOMETRIA = os.environ.get(
 PROCEDENCIA = (
     "Marco Geoestadístico Nacional 2018 del DANE, capa municipal política "
     "(simplificada), obtenida de una réplica pública porque el servicio oficial "
-    "del IGAC no responde"
+    "del IGAC —que desde el 05-nov-2026 vuelve a responder— no publica capa "
+    "municipal ni permite consultar las que tiene"
 )
 
 # Nombres de campo del MGN. Se validan al cargar: si cambian, es mejor fallar

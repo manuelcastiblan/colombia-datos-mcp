@@ -2,6 +2,106 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [Sin publicar]
+
+### El IGAC volvió, y la geometría se queda donde está
+
+`test_el_servicio_oficial_del_igac_sigue_caido` llevaba meses pasando y el
+05-nov-2026 falló: el servicio nacional del IGAC
+`atlas/politicoadministrativo` dejó de devolver HTTP 500 y ahora contesta 200
+con ArcGIS Server 11.3, «División Político-Administrativa» del Atlas de Colombia
+Edición 2024. El README decía que el día que respondiera, la geometría debería
+migrar. Respondió. **No migró**, y esta entrada es sobre por qué.
+
+Lo que volvió es el documento de metadatos del servicio, no el dato. Sondeado
+entero:
+
+- **De sus seis capas ninguna es municipal**: transporte terrestre, distritos,
+  capitales, áreas metropolitanas y `Departamento`. Los 1.122 polígonos
+  municipales sobre los que se sostiene `co_geo_limites` no están ahí.
+- **No expone `FeatureServer`**, que es la vía para consultar por atributo y
+  traer GeoJSON paginado: la extensión no está instalada. Lo avisa con un HTTP
+  200 y el error en el cuerpo.
+- **Sus consultas son lentas y poco de fiar.** Volcar la capa departamental
+  entera acertó 2 de 5 intentos secuenciales —33 MB en unos 9 s cuando salió— y
+  paginar con `resultOffset` acertó 1 de 5, porque `resultOffset>0` no funcionó
+  ni una vez. El resto murió con 503 «Wait timeout for the request exceeded» a
+  los 60 s: el mismo error que documentaba el adaptador desde el principio,
+  ahora envuelto en 503 en vez de 500. Y llega de dos formas según el formato
+  —HTTP 200 con el error en el cuerpo si se pide `f=json`, 503 de verdad si se
+  pide `f=geojson`—, lo que importa porque `core/http.py` juzga por el status.
+- **Las capas municipales temáticas tampoco se pueden consultar.**
+  `atlas/potmunicipal` (`COD_MPIO`, `NOM_MPIO`) y
+  `ordenamientoterritorial/clasificacionsegunley617del2000` (`MpCodigo`,
+  `MpNombre`) tienen los campos que harían falta y fallaron las tres formas de
+  consulta —recuento, atributos sin geometría, dos rasgos con geometría— con el
+  mismo 503, seis de seis, pedidas una a una con tres segundos entre ellas.
+- **Y su capa departamental no habría servido de atajo**: campos
+  `DeCodigo`/`DeNombre` en vez de los del MGN y nombres en Title Case. Pero el
+  hallazgo que más caro habría salido es otro, y es el que habría pasado
+  cualquier revisión: la capa trae **33 registros y DIVIPOLA tiene 33
+  departamentos**, así que comparar totales —la comprobación que cualquiera
+  escribiría— da la migración por buena. Los conjuntos no son el mismo: sobra
+  «Area en Litigio Cauca - Huila» con código `00`, y **falta Bogotá D.C.
+  (`11`)**, que para el IGAC es un distrito y no un departamento. La
+  intersección son 32, así que unir por código habría dejado la capital del país
+  sin contorno sin que ningún recuento chistara.
+- Y un detalle que sale de comparar dos volcados de días distintos: **el orden
+  de los registros no es estable** —`52` salió decimoséptimo en uno y último en
+  el otro—, así que paginar esta capa perdería y duplicaría rasgos aunque el
+  servicio respondiera siempre.
+
+Escribir `adapters/arcgis.py` habría añadido una vía que gasta los 30 s del
+perfil `arcgis` antes de caer a la réplica, que sirve el país entero en 0,9 s, y
+habría puesto el nivel departamental en una fuente de 2024 incoherente con el
+nivel municipal de 2018 — dos contornos que no encajan entre sí, en un servidor
+cuya premisa es que todo se une por DIVIPOLA. Así que el adaptador no se
+escribió y la decisión quedó documentada con los números delante.
+
+### Cambiado
+
+- **`adapters/geometria.py` dice la verdad de hoy.** Su docstring explicaba que
+  el IGAC devuelve 500; ahora explica que responde y por qué sigue sin servir.
+  La cadena `PROCEDENCIA`, que viaja al sobre de cada respuesta de
+  `co_geo_limites`, decía «porque el servicio oficial del IGAC no responde» —una
+  afirmación que había dejado de ser cierta— y ahora dice que no publica capa
+  municipal ni permite consultar las que tiene. El código no cambió: cambió lo
+  que afirma, que en este servidor es parte del dato.
+- **La réplica dejó de ser «la fuente provisional» para ser lo que es.** No es
+  un respaldo: es la única fuente de los 1.122 polígonos, y así se nombra en el
+  README, en `docs/fuentes.md`, en `docs/herramientas.md` y en la prueba de
+  contrato que la vigila.
+
+### Añadido
+
+- **`docs/fuentes.md` tiene por fin un apartado de geometría**, con los campos
+  del MGN, los dos límites que hay que declarar al dibujar (corte de 2018,
+  geometría simplificada) y la tabla de supuesto contra hallazgo del sondeo al
+  IGAC.
+- **Fixtures reales del IGAC en `tests/fixtures.py`** —documento de servicio,
+  campos de la capa departamental, los tres primeros rasgos del único volcado
+  que llegó a servir, las dos listas de códigos en el orden en que llegaron y
+  los cuerpos de sus dos errores— con sus defectos intactos, el área en litigio
+  incluida.
+- **Nueve pruebas sin red** en `tests/test_geometria.py`. La que importa:
+  apuntar `CO_GEOMETRIA_URL` a la capa del IGAC —que también es un
+  FeatureCollection de polígonos, así que el cambio parece inocuo— se rechaza
+  con un mensaje que nombra los campos que faltan, en vez de dejar pasar la
+  colección para que `domain/geo.py` reviente luego con un `KeyError` ilegible.
+  Otras fijan por escrito que los 33 del IGAC cuadran en total con los 33 de
+  DIVIPOLA **sin ser el mismo conjunto**, y que su orden no es estable.
+
+### Corregido
+
+- **`test_el_servicio_oficial_del_igac_sigue_caido` se fue, habiendo cumplido.**
+  Vigilaba la vuelta del IGAC y la detectó. En su lugar hay tres pruebas de
+  contrato que comprueban los supuestos de verdad: que el servicio responde, que
+  **sigue sin publicar capa municipal** —y el día que esa falle, es cuando toca
+  escribir el adaptador— y que su capa departamental no ha adoptado los nombres
+  del MGN. Son rápidas a propósito: solo piden metadatos, que el servicio sirve
+  en menos de un segundo. Una aserción que tarda cinco minutos en fallar no sirve
+  en CI.
+
 ## [0.16.0] — 2026-11-05
 
 Registro mercantil, sanciones, educación, desempeño municipal y TRM: cinco

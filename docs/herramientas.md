@@ -645,23 +645,50 @@ El sobre lo advierte.
 
 #### De dónde sale, y por qué importa
 
-**No hay endpoint oficial utilizable.** El servicio nacional del IGAC
-—`atlas/politicoadministrativo`— devuelve HTTP 500 «Wait timeout» tanto en
-MapServer como en FeatureServer; su carpeta `limites` solo tiene territorios
-cedidos, y de las 952 capas de `carto` ninguna es municipal. `datos.gov.co`
-tampoco los publica: buscar con `only=map` y `only=geo` devuelve cero.
+**Sigue sin haber endpoint oficial utilizable, pero ya no porque el IGAC esté
+caído.** Su servicio nacional —`atlas/politicoadministrativo`— **volvió a
+responder** el 05-nov-2026 después de meses de HTTP 500: contesta 200, ArcGIS
+Server 11.3, «División Político-Administrativa» del Atlas de Colombia Edición
+2024. Se sondeó entero y no alcanza:
 
-Así que se usa una **réplica pública del Marco Geoestadístico Nacional 2018 del
-DANE**, capa municipal política simplificada, configurable con
-`CO_GEOMETRIA_URL`. Se descarga una vez y se cachea en disco 24 h, así que
-después funciona sin red.
+| Lo que hace falta | Lo que hay |
+|---|---|
+| Capa municipal (1.122 polígonos) | Ninguna. Seis capas: transporte, distritos, capitales, áreas metropolitanas y `Departamento` |
+| `FeatureServer` para consultar por atributo | No existe: la extensión no está instalada, y lo avisa con un HTTP 200 y el error en el cuerpo. Solo `MapServer` sobre caché de teselas |
+| Consultas que respondan | A medias: 2 de 5 volcando la capa entera (33 MB en ~9 s), 1 de 5 paginando —`resultOffset>0` no funcionó ni una vez—. El resto, 503 «Wait timeout for the request exceeded» a los 60 s |
+| Campos del MGN | `DeCodigo`/`DeNombre`, que no casan con `DPTO_CCDGO`/`DPTO_CNMBR` |
+| 33 departamentos de DIVIPOLA | 33 registros y los totales cuadran, pero sobra «Area en Litigio Cauca - Huila» (`00`) y falta **Bogotá D.C. (`11`)**. Intersección: 32 |
+
+Ese último es el que habría pasado la revisión: 33 contra 33 **cuadra**, pero el
+IGAC no considera Bogotá un departamento sino un distrito, así que unir por
+código habría dejado la capital sin contorno y metido a cambio un área en
+litigio, sin que ningún recuento lo delatara.
+
+Las capas municipales temáticas que sí existen —`atlas/potmunicipal`,
+`ordenamientoterritorial/clasificacionsegunley617del2000`— fallaron 6 de 6
+consultas, incluso pidiendo **un** municipio sin geometría. La carpeta `limites`
+solo tiene territorios cedidos, y de las 952 capas de `carto` ninguna es
+municipal. `datos.gov.co` tampoco los publica: buscar con `only=map` y
+`only=geo` devuelve cero.
+
+Así que se sigue usando una **réplica pública del Marco Geoestadístico Nacional
+2018 del DANE**, capa municipal política simplificada, configurable con
+`CO_GEOMETRIA_URL`. No es un respaldo: es la **única** fuente de los 1.122
+polígonos. Se descarga una vez y se cachea en disco 24 h, así que después
+funciona sin red — y sirve el país entero en 0,9 s, contra los 60 s que el IGAC
+tarda en rendirse.
 
 El adaptador **valida la forma antes de fiarse**: que sea un FeatureCollection,
 que traiga ~1.122 municipios y que tenga `MPIO_CCNCT`. Si la réplica cambia,
-falla con un mensaje claro en vez de dibujar un mapa con agujeros. Y hay tres
-pruebas de contrato: una comprueba la réplica a diario, otra que los códigos
-crucen con DIVIPOLA, y otra **vigila si el IGAC vuelve a responder** — el día que
-lo haga, esto debería migrar a la fuente oficial.
+falla con un mensaje claro en vez de dibujar un mapa con agujeros. Eso mismo
+protege de la trampa fácil: apuntar `CO_GEOMETRIA_URL` a la capa departamental
+del IGAC —que también es un FeatureCollection de polígonos— se rechaza nombrando
+los campos que faltan, en vez de devolver un mapa vacío.
+
+Y hay pruebas de contrato: una comprueba la réplica a diario, otra que los
+códigos crucen con DIVIPOLA, y otras tres vigilan al IGAC — **que responda y que
+siga sin publicar capa municipal**, que es la condición real para migrar. El día
+que esa prueba falle, toca escribir `adapters/arcgis.py`.
 
 Es un corte de **2018**: los municipios creados después no están. Falta Nuevo
 Belén de Bajirá, que en DIVIPOLA sí existe.

@@ -68,7 +68,7 @@ Todas son opcionales y tienen valores conservadores.
 | `CO_TTL_METADATOS` | `86400` (24 h) | TTL de esquemas y dominios categóricos, en disco. |
 | `CO_CACHE_DIR` | `~/.cache/colombia-datos-mcp` | Dónde vive la caché L2. |
 | `CO_EXPORT_DIR` | `~/colombia-datos-export` | Único directorio donde `co_datos_exportar` puede escribir. |
-| `CO_GEOMETRIA_URL` | réplica del MGN 2018 | De dónde bajar los límites municipales. Configurable porque la fuente oficial no responde. |
+| `CO_GEOMETRIA_URL` | réplica del MGN 2018 | De dónde bajar los límites municipales. Configurable porque la fuente oficial no publica capa municipal. Apuntarla a la capa departamental del IGAC NO funciona: los campos no casan y el adaptador lo rechaza. |
 | `CO_REQ_POR_SEGUNDO` | `5` | Autolímite por host. |
 | `CO_MAX_REINTENTOS` | `4` | Intentos por petición antes de rendirse. |
 | `CO_USER_AGENT` | `colombia-datos-mcp/<versión> (+URL del repo)` | Identificación ante la fuente. |
@@ -810,8 +810,10 @@ Explícito para que nadie lo dé por hecho:
   servidor se define como «sin credenciales».
 - **No expide certificados de antecedentes.** Las fuentes de sanciones son
   incompletas y con rezago; un cero en ellas no limpia a nadie.
-- **No cubre Banco de la República ni IGAC / MGN del DANE**: faltan los
-  adaptadores SDMX y ArcGIS.
+- **No cubre Banco de la República**: falta el adaptador SDMX.
+- **No tiene adaptador ArcGIS**, y no por falta de tiempo: el servicio del IGAC
+  se evaluó el 05-nov-2026 y no publica capa municipal. La geometría viene de
+  una réplica del MGN 2018 del DANE.
 - `ESQUEMA_CAMBIADO` y `FUERA_DE_JURISDICCION` están definidos como errores pero
   **ningún camino de código los lanza todavía**. `PRIVACIDAD` sí, desde 0.16.0.
 
@@ -900,18 +902,44 @@ quedaba escondida dentro de la suma—. Lo atrapó `test_invariantes.py`, no la
 revisión, y el arreglo volvió a ser cerrar la vía de escritura: `Total.union`
 recibe los pares `(devueltos, límite)` y declara desconocido lo que no consta.
 
-Pendiente: adaptador SDMX para Banco de la República y adaptador ArcGIS para el
-IGAC. El SDMX es además lo que impediría seguir sin deflactar, aunque el Banco no
+Pendiente: adaptador SDMX para Banco de la República. El adaptador ArcGIS para
+el IGAC dejó de estar pendiente para quedar descartado con los números delante:
+su servicio volvió a responder y no publica capa municipal. El SDMX es además lo que impediría seguir sin deflactar, aunque el Banco no
 publica hoy una API REST abierta de sus series: el servidor advierte que no
 compares montos entre años y ofrece la TRM como segunda unidad, que no es lo
 mismo.
 
-**La geometría es la pieza más frágil del servidor.** No hay endpoint oficial
-utilizable: el servicio nacional del IGAC devuelve HTTP 500 y `datos.gov.co` no
-publica los límites como dataset, así que se usa una réplica del MGN 2018 del
-DANE, configurable con `CO_GEOMETRIA_URL`. Una prueba de contrato comprueba a
-diario que la réplica siga sirviendo los 1.122 municipios con su código DIVIPOLA,
-y otra vigila si el IGAC vuelve — el día que responda, esto debería migrar.
+**La geometría es la pieza más frágil del servidor.** Sigue sin haber endpoint
+oficial utilizable, y desde el 05-nov-2026 ya no por la razón de antes: el
+servicio nacional del IGAC **volvió a responder** —200, ArcGIS Server 11.3,
+Atlas de Colombia Edición 2024— después de meses de HTTP 500. Se sondeó a fondo
+y no sirve igual:
+
+- de sus **seis capas ninguna es municipal** (llegan hasta `Departamento`), y
+  los 1.122 polígonos municipales son la granularidad que este servidor necesita;
+- **no expone `FeatureServer`** —la extensión no está instalada, y lo avisa con
+  un HTTP 200 y el error en el cuerpo— y el `/query` del `MapServer` es poco de
+  fiar: **2 aciertos de 5** volcando la capa departamental entera (33 MB en ~9 s
+  cuando sale) y **1 de 5** paginando, porque `resultOffset>0` no funcionó ni
+  una vez; el resto, 503 «Wait timeout for the request exceeded» a los 60 s;
+- las capas municipales temáticas que sí existen (`atlas/potmunicipal`,
+  `clasificacionsegunley617del2000`) fallaron 6 de 6, incluso pidiendo un
+  municipio suelto sin geometría;
+- y su capa departamental, además de lenta, nombra los campos `DeCodigo`/
+  `DeNombre` en vez de los del MGN, trae los nombres en Title Case, y sobre todo
+  **cuadra en total sin ser lo mismo**: 33 registros contra los 33 departamentos
+  de DIVIPOLA, pero sobra «Area en Litigio Cauca - Huila» (`00`) y **falta
+  Bogotá D.C. (`11`)**. La intersección son 32, así que un recuento habría dado
+  el cambio por bueno mientras el join dejaba la capital sin contorno.
+
+Así que se sigue usando una réplica del MGN 2018 del DANE, configurable con
+`CO_GEOMETRIA_URL`, y conviene decir qué es: **no un respaldo, sino la única
+fuente** de los 1.122 polígonos. Una prueba de contrato comprueba a diario que
+la réplica siga sirviéndolos con su código DIVIPOLA; otra comprueba que el IGAC
+responde **y que sigue sin publicar capa municipal**, que es la condición real
+para migrar. El día que esa prueba falle, hay que escribir `adapters/arcgis.py`
+— y hasta ese día, escribirlo solo añadiría 30 s de espera antes de caer a la
+réplica, que sirve el país entero en 0,9 s.
 
 ## Licencia y atribución
 

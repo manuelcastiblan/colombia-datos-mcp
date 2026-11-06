@@ -8,7 +8,7 @@ flowchart TD
     cliente["Cliente MCP"]
     server["server.py<br/>19 herramientas · 3 recursos · playbook<br/>traduce los errores tipados y arma el ToolResult"]
     dominio["domain/ · catalogo · secop · geo · crimen · analisis · exportar<br/>construye filtros, proyecta columnas, arma el sobre"]
-    adaptador["adapters/<br/>socrata.py · Discovery API + SODA<br/>geometria.py · límites del MGN"]
+    adaptador["adapters/<br/>socrata.py · Discovery API + SODA<br/>geometria.py · límites del MGN por réplica"]
     fuente[("datos.gov.co")]
     registro["registry/<br/>unidad de análisis · campos clave · alias · atribuciones"]
     nucleo["core/<br/>sobre · presupuesto · caché · HTTP · errores · coordenadas · texto"]
@@ -35,7 +35,7 @@ dominio nunca llama a `httpx` y el adaptador nunca sabe qué es un contrato.
 | `core/nit.py` | Las dos formas de un NIT —con y sin dígito de verificación— y por qué una cédula no se pliega nunca. |
 | `core/privacidad.py` | El guardarraíl de las tres fuentes que traen personas: política, finalidad, clasificación del documento y enmascarado. |
 | `registry/datasets.py` | IDs, unidad de análisis, campos clave, alias, atribuciones. |
-| `adapters/geometria.py` | Límites del MGN, con validación de forma y caché en disco. |
+| `adapters/geometria.py` | Límites del MGN, con validación de forma y caché en disco. Fuente única, no respaldo: el servicio del IGAC responde desde el 05-nov-2026 pero no publica capa municipal. |
 | `domain/analisis.py` | Series temporales y perfilado de calidad, para cualquier dataset. |
 | `domain/crimen.py` | 23 datasets de MinDefensa: series, municipios y comparación entre años. |
 | `domain/exportar.py` | La única operación que escribe: descarga paginada a disco. |
@@ -406,8 +406,22 @@ Ser explícito aquí evita que alguien dé por implementado lo que no está:
 - **El presupuesto solo recorta el markdown**, y el `estructurado` va con las
   mismas filas ya recortadas: no hay una vía para recibir todas las filas en una
   sola respuesta. Para eso está `co_datos_exportar`, que pagina a disco.
-- **Sin adaptador SDMX** (Banco de la República) ni **ArcGIS** (IGAC, MGN del
-  DANE) con descubrimiento del corte vigente.
+- **Sin adaptador SDMX** (Banco de la República) con descubrimiento del corte
+  vigente.
+- **Sin adaptador ArcGIS, y ya no por falta de tiempo: se evaluó y no procede.**
+  El servicio del IGAC `atlas/politicoadministrativo` volvió a responder el
+  05-nov-2026 tras meses de HTTP 500, así que se sondeó a fondo. No publica capa
+  municipal —sus seis capas llegan hasta `Departamento`—, no expone
+  `FeatureServer`, y su `/query` es poco de fiar: 2 aciertos de 5 volcando la
+  capa departamental (33 MB) y 1 de 5 paginando; el resto, 503 «Wait timeout for
+  the request exceeded» a los 60 s. Las capas municipales temáticas que existen
+  (`atlas/potmunicipal`, `ordenamientoterritorial/clasificacionsegunley617del2000`)
+  fallaron 6 de 6. Y su capa departamental cuadra en total con DIVIPOLA sin ser
+  el mismo conjunto: sobra un área en litigio (`00`) y falta Bogotá D.C. (`11`).
+  Escribir el adaptador habría añadido una vía que gasta 30 s de timeout antes
+  de caer a la réplica, para un dato que la réplica ya sirve en 0,9 s. La
+  decisión se revisa cuando `test_el_igac_responde_pero_no_publica_capa_municipal`
+  falle, que es justo el día en que el IGAC publique municipios.
 - **Sin tasas por habitante**: no hay población municipal total con fuente
   abierta, así que el servidor no puede dividir por nada. Declarado en
   `registry.SIN_FUENTE_ABIERTA`.
