@@ -299,16 +299,18 @@ Las agregaciones traen barras proporcionales a la métrica:
 co_secop_agregar(agrupar_por="modalidad", metrica="contratos", limite=6)
 ```
 
-```markdown
+<!-- salida -->
+**Respuesta:**
+
 | modalidad | contratos | valor total | gráfica |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Contratación directa | 4.544.193 | $3.931.378.721.213.195.485.184 | ████████████████ |
 | Contratación régimen especial | 796.794 | $277.323.984.716.490.637.312 | ██▊ |
 | Mínima cuantía | 330.244 | $85.835.936.664.481.520 | █▏ |
 | Contratación Directa (con ofertas) | 77.176 | $873.112.811.754.116.349.952 | ▎ |
 | Selección Abreviada de Menor Cuantía | 60.014 | $1.347.211.323.950.801.408 | ▎ |
 | Selección abreviada subasta inversa | 52.877 | $70.054.914.734.920.672 | ▏ |
-```
+
 
 La lectura salta a la vista: la contratación directa son **4,5 de los 5,9
 millones** de contratos de SECOP II, tres cuartas partes del total.
@@ -368,13 +370,15 @@ Es la receta más importante del módulo, porque el error es muy fácil de comet
 co_crimen_comparar(anio_a=2017, anio_b=2025, delitos="secuestro,extorsion,homicidio")
 ```
 
-```markdown
+<!-- salida -->
+**Respuesta:**
+
 | delito | 2017 | 2025 | cambio |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Secuestro | 195 | 701 | +259 % |
 | Extorsion | 5.532 | 13.417 | +143 % |
 | Homicidio | 11.957 | 14.038 | +17 % |
-```
+
 
 **+259 % en secuestro** parece una catástrofe. Ahora mira de dónde viene:
 
@@ -382,14 +386,16 @@ co_crimen_comparar(anio_a=2017, anio_b=2025, delitos="secuestro,extorsion,homici
 co_crimen_serie(delito="secuestro", desde=2003, hasta=2006)
 ```
 
-```markdown
+<!-- salida -->
+**Respuesta:**
+
 | periodo | casos | gráfica |
-|---|---|---|
+| --- | --- | --- |
 | 2003 | 2.121 | ████████████████ |
 | 2004 | 1.440 | ██████████▉ |
 | 2005 | 800 | ██████ |
 | 2006 | 687 | █████▏ |
-```
+
 
 2.121 casos en 2003, 195 en 2017, 701 en 2025. Contra 2017 subió 259 %; contra
 2003 **bajó 67 %**. Las dos cifras son ciertas y describen la misma serie.
@@ -404,14 +410,16 @@ sin su serie es técnicamente cierto y sustancialmente engañoso.**
 co_crimen_por_municipio(delito="extorsion", anio=2025, limite=4)
 ```
 
-```markdown
+<!-- salida -->
+**Respuesta:**
+
 | municipio | departamento | cod_mpio | casos | gráfica |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | BOGOTA D.C. | BOGOTA D.C. | 11001 | 2.228 | ████████████████ |
 | MEDELLIN | ANTIOQUIA | 05001 | 972 | ███████ |
 | BARRANQUILLA | ATLANTICO | 08001 | 729 | █████▎ |
 | CALI | VALLE DEL CAUCA | 76001 | 435 | ███▏ |
-```
+
 
 Fíjate en `cod_mpio`: es la clave DIVIPOLA, y sirve para cruzar con geometría o
 con cualquier otra fuente territorial **por código**, sin pasar por el nombre —
@@ -441,20 +449,22 @@ Una sola llamada antes de cualquier otra cosa:
 co_dossier_documento(documento="899999068")
 ```
 
-```
+<!-- salida -->
+**Respuesta:**
+
 **Documento 899999068** — ECOPETROL S A · DV 1
 
-| ámbito                      | fuente                       | hallazgo |
-|---|---|---|
-| Registro mercantil          | RUES · c82u-588k             | ECOPETROL S A · SOCIEDAD ANONIMA · matrícula ACTIVA en BOGOTA desde 2003-07-18 |
-| Contratación estatal        | SECOP II · jbjy-vk9h         | 7 contratos · $8.137.440.199 · de 2020-10-19 a 2025-11-04 |
-| Estados financieros         | Supersociedades · pfdp-zks5  | no reporta — los bancos y aseguradoras reportan a la Superfinanciera |
-| 10.000 más grandes          | Supersociedades · 6cat-2gcs  | sí, en 2025, 2024, 2023, 2022, 2021 · macrosector MINERO |
-| Multas de contratación      | SECOP I · 4n4q-k399          | 0 registros |
-| Antecedentes disciplinarios | Procuraduría · iaeu-rcn6     | 0 registros |
-| Sanciones a contadores      | JCC · fs36-azrv              | 0 registros |
-| Responsabilidad fiscal      | Contraloría · jr8e-e8tu      | 0 registros |
-```
+| ámbito | fuente | hallazgo |
+| --- | --- | --- |
+| Registro mercantil | RUES · c82u-588k | ECOPETROL S A · SOCIEDAD ANONIMA · matrícula ACTIVA en BOGOTA desde 2003-07-18 |
+| Contratación estatal | SECOP II · jbjy-vk9h | 7 contratos · $8.137.440.199 · de 2020-10-19 a 2025-11-04 |
+| Estados financieros | Supersociedades · pfdp-zks5 | no reporta — los bancos y aseguradoras reportan a la Superfinanciera |
+| 10.000 más grandes | Supersociedades · 6cat-2gcs | sí, en 2025, 2024, 2023, 2022, 2021 · macrosector MINERO |
+| Multas de contratación | SECOP I · 4n4q-k399 | 0 registros |
+| Antecedentes disciplinarios | Procuraduría · iaeu-rcn6 | 0 registros |
+| Sanciones a contadores | JCC · fs36-azrv | 0 registros |
+| Responsabilidad fiscal | Contraloría · jr8e-e8tu | 0 registros |
+
 
 **Los ceros son el punto, no el relleno.** La tabla deja escrito qué se miró,
 así que un cero se puede interpretar: sin esa lista, «no encontré sanciones» y
@@ -479,16 +489,18 @@ quién», no hace falta ninguna persona:
 co_integridad_panorama(agrupar_por="calidad")
 ```
 
-```
-| calidad                               | sanciones |
-|---|---|
-| MIEMBRO DE LA FUERZA PÚBLICA          |    26.091 |
-| SERVIDOR PÚBLICO                      |    15.736 |
-| PARTICULAR QUE EJERCE FUNCIÓN PÚBLICA |       143 |
-| NA                                    |       128 |
-| CONTRATISTA                            |        18 |
-| PARTICULAR                            |         8 |
-```
+<!-- salida -->
+**Respuesta:**
+
+| calidad | sanciones |
+| --- | --- |
+| MIEMBRO DE LA FUERZA PÚBLICA | 26.091 |
+| SERVIDOR PÚBLICO | 15.736 |
+| PARTICULAR QUE EJERCE FUNCIÓN PÚBLICA | 143 |
+| NA | 128 |
+| CONTRATISTA | 18 |
+| PARTICULAR | 8 |
+
 
 Esa tabla responde entera sin pedir finalidad y sin devolver un nombre. Y
 cambia cómo se lee todo lo demás: **18 contratistas de 42.124 sanciones**
@@ -524,11 +536,13 @@ segunda unidad, a la TRM de la fecha del contrato:
 co_macro_convertir(monto=1000000000, fecha="2024-01-21")
 ```
 
-```
-| monto (COP)      | TRM      | fecha de la TRM | monto (USD)   |
-|---|---|---|---|
-| $1.000.000.000   | 3.916,39 | 2024-01-20      | US$ 255.337,19 |
-```
+<!-- salida -->
+**Respuesta:**
+
+| monto (COP) | TRM | fecha de la TRM | monto (USD) |
+| --- | --- | --- | --- |
+| $1.000.000.000 | 3.916,39 | 2024-01-20 | US$ 255.337,19 |
+
 
 Dos cosas que la respuesta aclara y conviene no saltarse:
 

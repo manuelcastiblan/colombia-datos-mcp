@@ -81,9 +81,11 @@ Todas son opcionales y tienen valores conservadores.
 Pidiendo `co_geo_divipola(consulta="Itagui", limite=2)` —sin tilde, a propósito—
 la respuesta completa es:
 
-```markdown
+<!-- salida -->
+**Respuesta:**
+
 | cod_dpto | departamento | cod_mpio | municipio | tipo | lon | lat |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | 05 | ANTIOQUIA | 05360 | ITAGÜÍ | Municipio | -75.612056 | 6.175079 |
 
 **1 fila(s)** de **1** coincidencias · orden: `cod_mpio`
@@ -93,7 +95,7 @@ Fuente: `gdxc-w37w` DIVIPOLA - Códigos municipios · CC BY-SA 4.0
 Consulta reproducible: https://www.datos.gov.co/resource/gdxc-w37w.json?%24where=nom_mpio+in+%28%27ITAG%C3%9C%C3%8D%27%29&%24order=cod_mpio&%24limit=2
 
 > Los códigos DIVIPOLA son texto con ceros a la izquierda: consérvalos como string.
-```
+
 
 Todo lo que hay debajo de la tabla es **el sobre**, y es parte del contrato:
 
@@ -382,19 +384,21 @@ significar «no está en SECOP II», no «no contrató nunca».
 co_datos_perfilar(dataset_id="jbjy-vk9h", campo="valor_del_contrato")
 ```
 
-```markdown
+<!-- salida -->
+**Respuesta:**
+
 - Rango: 0 a 881.804.150.601.557.082.112
 - Los 10 valores mayores aportan el 95,5 % de la suma.
 
 | Por encima de | Filas |
-|---|---|
+| --- | --- |
 | 1.000.000.000 | 101.292 |
 | 1.000.000.000.000 | 3.452 |
 | 1.000.000.000.000.000.000 | 41 |
 
 > ATENCIÓN: 10 filas de 5.958.553 aportan el 95,5 % de la suma. Una suma así
 > no describe al conjunto: revisa si son valores reales o errores de digitación.
-```
+
 
 Ese reparto por orden de magnitud es lo que delata una segunda población dentro
 de una columna. Descubrirlo a mano costó una investigación entera; ahora cuesta
@@ -507,16 +511,18 @@ comparar los grupos sin salir de la terminal. Municipios por departamento:
 co_datos_agregar(dataset_id="gdxc-w37w", agrupar_por="dpto", limite=6)
 ```
 
-```markdown
+<!-- salida -->
+**Respuesta:**
+
 | dpto | total | gráfica |
-|---|---|---|
+| --- | --- | --- |
 | ANTIOQUIA | 125 | ████████████████ |
 | BOYACÁ | 123 | ███████████████▊ |
 | CUNDINAMARCA | 116 | ██████████████▉ |
 | SANTANDER | 87 | ███████████▏ |
 | NARIÑO | 64 | ████████▎ |
 | TOLIMA | 47 | ██████ |
-```
+
 
 Todas comparten escala —eso es lo que las hace comparables— y usan bloques de un
 octavo, así que 87 y 64 se distinguen sin leer los números. Un valor no numérico
@@ -531,13 +537,15 @@ Las mismas barras sobre `metrica="valor"` en SECOP dan esto:
 co_secop_agregar(agrupar_por="departamento", metrica="valor", limite=3)
 ```
 
-```markdown
+<!-- salida -->
+**Respuesta:**
+
 | departamento | contratos | valor total | gráfica |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Antioquia | 563.810 | $4.712.182.461.396.660.781.056 | ████████████████ |
 | Distrito Capital de Bogotá | 2.002.976 | $216.174.625.284.825.972.736 | ▊ |
 | Arauca | 25.550 | $48.653.538.638.823.145.472 | ▏ |
-```
+
 
 Bogotá tiene **cuatro veces más contratos** que Antioquia y una barra veinte
 veces menor. Eso no es un fallo de dibujo: es la regla 5 hecha visible. Fue así
@@ -552,19 +560,21 @@ Una gráfica que no cuadra con lo que sabes del mundo es información, no ruido.
 co_datos_perfilar(dataset_id="jbjy-vk9h", campo="valor_del_contrato")
 ```
 
-```markdown
+<!-- salida -->
+**Respuesta:**
+
 - Rango: 0 a 881.804.150.601.557.082.112
 - Los 10 valores mayores aportan el 95,5 % de la suma.
 
 | Por encima de | Filas |
-|---|---|
+| --- | --- |
 | 1.000.000.000 | 101.292 |
 | 1.000.000.000.000 | 3.452 |
 | 1.000.000.000.000.000.000 | 41 |
 
 > ATENCIÓN: 10 filas de 5.958.553 aportan el 95,5 % de la suma. Una suma así
 > no describe al conjunto: revisa si son valores reales o errores de digitación.
-```
+
 
 Ese reparto por orden de magnitud es lo que delata una segunda población dentro
 de una columna. Descubrirlo a mano costó una investigación entera; ahora cuesta

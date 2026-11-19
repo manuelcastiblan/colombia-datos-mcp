@@ -128,3 +128,42 @@ def test_hay_diagramas_que_revisar():
     sin mirar nada. Son seis repartidos en cuatro documentos."""
     total = sum(len(MERMAID.findall(d.read_text(encoding="utf-8"))) for d in DOCUMENTOS)
     assert total >= 6, f"solo se encontraron {total} diagramas"
+
+
+# ------------------------------------------------ salidas de herramienta ---
+# Trece bloques mostraban la respuesta de una herramienta dentro de
+# ```markdown. El lector veía tuberías y guiones en vez de la tabla: la
+# documentación enseñaba el fuente del markdown en lugar de lo que el cliente
+# pinta. La llamada sí es código y se queda en su valla; la respuesta no.
+TABLA_EN_VALLA = re.compile(r"^\s*\|.*\|\s*$\n^\s*\|[\s:|-]+\|\s*$", re.M)
+VALLA = re.compile(r"```([a-z]*)\n(.*?)```", re.S)
+
+
+@pytest.mark.parametrize("documento", DOCUMENTOS, ids=_ids)
+def test_ninguna_tabla_vive_dentro_de_una_valla_de_codigo(documento: Path):
+    texto = documento.read_text(encoding="utf-8")
+    atrapadas = [texto[:m.start()].count("\n") + 1
+                 for m in VALLA.finditer(texto) if TABLA_EN_VALLA.search(m.group(2))]
+    assert not atrapadas, (
+        f"Tablas dentro de una valla de código en {_ids(documento)}, "
+        f"líneas {atrapadas}: no se pintan como tabla. Si es la respuesta de "
+        "una herramienta, sácala de la valla y ponle «**Respuesta:**» encima."
+    )
+
+
+@pytest.mark.parametrize("documento", DOCUMENTOS, ids=_ids)
+def test_cada_salida_marcada_va_seguida_de_markdown_de_verdad(documento: Path):
+    """El comentario `<!-- salida -->` marca la respuesta de una herramienta.
+    Lo que venga detrás tiene que pintarse: una tabla o texto con formato,
+    nunca otra valla."""
+    lineas = documento.read_text(encoding="utf-8").splitlines()
+    fallos = []
+    for i, l in enumerate(lineas):
+        if l.strip() != "<!-- salida -->":
+            continue
+        siguientes = [x for x in lineas[i + 1:i + 6] if x.strip()]
+        if not siguientes or not siguientes[0].startswith("**Respuesta:**"):
+            fallos.append(f"  línea {i + 1}: falta la línea «**Respuesta:**»")
+        elif len(siguientes) > 1 and siguientes[1].lstrip().startswith("```"):
+            fallos.append(f"  línea {i + 1}: la respuesta volvió a una valla de código")
+    assert not fallos, f"Salidas mal marcadas en {_ids(documento)}:\n" + "\n".join(fallos)

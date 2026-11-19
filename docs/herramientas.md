@@ -210,16 +210,18 @@ Con `grafica` (por defecto activa):
 co_datos_agregar(dataset_id="gdxc-w37w", agrupar_por="dpto", limite=6)
 ```
 
-```markdown
+<!-- salida -->
+**Respuesta:**
+
 | dpto | total | gráfica |
-|---|---|---|
+| --- | --- | --- |
 | ANTIOQUIA | 125 | ████████████████ |
 | BOYACÁ | 123 | ███████████████▊ |
 | CUNDINAMARCA | 116 | ██████████████▉ |
 | SANTANDER | 87 | ███████████▏ |
 | NARIÑO | 64 | ████████▎ |
 | TOLIMA | 47 | ██████ |
-```
+
 
 La barra se calcula sobre el valor **crudo** del primer alias, antes de darle
 formato: si se midiera sobre `$1.234` ya formateado, el separador de miles
