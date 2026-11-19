@@ -11,6 +11,7 @@ pytest
 |---|---|---|---|
 | Núcleo | `tests/test_core.py` | No | Sobre, presupuesto, coordenadas, HTTP, caché, formato. |
 | Texto | `tests/test_texto.py` | No | Plegado y comparación de nombres, con las mediciones que justifican la estrategia. |
+| Documentación | `tests/test_documentacion.py` | No | Tablas markdown y diagramas mermaid: lo que se rompe en silencio. |
 | Dominio y servidor | `tests/test_dominio.py`, `tests/test_servidor.py` | No | Filtros, proyecciones y herramientas, con la red simulada por `RedFalsa`. |
 | Invariantes | `tests/test_invariantes.py` | No | Lo que **toda** herramienta debe cumplir, recorriéndolas todas. |
 | Contrato | `tests/test_contrato.py` | **Sí** | Los supuestos sobre la fuente viva. Se pide con `pytest -m contrato`. |
