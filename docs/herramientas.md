@@ -1012,5 +1012,5 @@ Una entidad pequeña con tasa alta pesa aquí lo mismo que un banco grande.
 | `co://secop/joins` | Joins verificados entre datasets. |
 | `co://atribuciones` | Cadenas de atribución exactas que exige el facet de Socrata. |
 | `co://privacidad/politica` | La política vigente, las finalidades admitidas y qué fuentes traen personas. Se puede leer **sin provocar un error**. |
-| `co://fuentes/familias` | Las siete familias del registro con la unidad de análisis de cada dataset. |
+| `co://fuentes/familias` | Las trece familias del registro con la unidad de análisis de cada dataset. |
 | `co://sin-fuente-abierta` | Lo que el servidor **no** puede responder y por qué: población municipal, IPC, Rama Judicial. |

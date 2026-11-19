@@ -229,9 +229,11 @@ async def de_documento(documento: str, finalidad: str | None = None,
         sobre.advertir(aviso_clasificacion)
     sobre.advertir(
         "Las nueve líneas son TODO lo que este servidor sabe mirar. No incluye "
-        "procesos judiciales, Registraduría, RUNT, SIMIT ni el Boletín de "
-        "Deudores Morosos: esas fuentes solo se consultan por formulario web "
-        "con captcha y no tienen API abierta.")
+        "el expediente judicial, la Registraduría, el RUNT, el SIMIT ni el "
+        "Boletín de Deudores Morosos: esas fuentes solo se consultan por "
+        "formulario web con captcha. Tampoco incluye el SPOA de la Fiscalía, "
+        "que sí está en el servidor pero no es cruzable por documento: sus "
+        "identificadores vienen anonimizados.")
     sobre.advertir(
         "El cruce es por número de documento en sus dos formas (con y sin "
         "dígito de verificación). Una empresa que opere con otro NIT, o un "

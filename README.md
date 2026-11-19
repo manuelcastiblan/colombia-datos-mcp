@@ -4,11 +4,14 @@ Servidor MCP para datos públicos de Colombia: catálogo nacional de
 `datos.gov.co`, contratación pública (SECOP), criminalidad (MinDefensa),
 división territorial con geometría (DIVIPOLA y MGN), registro mercantil (RUES),
 estados financieros (Supersociedades), sanciones y antecedentes, educación
-(ICFES y MinEducación), desempeño municipal (DNP) y TRM. **34 herramientas, sin
-credenciales.**
+(ICFES y MinEducación), desempeño municipal (DNP), TRM, procesos penales del
+SPOA (Fiscalía), regalías (DNP y MinHacienda), cifras forenses (Medicina
+Legal), operativos de drogas y minería (MinDefensa), víctimas del conflicto
+(UARIV) y población reclusa (INPEC). **34 herramientas, sin credenciales.**
 
-Núcleo completo, adaptador de Socrata, motor de privacidad y siete familias de
-datasets. Falta el adaptador SDMX y el de ArcGIS.
+Núcleo completo, adaptador de Socrata, motor de privacidad y trece familias con
+**97 datasets curados**, cada uno con su unidad de análisis medida. Falta el
+adaptador SDMX y el de ArcGIS.
 
 > **Si vas a citar una cifra de aquí, lee
 > [Antes de citar una cifra](#antes-de-citar-una-cifra).** Estos datos tienen
@@ -869,7 +872,7 @@ esquema.**
 |---|---|
 | [docs/herramientas.md](docs/herramientas.md) | Las 34 herramientas: parámetros, valores por defecto y topes. |
 | [docs/recetas.md](docs/recetas.md) | Secuencias que funcionan, con las trampas de cada una y cómo leer el sobre. |
-| [docs/fuentes.md](docs/fuentes.md) | Los 52 datasets: unidad de análisis, campos clave, joins y atribuciones. |
+| [docs/fuentes.md](docs/fuentes.md) | Los 97 datasets: unidad de análisis, campos clave, joins y atribuciones. |
 | [docs/arquitectura.md](docs/arquitectura.md) | Cómo está construido, y qué **no** hace todavía. |
 | [docs/operacion.md](docs/operacion.md) | Diagnóstico: caché, throttling, timeouts, y por qué el servidor no recoge tus cambios. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Las capas de prueba y cómo añadir un dataset o un filtro. |

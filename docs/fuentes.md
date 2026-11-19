@@ -1,10 +1,11 @@
 # Fuentes: datasets, unidades de análisis y joins
 
 Lo que el servidor sabe de cada dataset vive en `registry/datasets.py`. SECOP,
-DIVIPOLA y criminalidad se verificaron contra la API el 18-ago-2026; las siete
+DIVIPOLA y criminalidad se verificaron contra la API el 18-ago-2026; las
 familias de 0.16.0 —empresas, integridad, educación, territorio y macro—, el
-05-nov-2026 y revalidado a diario por la suite de
-contrato. Esta página es su lectura en prosa.
+05-nov-2026; y las seis de 0.17.0 —fiscalía, regalías, forense, operativos,
+conflicto y penitenciario—, el 19-nov-2026. Todo revalidado a diario por la
+suite de contrato. Esta página es su lectura en prosa.
 
 **Los IDs de Socrata rotan.** `6d52-qyqg` ya devuelve 403. Si uno deja de
 responder, búscalo por nombre con `co_datos_buscar_datasets`; no lo des por
@@ -267,7 +268,7 @@ enteros rompe todos los joins.
 `cod_muni` es la clave DIVIPOLA, así que el cruce con geometría o con cualquier
 otra fuente territorial es **por código**, sin pasar por el nombre.
 
-### Los 14 datasets que quedan fuera, y por qué
+### Los 14 datasets que estaban fuera, y dónde están ahora
 
 MinDefensa publica **37** con este mismo esquema. Los otros 14 son operativos
 del Estado —incautaciones, erradicación, aspersión, minas intervenidas, capturas
@@ -280,9 +281,12 @@ por minería ilegal, destrucción de infraestructura— y **no comparten unidad*
 - En `MINAS INTERVENIDAS` (`gr35-i7pm`) el `unidad_de_medida` es nulo en las
   15.827 filas.
 
-Sumar eso junto a homicidios sería sumar kilos con personas, así que el registro
-no los expone. Una prueba de contrato vigila que la unidad de `ERRADICACIÓN`
-siga siendo hectáreas: si algún día se unificara, podrían entrar.
+Sumar eso junto a homicidios sería sumar kilos con personas. Desde 0.17.0 **sí
+están en el registro**, pero en su propia familia (`OPERATIVOS`, ver más
+abajo) y con la unidad de cada uno medida y escrita en sus notas: la
+separación es lo que impide la suma. Una prueba de contrato vigila que la
+unidad de `ERRADICACIÓN` siga siendo hectáreas, y otra, que `test_registro.py`
+no deje colarse un operativo dentro de la familia de criminalidad.
 
 ### Tres trampas del dato
 
@@ -562,6 +566,192 @@ banco grande.
 
 Sin filtro, la agregación hace un recorrido completo y agota el tiempo, así que
 la herramienta exige al menos `desde` o `descripcion`.
+
+## Fiscalía · el SPOA
+
+La otra mitad del delito. MinDefensa cuenta **denuncias**; la Fiscalía cuenta
+**qué pasó con ellas**. Y cubre lo que ninguna otra fuente abierta publica por
+municipio: los delitos contra la administración pública.
+
+### `dbdv-iihs` — Procesos
+
+**23.783.687 filas** desde 2010, solo Ley 906. Lo anterior (Ley 600) no está.
+
+**Una fila no es un proceso.** Un proceso con varios delitos trae una fila por
+delito. En Guaduas son **16.204 filas y 15.665 procesos distintos**; para
+contar procesos hay que pedir `count(distinct proceso_anonimizado)`.
+
+Tres trampas más, todas medidas:
+
+- **Los nombres van en Title Case y sin tilde**: `Guaduas`, `Cundinamarca`,
+  `Delitos Contra La Administracion De Publica` —con la errata de la fuente—.
+  Y el `LIKE` de Socrata **distingue mayúsculas**: `'%ADMINISTRACI%'` devuelve
+  **0** y `'%Administraci%'` devuelve **582** en ese mismo municipio. Filtrar
+  por `cod_dane_hecho`.
+- **Agrupar por `municipio_hecho` expira**; por `cod_dane_hecho`, no.
+- `etapa` y `estado` son el valor de **hoy**, no el del momento del hecho: una
+  serie por año del hecho mezcla procesos de hace quince años con los de este
+  mes.
+
+No identifica a nadie: `proceso_anonimizado` es un SHA-256 y no hay columnas de
+persona. Se consulta libre.
+
+### `piva-db2c` y `hr73-zqjf` — Procesados y víctimas
+
+**33.013.953** y **17.988.620** filas. Aquí la fila **es una persona**: sexo,
+grupo etario, etnia, pueblo indígena, nivel educativo, discapacidad,
+orientación sexual e identidad de género, más el municipio y el delito. Sin
+nombre ni cédula, pero en un municipio pequeño eso es alguien.
+
+Están en `core.privacidad.MICRODATO`: se agregan, no se listan. Víctimas
+incluye además caracterización de feminicidio y la marca `victima_nna` de
+menores de edad.
+
+Una persona aparece varias veces, una por delito y por proceso:
+`id_procesado_anonimizado` no es una persona, es un registro de vinculación.
+
+## Regalías
+
+Dos sistemas que hablan del mismo dinero y no siempre coinciden.
+
+### `mzgh-shtp` — DNP · Proyectos del SGR
+
+**35.010 proyectos**, y la **única fuente abierta con avance físico de obra**:
+SECOP II no lo tiene. Tres avisos:
+
+- El porcentaje lo reporta la entidad ejecutora, que a menudo figura como su
+  propio `interventor`. Los terminados suelen declarar 100 % exacto.
+- `ejecucionfisica` viene **vacía** en proyectos en ejecución. La ausencia no
+  es cero y no se promedia como si lo fuera.
+- No tiene municipio: `entidadejecutora` es texto y `codejecutor` no es
+  DIVIPOLA.
+
+### `uwns-mbwd` — DNP · Contratos de los proyectos
+
+**1.637.804 filas**. Es el puente de un BPIN a los contratos que lo ejecutaron,
+**SECOP I incluido**. Un contrato puede venir **partido en varias filas** —el
+valor base y sus adiciones por separado—, así que sumar `valorcontrato` por
+BPIN infla; `valorcontrato` además es TEXT, de modo que ordenar por él ordena
+alfabéticamente.
+
+`estadoproyecto` aquí y `estado` en `mzgh-shtp` **se contradicen**: hay
+proyectos «Terminado» en uno y «EN EJECUCIÓN» en el otro. Se citan los dos.
+
+### `br9a-gygu`, `g4qj-2p2e`, `e624-d9uy`, `xb6a-jh3a` — MinHacienda
+
+22.675, 5.335, 5.284 y 4.046 filas. Solo el primero baja a proyecto y lleva
+`codigobpin`: es la vía para cruzar la plata del MinHacienda con el avance
+físico del DNP. `vigencia` es un **bienio**, no un año. En ingresos, los
+valores son **acumulados**: el flujo es la diferencia entre dos meses.
+
+## Medicina Legal · forense
+
+Once datasets, **todos microdato individual**: la fila es una víctima, con
+etnia, orientación sexual, discapacidad, municipio, día y franja horaria del
+hecho, agresor presunto y diagnóstico de la lesión. Son datos sensibles del
+artículo 5 de la Ley 1581, así que la política es la de Saber 11: **se agrega,
+no se lista**, por cualquier vía.
+
+| Dataset | Qué cuenta | Filas |
+|---|---|---|
+| `vtub-3de2` | una víctima de homicidio | 125.284 |
+| `f75u-mirk` | una víctima de suicidio | 26.558 |
+| `8hqm-7fdt` | una persona reportada desaparecida | 212.803 |
+| `ers2-kerr` | una víctima de violencia intrafamiliar | 236.840 |
+| `9fs6-37ea` | una víctima de violencia de pareja | 438.786 |
+| `hyqu-diue` | un examen por presunto delito sexual | 233.352 |
+| `s65h-7665` | una muerte en evento de transporte | 73.403 |
+| `irg9-q5fx` | una muerte accidental | 33.254 |
+| `6cjn-eevd` | una lesión accidental | 27.621 |
+| `2kpj-cktv` | una lesión fatal de causa externa (preliminar) | 49.474 |
+| `79dd-d24f` | una lesión no fatal de causa externa (preliminar) | 290.281 |
+
+Tres cosas que no se pueden hacer con ellos:
+
+- **No son el conteo policial.** El homicidio forense de `vtub-3de2` no
+  coincide con el `HOMICIDIO` de MinDefensa, y la diferencia entre los dos es
+  un dato en sí mismo. No son intercambiables ni sumables.
+- **Violencia intrafamiliar y violencia de pareja se solapan**: son dos cortes
+  del mismo sistema. Sumarlos duplica.
+- **Los dos preliminares son del año en curso y cambian.** No se mezclan con
+  las cifras definitivas.
+
+En desaparecidos, `estado_de_la_desaparicion` separa a quien sigue desaparecido
+de quien apareció: contar filas sin filtrarlo cuenta las dos cosas.
+
+## Operativos · MinDefensa y Policía
+
+Los catorce datasets que **estaban fuera** de la familia de criminalidad entran
+ahora, con otros cinco, en su **propia familia**. La separación es justo lo que
+impide sumarlos con homicidios: aquí la `cantidad` son hectáreas, kilos,
+galones o unidades.
+
+| Dataset | Unidad medida | Filas |
+|---|---|---|
+| `p72f-qcvk` ERRADICACIÓN | `unidad` = HECTAREA en todas | 146.232 |
+| `uvrw-m4tm` ASPERSIÓN | HECTAREA en todas | 9.889 |
+| `g228-vp9d` MARIHUANA | KILOGRAMO en todas | 495.622 |
+| `3cjd-phaj` BASUCO | KILOGRAMO en todas | 237.611 |
+| `nxbk-nikm` BASE DE COCA | KILOGRAMO en todas | 177.570 |
+| `26zg-9p9r` COCAÍNA | **rota**: trae 0.002, 0.003, 0.005 | 156.187 |
+| `iat2-gskt` HEROÍNA | KILOGRAMO en todas | 11.018 |
+| `n997-hhiv` INSUMOS SÓLIDOS | KILOGRAMO (66.724) y kILOGRAMO (1.855) | 68.579 |
+| `k2wp-tdv7` INSUMOS LÍQUIDOS | GALON (61.970) y UNIDAD (78) | 62.048 |
+| `s29y-2xjd` INFRAESTRUCTURA DE DROGA | UNIDAD en todas | 38.314 |
+| `dxs6-mdeg` MAQUINARIA | UNIDAD en todas | 8.012 |
+| `gr35-i7pm` MINAS INTERVENIDAS | **vacía** en las 16.774 | 16.774 |
+| `fr5q-rz2x` GESTIÓN DEL RIESGO | una actuación | 103.359 |
+| `3wcs-8xp9` CAPTURAS POR MINERÍA ILEGAL | una persona | 6.220 |
+| `3pur-d5ez` DESMOVILIZACIÓN | una persona; fecha en `fecha` | 5.284 |
+| `ajsa-ebuq` DESVINCULACIÓN DE MENORES | una persona; fecha en `fecha` | 6.831 |
+| `xg7g-dzk4` SOMETIMIENTO | una persona; **sin `cantidad`** | 2.705 |
+| `u8eq-92tb` MASACRES | `casos` y `victimas`, **sin `cantidad`** | 456 |
+| `3jdh-nmwu` CAPTURAS (Policía) | capturas de un perfil; municipio en `codigo_dane` | 3.746.786 |
+
+Cuatro trampas que hay que repetir porque cuestan dinero:
+
+- **`26zg-9p9r` tiene la columna `unidad` rota.** En vez de KILOGRAMO trae
+  cantidades. La unidad real es el kilogramo; el campo no sirve para
+  comprobarlo. Hay contrato que lo vigila, para poder decirlo el día que lo
+  arreglen.
+- **`n997-hhiv` escribe la unidad de dos formas**, KILOGRAMO y kILOGRAMO:
+  agrupar por `unidad` devuelve dos grupos que son el mismo.
+- **`k2wp-tdv7` no es homogéneo**: 61.970 filas en galones y 78 en unidades.
+  Sumar la columna mezcla galones con bultos.
+- **`u8eq-92tb` tiene dos medidas.** `casos` cuenta masacres y `victimas`
+  cuenta personas; elegir mal cambia la cifra por cuatro o más.
+
+Y una de método: `3jdh-nmwu` es de la Policía, no de MinDefensa, así que el
+municipio va en `codigo_dane` y no en `cod_muni`. Mide la respuesta del Estado,
+no el delito: una captura no es un caso ni una condena.
+
+## Conflicto · Unidad para las Víctimas
+
+`ykxr-xynr` (8.538.627 filas) y `9qih-4vkc` (11.566.909). Son cifras ya
+agregadas; no hay microdato.
+
+**Hay cuatro conteos de persona y no son intercambiables**: `per_ocu` es dónde
+ocurrió el hecho, `per_decla` dónde se declaró, `per_ubic` dónde vive hoy la
+víctima y `per_sa` los sujetos de atención. Elegir el equivocado cambia el mapa
+entero. `eventos` cuenta hechos, no personas.
+
+Dos avisos de formato, los dos medidos:
+
+- La `fecha_corte` viene **aaaa/mm/dd en `ykxr-xynr` y dd/mm/aaaa en
+  `9qih-4vkc`**: dos formatos en la misma familia.
+- Y como es TEXT, **`max(fecha_corte)` miente**: devuelve `31/12/2025` cuando
+  el corte más reciente es `31/10/2026`, porque ordena alfabéticamente.
+
+Los datasets apilan varios cortes: sin filtrar `fecha_corte` se suman cortes
+distintos del mismo universo.
+
+## Penitenciario · INPEC
+
+`ux6v-gpit`, **7.333 filas**: un establecimiento de reclusión en un mes, con
+capacidad, población, sobrepoblación y hacinamiento ya en porcentaje, y con
+códigos DIVIPOLA. Es una **serie mensual**: sin filtrar `anno` y `mes` la
+población sale multiplicada por el número de cortes. El municipio es el del
+establecimiento, no el de origen de las personas presas.
 
 ## Lo que no tiene fuente abierta
 

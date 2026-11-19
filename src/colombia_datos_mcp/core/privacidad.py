@@ -349,6 +349,29 @@ MICRODATO = {
     "kgxf-xxbe",   # ICFES · Saber 11, 7.109.704 registros individuales
     "u37r-hjmu",   # ICFES · Saber Pro
     "iwgf-bkfk",   # ICFES · Saber TyT
+    # Fiscalía: la fila es una persona vinculada a un delito. No trae nombre
+    # ni cédula —el identificador es un SHA-256—, pero sí sexo, grupo etario,
+    # etnia, pueblo indígena, nivel educativo, discapacidad, orientación
+    # sexual e identidad de género, más el municipio y el delito. En un
+    # municipio pequeño eso es una persona concreta.
+    "piva-db2c",   # Fiscalía · Procesados, 33.013.953 filas
+    "hr73-zqjf",   # Fiscalía · Víctimas, 17.988.620 filas
+    # Medicina Legal: la fila es una víctima, con las mismas cuasi-identidades
+    # y además el día y la franja horaria del hecho, el agresor presunto y el
+    # diagnóstico de la lesión. Son datos sensibles del artículo 5 de la Ley
+    # 1581 —salud, vida sexual, origen étnico, orientación—, así que la
+    # política es la misma que con Saber 11: se agrega, no se lista.
+    "vtub-3de2",   # homicidios
+    "f75u-mirk",   # suicidios
+    "8hqm-7fdt",   # desaparecidos
+    "ers2-kerr",   # violencia intrafamiliar
+    "9fs6-37ea",   # violencia de pareja
+    "hyqu-diue",   # exámenes por presunto delito sexual
+    "s65h-7665",   # muertes por eventos de transporte
+    "irg9-q5fx",   # muertes accidentales
+    "6cjn-eevd",   # lesiones accidentales
+    "2kpj-cktv",   # lesiones fatales, preliminar
+    "79dd-d24f",   # lesiones no fatales, preliminar
 }
 
 # Fuentes cuyas filas pueden identificar a una persona natural. Devolverlas
@@ -373,9 +396,9 @@ def exige_agregado(dataset_id: str, *, que: str) -> None:
         raise ErrorPrivacidad(
             f"{que} devolvería filas de {dataset_id}, que es microdato "
             "individual: una fila es una persona.",
-            "Agrégalo: co_educacion_saber11 responde por municipio, "
-            "departamento, estrato o año, y co_datos_agregar admite cualquier "
-            "agrupación sobre este dataset.",
+            "Agrégalo: co_datos_agregar admite cualquier agrupación sobre "
+            "este dataset —por municipio, año, sexo o delito— y "
+            "co_educacion_saber11 ya responde agregado para el ICFES.",
         )
 
 

@@ -4,6 +4,72 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin publicar]
 
+### El registro pasa de 52 a 97 fuentes, y seis familias nuevas
+
+Las herramientas genéricas ya llegaban a los 8.468 datasets oficiales de
+datos.gov.co; lo que no había era conocimiento curado de casi ninguno. Entran
+45 fuentes con su unidad de análisis medida, sus campos clave y sus trampas
+documentadas, todas verificadas contra la API el 19-nov-2026 y cada supuesto
+con su prueba de contrato.
+
+- **Fiscalía (3)**, el SPOA. Es la otra mitad del delito: MinDefensa cuenta
+  denuncias y la Fiscalía cuenta qué pasó con ellas. Y es la única fuente
+  abierta con **delitos contra la administración pública por municipio**
+  —peculado, cohecho, contrato sin cumplimiento de requisitos legales—.
+- **Regalías (6)**: los dos del DNP, que traen el **único avance físico de obra
+  que existe en datos abiertos**, y los cuatro del MinHacienda, que traen la
+  plata. `codigobpin` los une.
+- **Forense (11)**, Medicina Legal. Homicidios, suicidios, desaparecidos,
+  violencia intrafamiliar y de pareja, delito sexual, transporte y lesiones.
+- **Operativos (19)**: los 14 de MinDefensa que estaban deliberadamente fuera
+  de criminalidad, más capturas, masacres, desmovilización, sometimiento y
+  desvinculación de menores.
+- **Conflicto (2)**, Unidad para las Víctimas, y **penitenciario (1)**, INPEC.
+- Y tres en SECOP que faltaban: **grupos de proveedores** (quién está detrás de
+  un consorcio), **proponentes por proceso** (quién ofertó, no solo quién ganó)
+  y **ejecución de contratos** (el plan de entregables).
+
+**El motor de privacidad gana trece fuentes.** Los procesados y las víctimas de
+la Fiscalía y los once de Medicina Legal son microdato individual: la fila no
+trae nombre ni cédula, pero sí sexo, grupo etario, etnia, pueblo indígena,
+nivel educativo, discapacidad, orientación sexual, municipio y —en Medicina
+Legal— el día y la franja horaria del hecho. En un municipio pequeño eso es una
+persona concreta, y son datos sensibles del artículo 5 de la Ley 1581. Política
+igual que con Saber 11: se agregan, no se listan, por ninguna vía. Los
+*procesos* de la Fiscalía, en cambio, no traen a nadie dentro y se consultan
+libres; una prueba de contrato comprueba que sigan sin columnas de persona.
+
+**Los operativos entran sin poder sumarse con los delitos.** Estaban fuera por
+una buena razón —en `ERRADICACIÓN` la cantidad son hectáreas— y entran en una
+familia aparte, con la unidad de cada uno medida: hectáreas, kilogramos,
+galones o unidades. `test_registro.py` falla si alguien mueve uno a
+criminalidad.
+
+**Cuatro defectos de la fuente quedan documentados y vigilados**: la columna
+`unidad` de las incautaciones de cocaína trae cantidades (0.002, 0.003) en vez
+de KILOGRAMO; los insumos sólidos escriben KILOGRAMO y kILOGRAMO; los líquidos
+mezclan galones con unidades; y `MINAS INTERVENIDAS` tiene la unidad vacía en
+sus 16.774 filas.
+
+**Dos trampas nuevas que cuestan cifras.** En la Fiscalía los nombres van en
+Title Case sin tilde y el `LIKE` de Socrata distingue mayúsculas: buscar
+`'%ADMINISTRACI%'` devuelve **cero** donde `'%Administraci%'` devuelve 582. Y
+en la Unidad para las Víctimas la `fecha_corte` es TEXT, así que
+`max(fecha_corte)` **miente**: devuelve 31/12/2025 cuando el corte más reciente
+es 31/10/2026.
+
+**Una nota del registro había caducado.** `SIN_FUENTE_ABIERTA` decía que bajo
+la atribución del DANE hay «exactamente dos datasets». Son tres —municipios,
+departamentos y centros poblados—, contados sobre el catálogo oficial entero.
+La conclusión no cambia: el DANE no publica la proyección de población, así que
+sigue sin haber denominador para tasas por 100.000 habitantes.
+
+`tests/test_registro.py` es nuevo y recorre el registro sin red: IDs
+irrepetidos, familias enlazadas en `FAMILIAS`, unidad de análisis declarada en
+las 97, y la regla que protege a la familia forense de sí misma —si alguien
+añade otro dataset de Medicina Legal y olvida el motor de privacidad, falla—.
+
+
 ### El IGAC volvió, y la geometría se queda donde está
 
 `test_el_servicio_oficial_del_igac_sigue_caido` llevaba meses pasando y el

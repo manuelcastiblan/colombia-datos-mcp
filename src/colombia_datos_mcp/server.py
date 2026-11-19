@@ -87,8 +87,11 @@ Dilo cuando te lo pidan, en vez de buscar un sustituto que no lo es:
   la población de 5 a 16 años del MinEducación, que no sirve de denominador.
 - NO hay IPC, así que los montos siguen sin deflactar. Lo que sí hay es la TRM
   (co_macro_convertir), que da una segunda unidad, no un deflactor.
-- NO hay procesos judiciales, Registraduría, RUNT, SIMIT ni Boletín de
-  Deudores Morosos: solo se consultan por formulario web con captcha.
+- NO hay expediente judicial —la consulta de procesos de la Rama, la
+  Registraduría, el RUNT, el SIMIT ni el Boletín de Deudores Morosos: eso
+  solo se consulta por formulario web con captcha—. Lo que SÍ hay es el SPOA
+  de la Fiscalía (dbdv-iihs): la noticia criminal con su delito, municipio,
+  etapa y estado, incluidos los delitos contra la administración pública.
 - Las fuentes de sanciones son INCOMPLETAS y un cero en ellas no es un
   certificado de antecedentes limpio. Dilo siempre que devuelvas un cero.
 

@@ -683,3 +683,153 @@ async def test_el_ranking_sigue_sirviendo_el_nit_con_decimales():
     NIT del ranking encadenado a la ficha consulte otro documento."""
     r = await socrata.consultar("6cat-2gcs", seleccionar="nit", limite=1)
     assert "." in str(r["filas"][0]["nit"])
+
+
+# ================================================ fuentes nuevas (0.17.0) ==
+# Cada aserción de aquí es una cifra escrita en `registry/datasets.py` o una
+# trampa documentada en sus notas. Si una falla, la nota caducó.
+
+async def test_los_datasets_nuevos_siguen_existiendo():
+    """Seis familias nuevas de una vez. Un ID que rote deja muda a la suya."""
+    faltantes = []
+    for nombre in ("fiscalia", "regalias", "forense", "operativos", "conflicto",
+                   "penitenciario"):
+        for clave, ds in reg.FAMILIAS[nombre].items():
+            if not await socrata.esquema(ds.id):
+                faltantes.append(f"{nombre}.{clave}={ds.id}")
+    for clave in ("grupos", "proponentes", "ejecucion"):
+        ds = reg.SECOP[clave]
+        if not await socrata.esquema(ds.id):
+            faltantes.append(f"secop.{clave}={ds.id}")
+    assert not faltantes, f"datasets desaparecidos: {faltantes}"
+
+
+# ------------------------------------------------------------- fiscalía ---
+async def test_fiscalia_una_fila_no_es_un_proceso():
+    """La nota del registro dice que un proceso con varios delitos trae una
+    fila por delito, y que para contar procesos hay que pedir
+    count(distinct proceso_anonimizado). Guaduas es el caso medido."""
+    ds = reg.FISCALIA["procesos"]
+    filas = await socrata.contar(ds.id, donde="cod_dane_hecho='25320'")
+    r = await socrata.consultar(
+        ds.id, seleccionar="count(distinct proceso_anonimizado) as procesos",
+        donde="cod_dane_hecho='25320'", limite=1)
+    procesos = int(r["filas"][0]["procesos"])
+    assert filas > procesos, "ya no habría diferencia entre filas y procesos"
+    assert procesos > 10_000
+
+
+async def test_fiscalia_escribe_en_title_case_y_el_like_distingue_mayusculas():
+    """Por esto el registro manda filtrar por `cod_dane_hecho`: el nombre del
+    municipio va en Title Case y sin tilde, y el LIKE de Socrata distingue
+    mayúsculas, así que el patrón en mayúsculas devuelve cero en silencio."""
+    ds = reg.FISCALIA["procesos"]
+    mayus = await socrata.contar(
+        ds.id, donde="cod_dane_hecho='25320' and titulo_delito like '%ADMINISTRACI%'")
+    titulo = await socrata.contar(
+        ds.id, donde="cod_dane_hecho='25320' and titulo_delito like '%Administraci%'")
+    assert mayus == 0, "el LIKE dejó de distinguir mayúsculas: revisar las notas"
+    assert titulo > 0, "ya no hay delitos contra la administración en ese municipio"
+
+
+async def test_fiscalia_procesos_no_trae_columnas_de_persona():
+    """La familia se partió en dos políticas: `procesos` se consulta libre
+    porque no hay nadie dentro. Si le añadieran sexo o edad, habría que
+    moverlo a MICRODATO."""
+    campos = await socrata.campos_validos(reg.FISCALIA["procesos"].id)
+    personales = {"sexo", "grupo_etario", "etnia", "nivel_educativo",
+                  "discapacidad", "identidad_genero_orient_sexual"}
+    assert not (campos & personales), f"`procesos` ganó columnas de persona: {campos & personales}"
+    assert privacidad.MICRODATO >= {reg.FISCALIA["procesados"].id,
+                                    reg.FISCALIA["victimas"].id}
+
+
+async def test_las_personas_de_la_fiscalia_si_traen_cuasi_identidades():
+    """La otra mitad del contrato anterior: estos dos están en MICRODATO
+    porque la fila describe a alguien."""
+    for clave in ("procesados", "victimas"):
+        campos = await socrata.campos_validos(reg.FISCALIA[clave].id)
+        assert {"sexo", "grupo_etario", "etnia"} <= campos, clave
+
+
+# ----------------------------------------------------------- operativos ---
+async def test_cada_operativo_sigue_midiendo_lo_que_dice_su_unidad():
+    """La razón de que OPERATIVOS no esté dentro de CRIMEN. Si deja de
+    cumplirse, las notas mienten sobre qué se puede sumar."""
+    esperado = {"p72f-qcvk": "HECTAREA", "uvrw-m4tm": "HECTAREA",
+                "nxbk-nikm": "KILOGRAMO", "3cjd-phaj": "KILOGRAMO",
+                "g228-vp9d": "KILOGRAMO", "iat2-gskt": "KILOGRAMO"}
+    fallan = []
+    for did, unidad in esperado.items():
+        r = await socrata.consultar(did, seleccionar="unidad, count(*) as n",
+                                    agrupar="unidad", ordenar="n DESC", limite=3)
+        valores = {f.get("unidad") for f in r["filas"]}
+        if valores != {unidad}:
+            fallan.append(f"{did}: {valores}")
+    assert not fallan, f"unidades cambiadas: {fallan}"
+
+
+async def test_la_unidad_de_cocaina_sigue_trayendo_numeros():
+    """Defecto documentado: la columna `unidad` de las incautaciones de
+    cocaína trae cantidades (0.002, 0.003) en vez de KILOGRAMO. Se vigila
+    para poder decirlo el día que lo arreglen."""
+    r = await socrata.consultar("26zg-9p9r", seleccionar="unidad, count(*) as n",
+                                agrupar="unidad", ordenar="n DESC", limite=5)
+    valores = [f.get("unidad") for f in r["filas"]]
+    numericos = [v for v in valores if v and v.replace(".", "").isdigit()]
+    assert numericos, f"`unidad` ya no trae números: {valores}"
+
+
+async def test_los_insumos_solidos_traen_la_ka_minuscula():
+    """KILOGRAMO y kILOGRAMO conviven: agrupar por `unidad` da dos grupos que
+    son el mismo."""
+    r = await socrata.consultar("n997-hhiv", seleccionar="unidad, count(*) as n",
+                                agrupar="unidad", ordenar="n DESC", limite=5)
+    valores = {f.get("unidad") for f in r["filas"]}
+    assert {"KILOGRAMO", "kILOGRAMO"} <= valores, valores
+
+
+async def test_masacres_cuenta_casos_y_victimas_por_separado():
+    """Es el único de la familia con dos medidas y sin columna `cantidad`."""
+    campos = await socrata.campos_validos("u8eq-92tb")
+    assert {"casos", "victimas"} <= campos
+    assert "cantidad" not in campos
+
+
+# --------------------------------------------------------------- SECOP ---
+async def test_el_modulo_de_entregables_sigue_vacio_para_un_municipio():
+    """Sobre esto descansa la nota más fuerte del registro: SECOP II tiene
+    dónde registrar lo recibido y las alcaldías no lo usan."""
+    obras = await socrata.consultar(
+        reg.SECOP["contratos"].id, seleccionar="id_contrato",
+        donde="upper(nombre_entidad) like '%GUADUAS%' and tipo_de_contrato='Obra'",
+        limite=40)
+    ids = [f["id_contrato"] for f in obras["filas"]]
+    assert ids, "no hay contratos de obra con los que comprobarlo"
+    r = await socrata.consultar(
+        reg.SECOP["ejecucion"].id, seleccionar="identificadorcontrato",
+        donde=socrata.filtro_en("identificadorcontrato", ids), limite=5)
+    assert not r["filas"], "ahora sí publican plan de ejecución: actualizar la nota"
+
+
+async def test_el_nit_de_un_consorcio_sigue_sin_servir_de_llave():
+    """Por esto la única llave fiable de ceth-n4bn es `codigo_grupo`."""
+    r = await socrata.consultar(reg.SECOP["grupos"].id,
+                                seleccionar="nit_grupo, count(*) as n",
+                                agrupar="nit_grupo", ordenar="n DESC", limite=3)
+    top = r["filas"][0]
+    assert str(top.get("nit_grupo", "")).strip().lower().startswith("no definido"), top
+
+
+# --------------------------------------------------------------- UARIV ---
+async def test_el_maximo_de_la_fecha_de_corte_de_la_uariv_miente():
+    """`fecha_corte` es TEXT en dd/mm/aaaa, así que max() ordena
+    alfabéticamente y devuelve un corte que no es el más reciente."""
+    did = reg.CONFLICTO["victimas_hecho_municipio"].id
+    r = await socrata.consultar(did, seleccionar="max(fecha_corte) as m", limite=1)
+    maximo = str(r["filas"][0]["m"])
+    g = await socrata.consultar(did, seleccionar="fecha_corte, count(*) as n",
+                                agrupar="fecha_corte", ordenar="n DESC", limite=20)
+    anios = {str(f["fecha_corte"])[-4:] for f in g["filas"]}
+    assert max(anios) > maximo[-4:], (
+        f"max() devolvió {maximo} y hay cortes de {max(anios)}")

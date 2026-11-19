@@ -134,6 +134,93 @@ SECOP = {
         campos_clave={"id": "identificador_de_la_orden", "entidad": "entidad", "valor": "total"},
         campos_resumen=("identificador_de_la_orden", "entidad", "proveedor", "total", "fecha", "estado"),
     ),
+    "grupos": Dataset(
+        id="ceth-n4bn",
+        nombre="SECOP II - Grupos de Proveedores",
+        unidad="un socio dentro de un consorcio o unión temporal",
+        campos_clave={"grupo": "codigo_grupo", "nombre_grupo": "nombre_grupo",
+                      "nit_grupo": "nit_grupo", "socio": "nit_participante",
+                      "nombre_socio": "nombre_participante",
+                      "participacion": "participacion",
+                      "lider": "es_lider_del_grupo",
+                      "representante": "nombre_representante_legal_grupo"},
+        campos_resumen=(
+            "codigo_grupo", "nombre_grupo", "nombre_participante",
+            "nit_participante", "participacion", "es_lider_del_grupo",
+            "nombre_representante_legal_grupo", "fecha_creaci_n_grupo",
+            "minucipio",
+        ),
+        notas=(
+            "675.436 filas. Responde quién está detrás de un consorcio, que es "
+            "justo lo que el registro mercantil no sabe: los consorcios y las "
+            "uniones temporales no se matriculan.",
+            "La ÚNICA llave fiable es `codigo_grupo`, que es el "
+            "`codigo_proveedor` de hgi6-6wh3. El `nit_grupo` casi siempre vale "
+            "«No Definido» y el nombre NO identifica: en un solo municipio "
+            "había once grupos distintos llamados «CONSORCIO PUENTE GUADUAS», "
+            "con socios diferentes.",
+            "`participacion` es el porcentaje del socio y permite repartir el "
+            "valor de un contrato entre quienes están detrás. Es una "
+            "atribución contable, no un flujo de caja.",
+            "El municipio viene en `minucipio`, con la errata en el nombre de "
+            "la columna.",
+        ),
+    ),
+    "proponentes": Dataset(
+        id="hgi6-6wh3",
+        nombre="SECOP II - Proponentes por Proceso",
+        unidad="un oferente en un proceso",
+        campos_clave={"proceso": "id_procedimiento",
+                      "entidad": "entidad_compradora", "nit_entidad": "nit_entidad",
+                      "proveedor": "proveedor", "nit_proveedor": "nit_proveedor",
+                      "codigo_proveedor": "codigo_proveedor"},
+        campos_resumen=(
+            "id_procedimiento", "nombre_procedimiento", "entidad_compradora",
+            "proveedor", "nit_proveedor", "codigo_proveedor",
+            "fecha_publicaci_n",
+        ),
+        notas=(
+            "2.379.104 filas. Es la lista de QUIÉN OFERTÓ, no solo de quién "
+            "ganó: con ella se ve si dos ofertas rivales comparten socio.",
+            "Solo existe para los procesos competitivos. En un municipio con "
+            "1.157 procesos había oferentes publicados de 208: de la "
+            "contratación directa no hay nada que mirar aquí.",
+            "`codigo_proveedor` es la llave hacia ceth-n4bn cuando el oferente "
+            "es un consorcio.",
+        ),
+    ),
+    "ejecucion": Dataset(
+        id="mfmm-jqmq",
+        nombre="SECOP II - Ejecución Contratos (plan de entregables)",
+        unidad="una línea del plan de ejecución de un contrato",
+        campos_clave={"contrato": "identificadorcontrato", "plan": "nombreplan",
+                      "tipo": "tipoejecucion", "planeada": "cantidad_planeada",
+                      "recibida": "cantidadrecibida",
+                      "avance": "porcentaje_de_avance_real",
+                      "esperado": "porcentajedeavanceesperado",
+                      "entrega_real": "fechadeentregareal"},
+        campos_resumen=(
+            "identificadorcontrato", "nombreplan", "tipoejecucion",
+            "descripci_n", "unidad", "cantidad_planeada", "cantidadrecibida",
+            "cantidadporrecibir", "porcentaje_de_avance_real",
+            "porcentajedeavanceesperado", "fechadeentregaesperada",
+            "fechadeentregareal",
+        ),
+        notas=(
+            "Es el único sitio de SECOP II donde está QUÉ SE RECIBIÓ, y para "
+            "obra municipal está vacío: cero filas para los 953 contratos de "
+            "un municipio, una sola fila en los 218 contratos de obra de ese "
+            "municipio y sus cuatro vecinos desde 2022, cero en las 16 obras "
+            "de la Gobernación de Cundinamarca y cero en seis de Medellín.",
+            "7.723.427 filas en todo el país, concentradas en entidades "
+            "nacionales. Un cero aquí NO significa que la obra no se entregó: "
+            "significa que la entidad no usa el módulo.",
+            "La llave es `identificadorcontrato` = `id_contrato` de "
+            "jbjy-vk9h, mismo formato CO1.PCCNTR.*",
+            "`condiciones_de_entrega`, que vive en el contrato mismo, es el "
+            "otro campo de entrega y suele venir «No Definido».",
+        ),
+    ),
 }
 
 # Joins verificados. Sin esto el modelo no acierta los fieldName truncados.
@@ -775,12 +862,691 @@ MACRO = {
 
 # Lo que el servidor NO puede ofrecer y conviene que conste, porque la pregunta
 # se hace sola al ver el resto. Verificado el 05-nov-2026.
+# -------------------------------------------------------------- fiscalía --
+# El SPOA: la otra mitad del delito. La Policía cuenta denuncias; la Fiscalía
+# cuenta qué pasó con ellas, y además cubre los delitos contra la
+# administración pública, que MinDefensa no publica. Verificado el 19-nov-2026.
+FISCALIA = {
+    "procesos": Dataset(
+        id="dbdv-iihs",
+        nombre="Fiscalía - Procesos (SPOA)",
+        unidad="un delito dentro de una noticia criminal, NO un proceso",
+        campos_clave={"proceso": "proceso_anonimizado", "delito": "delito",
+                      "titulo": "titulo_delito", "capitulo": "capitulo_delito",
+                      "municipio": "cod_dane_hecho",
+                      "nombre_municipio": "municipio_hecho",
+                      "departamento": "departamento_hecho", "anio": "a_o_hecho",
+                      "etapa": "etapa", "estado": "estado"},
+        campos_resumen=(
+            "a_o_hecho", "departamento_hecho", "municipio_hecho", "delito",
+            "titulo_delito", "etapa", "estado", "tipo_noticia",
+            "dir_hecho_rural_urbana", "seccional",
+        ),
+        notas=(
+            "23.783.687 filas desde 2010, solo Ley 906. Lo anterior (Ley 600) "
+            "no está.",
+            "Una fila NO es un proceso: un proceso con varios delitos trae una "
+            "fila por delito. En Guaduas son 16.204 filas y 15.665 procesos "
+            "distintos. Para contar procesos, count(distinct "
+            "proceso_anonimizado).",
+            "Los nombres van en Title Case y SIN tilde: «Guaduas», "
+            "«Cundinamarca», «Delitos Contra La Administracion De Publica» "
+            "(con la errata de la fuente). El LIKE de Socrata distingue "
+            "mayúsculas: '%ADMINISTRACI%' devuelve 0 y '%Administraci%' "
+            "devuelve 582 en ese municipio. Filtrar por `cod_dane_hecho`.",
+            "Agrupar por `municipio_hecho` expira; por `cod_dane_hecho` no.",
+            "`etapa` y `estado` son el valor de HOY, no el del momento del "
+            "hecho: una serie por año del hecho mezcla procesos que llevan "
+            "quince años con los de este mes.",
+            "Todas las columnas son text, las fechas incluidas: no hay "
+            "`fecha_hecho`, sino `a_o_hecho`, `mes_hecho` y `trimestre_hecho` "
+            "por separado.",
+            "Es la única fuente abierta con delitos contra la administración "
+            "pública por municipio: peculado, cohecho, contrato sin "
+            "cumplimiento de requisitos legales, interés indebido.",
+            "No identifica a nadie: `proceso_anonimizado` es un SHA-256 y no "
+            "hay columnas de persona. Las personas están en los otros dos "
+            "datasets de la familia, que son microdato.",
+        ),
+    ),
+    "procesados": Dataset(
+        id="piva-db2c",
+        nombre="Fiscalía - Procesados (SPOA)",
+        unidad="un procesado vinculado a un delito",
+        campos_clave={"procesado": "id_procesado_anonimizado",
+                      "proceso": "proceso_anonimizado", "delito": "delito",
+                      "municipio": "cod_dane_hecho_origen",
+                      "anio": "a_o_hecho_origen", "etapa": "etapa",
+                      "sentencia": "tipo_sentencia"},
+        notas=(
+            "33.013.953 filas. MICRODATO: la fila es una PERSONA, con sexo, "
+            "grupo etario, etnia, pueblo indígena, nivel educativo, "
+            "discapacidad, orientación sexual e identidad de género, más el "
+            "municipio y el delito. Solo se agrega.",
+            "Una misma persona aparece varias veces, una por delito y por "
+            "proceso: `id_procesado_anonimizado` no es una persona, es un "
+            "registro de vinculación.",
+        ),
+    ),
+    "victimas": Dataset(
+        id="hr73-zqjf",
+        nombre="Fiscalía - Víctimas (SPOA)",
+        unidad="una víctima vinculada a un delito",
+        campos_clave={"victima": "id_victima_anonimizado",
+                      "proceso": "proceso_anonimizado", "delito": "delito",
+                      "municipio": "cod_dane_hecho_origen",
+                      "anio": "a_o_hecho_origen", "etapa": "etapa"},
+        notas=(
+            "17.988.620 filas. MICRODATO por la misma razón que procesados, y "
+            "más sensible: incluye víctimas de delitos sexuales y "
+            "caracterización de feminicidio. Solo se agrega.",
+            "`victima_nna` marca a los menores de edad.",
+        ),
+    ),
+}
+
+
+# -------------------------------------------------------------- regalías --
+# Dos sistemas que hablan del mismo dinero: el DNP mira el PROYECTO —y es la
+# única fuente abierta con avance FÍSICO de obra— y el MinHacienda mira la
+# plata. Verificado el 19-nov-2026.
+REGALIAS = {
+    "proyectos": Dataset(
+        id="mzgh-shtp",
+        nombre="DNP - Proyectos del Sistema General de Regalías",
+        unidad="un proyecto aprobado por un OCAD",
+        campos_clave={"bpin": "codigobpin", "entidad": "entidadejecutora",
+                      "departamento": "departamento", "estado": "estado",
+                      "valor": "valortotal", "fisica": "ejecucionfisica",
+                      "financiera": "ejecucionfinanciera",
+                      "interventor": "interventor"},
+        campos_resumen=(
+            "codigobpin", "nombre", "entidadejecutora", "departamento",
+            "sector", "estado", "valortotal", "ejecucionfisica",
+            "ejecucionfinanciera", "interventor", "nomocad",
+        ),
+        notas=(
+            "35.010 proyectos. Es la ÚNICA fuente abierta con porcentaje de "
+            "ejecución física de obra: SECOP II no lo tiene (ver mfmm-jqmq).",
+            "El porcentaje lo reporta la entidad ejecutora, que a menudo "
+            "figura como su propio `interventor`. Los terminados suelen "
+            "declarar 100 % exacto, sin decimales.",
+            "`ejecucionfisica` viene VACÍA en proyectos en ejecución: la "
+            "ausencia no es cero y no se puede promediar como si lo fuera.",
+            "No tiene municipio: `entidadejecutora` es texto («MUNICIPIO DE "
+            "GUADUAS») y `codejecutor` no es DIVIPOLA.",
+        ),
+    ),
+    "proyectos_contratos": Dataset(
+        id="uwns-mbwd",
+        nombre="DNP - Contratos de los proyectos de inversión",
+        unidad="una fila de contrato asociada a un proyecto BPIN",
+        campos_clave={"bpin": "bpin", "contrato": "referenciacontrato",
+                      "proveedor": "proveedor", "doc": "documentoproveedor",
+                      "valor": "valorcontrato", "tipo": "tipoproyecto",
+                      "estado": "estadocontrato"},
+        campos_resumen=(
+            "bpin", "nombreproyecto", "tipoproyecto", "referenciacontrato",
+            "objetodelcontrato", "proveedor", "valorcontrato",
+            "estadocontrato", "vigenciacontrato",
+        ),
+        notas=(
+            "1.637.804 filas. Es el puente entre un proyecto BPIN y los "
+            "contratos que lo ejecutaron, SECOP I incluido: el `urlproceso` "
+            "apunta a contratos.gov.co cuando el contrato es viejo.",
+            "Un contrato puede venir PARTIDO en varias filas —el valor base y "
+            "sus adiciones por separado—, así que sumar `valorcontrato` por "
+            "BPIN infla. El valor real se confirma en SECOP.",
+            "`valorcontrato` es TEXT, no número: ordenar por él ordena "
+            "alfabéticamente.",
+            "`estadoproyecto` aquí y `estado` en mzgh-shtp se contradicen: hay "
+            "proyectos «Terminado» en uno y «EN EJECUCIÓN» en el otro. Citar "
+            "los dos.",
+        ),
+    ),
+    "ejecucion_financiera": Dataset(
+        id="br9a-gygu",
+        nombre="MinHacienda - Ejecución financiera de regalías",
+        unidad="un proyecto dentro de un fondo y un bienio",
+        campos_clave={"bpin": "codigobpin", "entidad": "nombreentidad",
+                      "municipio": "codigodaneentidad", "fondo": "nombrefondo",
+                      "vigencia": "vigencia", "pagado": "apropiacionpagada",
+                      "porcentaje": "porcentajeejecutadopresu"},
+        campos_resumen=(
+            "vigencia", "nombrefondo", "nombredepartamento", "nombreentidad",
+            "codigobpin", "nombreproyecto", "recursosaprobadosasignadosspgr",
+            "apropiacioncdp", "apropiacionrp", "apropiacionpagada",
+            "porcentajeejecutadopresu",
+        ),
+        notas=(
+            "22.675 filas. Lleva `codigobpin`: es la vía para cruzar el dinero "
+            "del MinHacienda con el avance físico del DNP.",
+            "`vigencia` es un BIENIO («Vigencia 2025 - 2026»), no un año. "
+            "Agrupar por vigencia no da una serie anual.",
+            "`codigodaneentidad` es DIVIPOLA de cinco dígitos en texto, y vale "
+            "«00000» cuando la entidad es «OTROS».",
+        ),
+    ),
+    "ejecucion_presupuestal": Dataset(
+        id="g4qj-2p2e",
+        nombre="MinHacienda - Ejecución presupuestal de regalías",
+        unidad="un fondo en una entidad y un bienio",
+        campos_clave={"entidad": "nombreentidad",
+                      "municipio": "codigodaneentidad", "fondo": "nombrefondo",
+                      "vigencia": "vigencia",
+                      "presupuesto": "presupuestosgrinversion",
+                      "proyectos": "numeroproyectosaprobados"},
+        notas=(
+            "5.335 filas. No baja a proyecto: es el presupuesto por fondo y "
+            "entidad. Para proyecto, br9a-gygu.",
+        ),
+    ),
+    "caja": Dataset(
+        id="e624-d9uy",
+        nombre="MinHacienda - Situación de caja para regalías",
+        unidad="un fondo en una entidad y un bienio",
+        campos_clave={"entidad": "nombreentidad",
+                      "municipio": "codigodaneentidad", "fondo": "nombrefondo",
+                      "vigencia": "vigencia", "recaudo": "valorrecaudo",
+                      "pagado": "totalpagado", "saldo": "saldocaja"},
+        notas=(
+            "5.284 filas. `saldocaja` es plata girada y no gastada: el "
+            "indicador de regalías que se quedan quietas.",
+        ),
+    ),
+    "ingresos": Dataset(
+        id="xb6a-jh3a",
+        nombre="MinHacienda - Ingresos corrientes para regalías",
+        unidad="un fondo en una entidad y un mes del bienio",
+        campos_clave={"entidad": "nombreentidad",
+                      "municipio": "codigodaneentidad", "fondo": "nombrefondo",
+                      "vigencia": "vigencia", "mes": "numeromesbienio",
+                      "acumulado": "pbcacumuladomes"},
+        notas=(
+            "4.046 filas. Los valores son ACUMULADOS del bienio: la diferencia "
+            "entre dos meses es el flujo; el valor del mes, no.",
+        ),
+    ),
+}
+
+
+# --------------------------------------------------------------- forense --
+# Medicina Legal. TODO es microdato individual: la fila es una víctima, con
+# etnia, orientación sexual, discapacidad, municipio y hora del hecho. Se
+# registra para AGREGAR; `core.privacidad.MICRODATO` cierra la puerta a las
+# filas por cualquier vía. Verificado el 19-nov-2026.
+FORENSE = {
+    "homicidios": Dataset(
+        id="vtub-3de2",
+        nombre="Medicina Legal - Presuntos homicidios (cifras definitivas)",
+        unidad="una víctima de homicidio",
+        campos_clave={"anio": "a_o_del_hecho",
+                      "municipio": "codigo_dane_municipio",
+                      "departamento": "codigo_dane_departamento",
+                      "sexo": "sexo_de_la_victima",
+                      "edad": "grupo_de_edad_quinquenal",
+                      "mecanismo": "mecanismo_causal_de_la_lesion_fatal",
+                      "agresor": "presunto_agresor_detallado"},
+        notas=(
+            "125.284 filas, 2015 a 2024, cifras definitivas.",
+            "Es el conteo FORENSE, no el policial: no coincide con el "
+            "HOMICIDIO de MinDefensa, y la diferencia entre los dos es un dato "
+            "en sí mismo. No son intercambiables ni sumables.",
+        ),
+    ),
+    "suicidios": Dataset(
+        id="f75u-mirk",
+        nombre="Medicina Legal - Presuntos suicidios (cifras definitivas)",
+        unidad="una víctima de suicidio",
+        campos_clave={"anio": "a_o_del_hecho",
+                      "municipio": "codigo_dane_municipio",
+                      "sexo": "sexo_de_la_victima",
+                      "edad": "grupo_de_edad_quinquenal",
+                      "razon": "razon_del_suicidio"},
+        notas=("26.558 filas, 2015 a 2024.",),
+    ),
+    "desaparecidos": Dataset(
+        id="8hqm-7fdt",
+        nombre="Medicina Legal - Desaparecidos (histórico)",
+        unidad="una persona reportada como desaparecida",
+        campos_clave={"anio": "a_o_de_la_desaparicion",
+                      "municipio": "codigo_dane_municipio",
+                      "estado": "estado_de_la_desaparicion",
+                      "clasificacion": "clasificacion_de_la_desaparicion",
+                      "sexo": "sexo_del_desaparecido"},
+        notas=(
+            "212.803 filas.",
+            "`estado_de_la_desaparicion` distingue a quien sigue desaparecido "
+            "de quien apareció, vivo o muerto: contar filas sin filtrarlo "
+            "cuenta las dos cosas juntas.",
+        ),
+    ),
+    "violencia_intrafamiliar": Dataset(
+        id="ers2-kerr",
+        nombre="Medicina Legal - Violencia intrafamiliar (cifras definitivas)",
+        unidad="una víctima atendida por violencia intrafamiliar",
+        campos_clave={"anio": "a_o_del_hecho",
+                      "municipio": "codigo_dane_municipio",
+                      "sexo": "sexo_de_la_victima",
+                      "agresor": "presunto_agresor_detallado",
+                      "contexto": "contexto_del_hecho"},
+        notas=(
+            "236.840 filas, 2015 a 2024.",
+            "Cuenta exámenes médico-legales, no denuncias: una víctima que no "
+            "pasó por el instituto no está.",
+        ),
+    ),
+    "violencia_pareja": Dataset(
+        id="9fs6-37ea",
+        nombre="Medicina Legal - Lesiones por violencia de pareja (histórico)",
+        unidad="una víctima atendida por violencia de pareja",
+        campos_clave={"anio": "a_o_del_hecho",
+                      "municipio": "codigo_dane_municipio",
+                      "sexo": "sexo_de_la_victima",
+                      "agresor": "presunto_agresor_detallado"},
+        notas=(
+            "438.786 filas.",
+            "Se solapa con violencia intrafamiliar: son dos cortes del mismo "
+            "sistema, no dos poblaciones. Sumarlos duplica.",
+        ),
+    ),
+    "delito_sexual": Dataset(
+        id="hyqu-diue",
+        nombre="Medicina Legal - Exámenes por presunto delito sexual",
+        unidad="un examen médico-legal por presunto delito sexual",
+        campos_clave={"anio": "a_o_del_hecho",
+                      "municipio": "codigo_dane_municipio",
+                      "sexo": "sexo_de_la_victima",
+                      "edad": "grupo_de_edad_quinquenal",
+                      "agresor": "presunto_agresor_detallado"},
+        notas=(
+            "233.352 filas, 2015 a 2024.",
+            "El más sensible de la familia: la mayoría de las víctimas son "
+            "menores de edad y la fila trae municipio, día y hora.",
+        ),
+    ),
+    "transporte": Dataset(
+        id="s65h-7665",
+        nombre="Medicina Legal - Muertes por eventos de transporte",
+        unidad="una víctima fatal de un evento de transporte",
+        campos_clave={"anio": "a_o_del_hecho",
+                      "municipio": "codigo_dane_municipio",
+                      "sexo": "sexo_de_la_victima",
+                      "condicion": "condicion_de_la_victima_at",
+                      "vehiculo": "medio_de_desplazamiento_o_transporte"},
+        notas=("73.403 filas, 2015 a 2024.",),
+    ),
+    "accidentales": Dataset(
+        id="irg9-q5fx",
+        nombre="Medicina Legal - Muertes accidentales (histórico)",
+        unidad="una víctima de muerte accidental",
+        campos_clave={"anio": "a_o_del_hecho",
+                      "municipio": "codigo_dane_municipio",
+                      "sexo": "sexo_de_la_victima",
+                      "mecanismo": "mecanismo_causal_de_la_lesion_fatal"},
+        notas=("33.254 filas.",),
+    ),
+    "lesiones_accidentales": Dataset(
+        id="6cjn-eevd",
+        nombre="Medicina Legal - Lesiones accidentales (cifras definitivas)",
+        unidad="una persona atendida por lesión accidental",
+        campos_clave={"anio": "a_o_del_hecho",
+                      "municipio": "codigo_dane_municipio",
+                      "sexo": "sexo_de_la_victima",
+                      "mecanismo": "mecanismo_causal_de_la_lesion_no_fatal"},
+        notas=("27.621 filas, 2015 a 2024.",),
+    ),
+    "fatales_preliminar": Dataset(
+        id="2kpj-cktv",
+        nombre="Medicina Legal - Lesiones fatales de causa externa (preliminar)",
+        unidad="una víctima fatal de causa externa",
+        campos_clave={"anio": "a_o_del_hecho",
+                      "municipio": "codigo_dane_municipio",
+                      "manera": "manera_de_muerte",
+                      "sexo": "sexo_de_la_victima"},
+        notas=(
+            "49.474 filas. PRELIMINAR, del año en curso: la cifra cambia. No "
+            "se mezcla con las definitivas.",
+            "Agrupa homicidio, suicidio, transporte y accidente en una sola "
+            "tabla: `manera_de_muerte` es la columna que los separa.",
+        ),
+    ),
+    "no_fatales_preliminar": Dataset(
+        id="79dd-d24f",
+        nombre="Medicina Legal - Lesiones no fatales de causa externa (preliminar)",
+        unidad="una persona atendida por lesión no fatal de causa externa",
+        campos_clave={"anio": "a_o_del_hecho",
+                      "municipio": "codigo_dane_municipio",
+                      "contexto": "contexto_de_violencia",
+                      "sexo": "sexo_de_la_victima"},
+        notas=(
+            "290.281 filas. PRELIMINAR, del año en curso. No se mezcla con las "
+            "definitivas.",
+        ),
+    ),
+}
+
+
+# ------------------------------------------------------------ operativos --
+# Los 14 datasets de MinDefensa que se habían dejado fuera de CRIMEN, más
+# cinco de esquema propio. Entran en su PROPIA familia, no en CRIMEN, porque
+# su `cantidad` no son casos: son hectáreas, kilos, galones o unidades. La
+# separación es justo lo que impide sumarlos con homicidios. Verificado el
+# 19-nov-2026; la unidad de cada uno está medida y va en sus notas.
+OPERATIVOS = {
+    "erradicacion": Dataset(
+        id="p72f-qcvk",
+        nombre="MinDefensa - ERRADICACIÓN",
+        unidad="hectáreas de cultivo ilícito erradicadas",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "cultivo": "tipo_de_cultivo", "unidad_medida": "unidad"},
+        notas=(
+            "146.232 filas, y la columna `unidad` vale HECTAREA en todas.",
+            "La `cantidad` son hectáreas: NO se suma con ningún dataset de "
+            "CRIMEN, donde la cantidad son casos o personas.",
+        ),
+    ),
+    "aspersion": Dataset(
+        id="uvrw-m4tm",
+        nombre="MinDefensa - ASPERSIÓN",
+        unidad="hectáreas asperjadas",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "unidad_medida": "unidad"},
+        notas=("9.889 filas, `unidad` = HECTAREA en todas.",),
+    ),
+    "incautacion_cocaina": Dataset(
+        id="26zg-9p9r",
+        nombre="MinDefensa - INCAUTACIONES DE COCAÍNA",
+        unidad="kilogramos de cocaína incautados",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "unidad_medida": "unidad"},
+        notas=(
+            "156.187 filas.",
+            "La columna `unidad` está ROTA: en vez de KILOGRAMO trae números "
+            "—0.002, 0.003, 0.005— que son cantidades. Los cinco valores más "
+            "frecuentes son todos numéricos. La unidad real es el kilogramo, "
+            "pero el campo no sirve para comprobarlo.",
+        ),
+    ),
+    "incautacion_base_coca": Dataset(
+        id="nxbk-nikm",
+        nombre="MinDefensa - INCAUTACIONES DE BASE DE COCA",
+        unidad="kilogramos de base de coca incautados",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "unidad_medida": "unidad"},
+        notas=("177.570 filas, `unidad` = KILOGRAMO en todas.",),
+    ),
+    "incautacion_basuco": Dataset(
+        id="3cjd-phaj",
+        nombre="MinDefensa - INCAUTACIONES DE BASUCO",
+        unidad="kilogramos de basuco incautados",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "unidad_medida": "unidad"},
+        notas=("237.611 filas, `unidad` = KILOGRAMO en todas.",),
+    ),
+    "incautacion_marihuana": Dataset(
+        id="g228-vp9d",
+        nombre="MinDefensa - INCAUTACIONES DE MARIHUANA",
+        unidad="kilogramos de marihuana incautados",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "unidad_medida": "unidad"},
+        notas=("495.622 filas, `unidad` = KILOGRAMO en todas.",),
+    ),
+    "incautacion_heroina": Dataset(
+        id="iat2-gskt",
+        nombre="MinDefensa - INCAUTACIÓN DE HEROÍNA",
+        unidad="kilogramos de heroína incautados",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "unidad_medida": "unidad"},
+        notas=("11.018 filas, `unidad` = KILOGRAMO en todas.",),
+    ),
+    "insumos_liquidos": Dataset(
+        id="k2wp-tdv7",
+        nombre="MinDefensa - INCAUTACIONES DE INSUMOS LÍQUIDOS",
+        unidad="galones de insumo líquido incautados",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "unidad_medida": "unidad"},
+        notas=(
+            "62.048 filas. La unidad NO es homogénea: 61.970 filas dicen GALON "
+            "y 78 dicen UNIDAD. Sumar la columna mezcla galones con bultos.",
+        ),
+    ),
+    "insumos_solidos": Dataset(
+        id="n997-hhiv",
+        nombre="MinDefensa - INSUMOS SÓLIDOS",
+        unidad="kilogramos de insumo sólido incautados",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "unidad_medida": "unidad"},
+        notas=(
+            "68.579 filas. La unidad viene con dos grafías: KILOGRAMO en "
+            "66.724 y kILOGRAMO —con la ka minúscula— en 1.855. Agrupar por "
+            "`unidad` devuelve dos grupos que son el mismo.",
+        ),
+    ),
+    "destruccion_infraestructura_droga": Dataset(
+        id="s29y-2xjd",
+        nombre="MinDefensa - DESTRUCCIÓN DE INFRAESTRUCTURA DE DROGAS",
+        unidad="una instalación de producción destruida",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "unidad_medida": "unidad_de_medida"},
+        notas=("38.314 filas, `unidad_de_medida` = UNIDAD en todas.",),
+    ),
+    "maquinaria_mineria": Dataset(
+        id="dxs6-mdeg",
+        nombre="MinDefensa - MAQUINARIA DE EXPLOTACIÓN ILÍCITA",
+        unidad="una máquina incautada o destruida",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "clase": "clase_de_bien",
+                      "unidad_medida": "unidad_de_medida"},
+        notas=(
+            "8.012 filas, `unidad_de_medida` = UNIDAD en todas. `clase_de_bien` "
+            "dice qué máquina es.",
+        ),
+    ),
+    "minas_intervenidas": Dataset(
+        id="gr35-i7pm",
+        nombre="MinDefensa - MINAS INTERVENIDAS",
+        unidad="una mina intervenida",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "clase": "clase_de_bien",
+                      "unidad_medida": "unidad_de_medida"},
+        notas=(
+            "16.774 filas, y `unidad_de_medida` está VACÍA en todas: el campo "
+            "existe y no dice nada.",
+        ),
+    ),
+    "capturas_mineria_ilegal": Dataset(
+        id="3wcs-8xp9",
+        nombre="MinDefensa - CAPTURAS POR MINERÍA ILEGAL",
+        unidad="una persona capturada por minería ilegal",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "unidad_medida": "unidad_de_medida"},
+        notas=("6.220 filas.",),
+    ),
+    "gestion_del_riesgo": Dataset(
+        id="fr5q-rz2x",
+        nombre="MinDefensa - GESTIÓN DEL RIESGO",
+        unidad="una actuación de gestión del riesgo",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "proceso": "proceso_de_gestion_del_riesgo"},
+        notas=(
+            "103.359 filas. No es un delito ni un decomiso: son actuaciones de "
+            "la fuerza pública ante emergencias.",
+        ),
+    ),
+    "masacres": Dataset(
+        id="u8eq-92tb",
+        nombre="MinDefensa - MASACRES",
+        unidad="una masacre, con sus víctimas en otra columna",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "cod_muni",
+                      "departamento": "departamento", "casos": "casos",
+                      "victimas": "victimas", "zona": "zona"},
+        notas=(
+            "456 filas, y es el único de la familia con DOS medidas: `casos` "
+            "cuenta masacres y `victimas` cuenta personas. Sumar la columna "
+            "equivocada cambia la cifra por cuatro o más.",
+            "No tiene columna `cantidad`.",
+        ),
+    ),
+    "desmovilizacion": Dataset(
+        id="3pur-d5ez",
+        nombre="MinDefensa - DESMOVILIZACIÓN INDIVIDUAL",
+        unidad="una persona desmovilizada",
+        campos_clave={"fecha": "fecha", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "grupo": "grupo"},
+        notas=(
+            "5.284 filas. La fecha se llama `fecha`, no `fecha_hecho`, al "
+            "revés que el resto de MinDefensa.",
+            "`grupo` es el grupo armado del que viene la persona.",
+        ),
+    ),
+    "desvinculacion_menores": Dataset(
+        id="ajsa-ebuq",
+        nombre="MinDefensa - DESVINCULACIÓN (MENORES DE EDAD)",
+        unidad="un menor de edad desvinculado de un grupo armado",
+        campos_clave={"fecha": "fecha", "municipio": "cod_muni",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "grupo": "grupo"},
+        notas=("6.831 filas. La fecha se llama `fecha`.",),
+    ),
+    "sometimiento": Dataset(
+        id="xg7g-dzk4",
+        nombre="MinDefensa - SOMETIMIENTO INDIVIDUAL A LA JUSTICIA",
+        unidad="una persona sometida a la justicia",
+        campos_clave={"fecha": "fecha", "municipio": "cod_muni",
+                      "departamento": "departamento", "grupo": "grupo"},
+        notas=(
+            "2.705 filas, y NO tiene columna `cantidad`: una fila es una "
+            "persona y se cuenta con count(*).",
+        ),
+    ),
+    "capturas": Dataset(
+        id="3jdh-nmwu",
+        nombre="Policía Nacional - Reporte de capturas",
+        unidad="capturas de un mismo perfil en un municipio y una fecha",
+        campos_clave={"fecha": "fecha_hecho", "municipio": "codigo_dane",
+                      "departamento": "departamento", "cantidad": "cantidad",
+                      "conducta": "descripcion_conducta_captura",
+                      "genero": "genero", "edad": "grupo_etario"},
+        notas=(
+            "3.746.786 filas. Es de la Policía, no de MinDefensa: el municipio "
+            "va en `codigo_dane` y no en `cod_muni`.",
+            "Mide la respuesta del Estado, no el delito: una captura no es una "
+            "condena ni un caso. No se suma con CRIMEN.",
+        ),
+    ),
+}
+
+
+# ------------------------------------------------------------- conflicto --
+# Unidad para las Víctimas. Son cifras YA agregadas: no hay microdato.
+# Verificado el 19-nov-2026.
+CONFLICTO = {
+    "victimas_municipio": Dataset(
+        id="ykxr-xynr",
+        nombre="UARIV - Cifras de víctimas, municipal",
+        unidad="un cruce de municipio, sexo, etnia, discapacidad y ciclo vital",
+        campos_clave={"municipio": "cod_ciudad_muni",
+                      "nombre_municipio": "ciudad_municipio",
+                      "departamento": "cod_estado_depto", "sexo": "sexo",
+                      "etnia": "etnia", "ocurrencia": "per_ocu",
+                      "declaracion": "per_decla", "ubicacion": "per_ubic",
+                      "eventos": "eventos"},
+        campos_resumen=(
+            "fecha_corte", "estado_depto", "ciudad_municipio", "sexo", "etnia",
+            "discapacidad", "ciclo_vital", "per_ocu", "per_decla", "per_ubic",
+            "eventos",
+        ),
+        notas=(
+            "8.538.627 filas.",
+            "HAY CUATRO CONTEOS DE PERSONA Y NO SON INTERCAMBIABLES: `per_ocu` "
+            "es dónde ocurrió el hecho, `per_decla` dónde se declaró, "
+            "`per_ubic` dónde vive hoy la víctima y `per_sa` los sujetos de "
+            "atención. Elegir el equivocado cambia el mapa entero.",
+            "`eventos` cuenta hechos, no personas.",
+            "Trae varias `fecha_corte` apiladas: sin filtrarla se suman cortes "
+            "distintos del mismo universo. Aquí el formato es aaaa/mm/dd.",
+        ),
+    ),
+    "victimas_hecho_municipio": Dataset(
+        id="9qih-4vkc",
+        nombre="UARIV - Cifras de víctimas por hecho, municipal",
+        unidad="un cruce de municipio, hecho victimizante y caracterización",
+        campos_clave={"municipio": "cod_ciudad_muni",
+                      "nombre_municipio": "ciudad_municipio", "hecho": "hecho",
+                      "sexo": "sexo", "etnia": "etnia",
+                      "ocurrencia": "per_ocu", "eventos": "eventos"},
+        campos_resumen=(
+            "fecha_corte", "estado_depto", "ciudad_municipio", "hecho", "sexo",
+            "etnia", "discapacidad", "ciclo_vital", "per_ocu", "per_decla",
+            "eventos",
+        ),
+        notas=(
+            "11.566.909 filas. Mismo aviso de los cuatro conteos que "
+            "ykxr-xynr, y además: una víctima con dos hechos aparece en los "
+            "dos, así que sumar por `hecho` no da el total de víctimas.",
+            "La `fecha_corte` aquí viene dd/mm/aaaa y en ykxr-xynr aaaa/mm/dd: "
+            "dos formatos en la misma familia.",
+            "Y como es TEXT, max(fecha_corte) MIENTE: devuelve 31/12/2025 "
+            "cuando el corte más reciente es 31/10/2026, porque ordena "
+            "alfabéticamente.",
+        ),
+    ),
+}
+
+
+# ---------------------------------------------------------- penitenciario --
+PENITENCIARIO = {
+    "poblacion_intramural": Dataset(
+        id="ux6v-gpit",
+        nombre="INPEC - Población intramural por códigos DIVIPOLA",
+        unidad="un establecimiento de reclusión en un mes",
+        campos_clave={"anio": "anno", "mes": "mes",
+                      "municipio": "codigo_municipio",
+                      "departamento": "codigo_departamento",
+                      "establecimiento": "nombre_establecimiento",
+                      "capacidad": "capacidad", "poblacion": "poblacion",
+                      "hacinamiento": "hacinamiento"},
+        campos_resumen=(
+            "anno", "mes", "nombre_regional", "nombre_establecimiento",
+            "departamento", "municipio", "capacidad", "poblacion",
+            "sobrepoblacion", "hacinamiento",
+        ),
+        notas=(
+            "7.333 filas. Es una SERIE MENSUAL: sin filtrar `anno` y `mes` se "
+            "suman todos los cortes y la población sale multiplicada por el "
+            "número de meses.",
+            "`hacinamiento` ya viene en porcentaje; no hay que calcularlo.",
+            "El municipio es el del establecimiento, no el de origen de las "
+            "personas presas.",
+        ),
+    ),
+}
+
+
 SIN_FUENTE_ABIERTA = {
     "poblacion_municipal": (
         "El DANE no publica las proyecciones de población municipal como API. "
         "En datos.gov.co solo hay republicaciones de alcaldías sueltas "
         "(Chiquinquirá, Sabaneta, Manizales) y bajo la atribución del DANE hay "
-        "exactamente dos datasets, los dos de DIVIPOLA. Sin denominador no hay "
+        "exactamente TRES datasets, los tres de DIVIPOLA —municipios, "
+        "departamentos y centros poblados—, contados sobre el catálogo oficial "
+        "entero el 19-nov-2026. Sin denominador no hay "
         "tasas por 100.000 habitantes: lo más cercano es la población de 5 a 16 "
         "años del MinEducación (nudc-7mev), que no sirve para eso."
     ),
@@ -792,9 +1558,13 @@ SIN_FUENTE_ABIERTA = {
         "fecha del contrato."
     ),
     "rama_judicial": (
-        "Los procesos judiciales, la Registraduría, el RUNT y el SIMIT solo se "
-        "consultan por formulario web con captcha, no por API abierta. No "
-        "entran en un servidor que se define como «sin credenciales»."
+        "El EXPEDIENTE judicial —la consulta de procesos de la Rama—, la "
+        "Registraduría, el RUNT y el SIMIT solo se consultan por formulario web "
+        "con captcha, no por API abierta. No entran en un servidor que se "
+        "define como «sin credenciales». Lo que sí hay desde 0.17.0 es la "
+        "etapa procesal agregada del SPOA de la Fiscalía (dbdv-iihs), que no "
+        "es el expediente y no se puede cruzar por documento: viene "
+        "anonimizada."
     ),
 }
 
@@ -808,7 +1578,9 @@ LICENCIA_POR_DEFECTO = "CC BY-SA 4.0 (verificar por dataset)"
 FAMILIAS = {
     "secop": SECOP, "crimen": CRIMEN, "empresas": EMPRESAS,
     "integridad": INTEGRIDAD, "educacion": EDUCACION, "territorio": TERRITORIO,
-    "macro": MACRO,
+    "macro": MACRO, "fiscalia": FISCALIA, "regalias": REGALIAS,
+    "forense": FORENSE, "operativos": OPERATIVOS, "conflicto": CONFLICTO,
+    "penitenciario": PENITENCIARIO,
 }
 
 
