@@ -56,12 +56,28 @@ async def test_soql_soporta_replace_anidado():
 
     Si SoQL dejara de aceptar `replace()`, `filtro_texto_libre` volvería a
     perder todas las filas con tilde y habría que rehacerlo.
+
+    La prueba lleva un `departamento='Atlántico'` delante que NO cambia el
+    resultado y sí el coste: el 19-nov-2026, la misma cuenta sin ese filtro
+    tardaba **70,9 s** sobre los 5,88 M de contratos y expiraba en el cliente,
+    mientras que con él tarda 8 s y devuelve las mismas 191.957 filas. El
+    supuesto que se vigila es que SoQL acepte `replace()` anidado, no que un
+    recorrido completo quepa en el timeout; pero conviene saber que el
+    plegado sobre esa tabla, sin ningún filtro selectivo delante, hoy no cabe.
     """
     campo = socrata.expr_sin_acentos("departamento")
     r = await socrata.consultar(reg.SECOP["contratos"].id,
                                 seleccionar="count(*) as total",
-                                donde=f"{campo} like '%ATLANTICO%'")
-    assert int(r["filas"][0]["total"]) > 100_000
+                                donde=f"departamento='Atlántico' and {campo} like '%ATLANTICO%'")
+    plegadas = int(r["filas"][0]["total"])
+    assert plegadas > 100_000
+
+    # Y que la expresión no está de adorno: sobre el literal acentuado
+    # encuentra exactamente lo mismo.
+    lit = await socrata.consultar(reg.SECOP["contratos"].id,
+                                  seleccionar="count(*) as total",
+                                  donde="departamento='Atlántico'")
+    assert plegadas == int(lit["filas"][0]["total"])
 
 
 async def test_el_plegado_en_servidor_encuentra_mas_que_el_literal():

@@ -59,6 +59,12 @@ adiciones: **26,1 M de adiciones para ~5,9 M de contratos**. Contar filas de
   `sum(valor_del_contrato)`. Si lo que quieres es contratación real, filtra por
   estado.
 - `urlproceso` llega a veces como objeto JSON con clave `url`, no como cadena.
+- **El plegado de acentos sobre esta tabla necesita un filtro selectivo delante.**
+  `replace()` anidado sigue funcionando, pero el 19-nov-2026 una cuenta con el
+  campo plegado y sin ningún otro filtro tardó **70,9 s** sobre los 5,88 M de
+  filas y expiró en el cliente; con un `departamento='Atlántico'` delante, que
+  no cambia el resultado, tarda 8 s y devuelve las mismas 191.957. Lo vigila
+  `test_soql_soporta_replace_anidado`.
 
 ### `p6dx-8zbt` — SECOP II · Procesos de Contratación
 
