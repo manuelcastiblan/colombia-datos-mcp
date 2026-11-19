@@ -701,7 +701,7 @@ async def test_el_ranking_sigue_sirviendo_el_nit_con_decimales():
     assert "." in str(r["filas"][0]["nit"])
 
 
-# ================================================ fuentes nuevas (0.17.0) ==
+# ============================================= las seis familias nuevas ===
 # Cada aserción de aquí es una cifra escrita en `registry/datasets.py` o una
 # trampa documentada en sus notas. Si una falla, la nota caducó.
 

@@ -3,7 +3,7 @@
 Lo que el servidor sabe de cada dataset vive en `registry/datasets.py`. SECOP,
 DIVIPOLA y criminalidad se verificaron contra la API el 18-ago-2026; las
 familias de 0.16.0 —empresas, integridad, educación, territorio y macro—, el
-05-nov-2026; y las seis de 0.17.0 —fiscalía, regalías, forense, operativos,
+05-nov-2026; y las seis familias nuevas —fiscalía, regalías, forense, operativos,
 conflicto y penitenciario—, el 19-nov-2026. Todo revalidado a diario por la
 suite de contrato. Esta página es su lectura en prosa.
 
@@ -287,7 +287,7 @@ por minería ilegal, destrucción de infraestructura— y **no comparten unidad*
 - En `MINAS INTERVENIDAS` (`gr35-i7pm`) el `unidad_de_medida` es nulo en las
   15.827 filas.
 
-Sumar eso junto a homicidios sería sumar kilos con personas. Desde 0.17.0 **sí
+Sumar eso junto a homicidios sería sumar kilos con personas. Ahora **sí
 están en el registro**, pero en su propia familia (`OPERATIVOS`, ver más
 abajo) y con la unidad de cada uno medida y escrita en sus notas: la
 separación es lo que impide la suma. Una prueba de contrato vigila que la

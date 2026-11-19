@@ -1561,7 +1561,7 @@ SIN_FUENTE_ABIERTA = {
         "El EXPEDIENTE judicial —la consulta de procesos de la Rama—, la "
         "Registraduría, el RUNT y el SIMIT solo se consultan por formulario web "
         "con captcha, no por API abierta. No entran en un servidor que se "
-        "define como «sin credenciales». Lo que sí hay desde 0.17.0 es la "
+        "define como «sin credenciales». Lo que sí hay en el registro es la "
         "etapa procesal agregada del SPOA de la Fiscalía (dbdv-iihs), que no "
         "es el expediente y no se puede cruzar por documento: viene "
         "anonimizada."
