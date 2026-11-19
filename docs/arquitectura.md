@@ -6,11 +6,11 @@ SECOP**.
 ```mermaid
 flowchart TD
     cliente["Cliente MCP"]
-    server["server.py<br/>19 herramientas · 3 recursos · playbook<br/>traduce los errores tipados y arma el ToolResult"]
-    dominio["domain/ · catalogo · secop · geo · crimen · analisis · exportar<br/>construye filtros, proyecta columnas, arma el sobre"]
+    server["server.py<br/>34 herramientas · 6 recursos · playbook<br/>traduce los errores tipados y arma el ToolResult"]
+    dominio["domain/ · catalogo · secop · geo · crimen · empresas · integridad<br/>educacion · macro · territorio · dossier · analisis · exportar"]
     adaptador["adapters/<br/>socrata.py · Discovery API + SODA<br/>geometria.py · límites del MGN por réplica"]
     fuente[("datos.gov.co")]
-    registro["registry/<br/>unidad de análisis · campos clave · alias · atribuciones"]
+    registro["registry/<br/>97 datasets en 13 familias<br/>unidad de análisis · campos clave · alias · atribuciones"]
     nucleo["core/<br/>sobre · presupuesto · caché · HTTP · errores · coordenadas · texto"]
 
     cliente --> server --> dominio --> adaptador --> fuente
@@ -58,7 +58,11 @@ ningún camino lo lanzaba, porque hasta 0.16.0 ninguna fuente lo necesitaba.
 
 ```mermaid
 flowchart TD
-    consulta["Una herramienta recibe una consulta"] --> agrega{"¿agrega?"}
+    consulta["Una herramienta recibe una consulta"] --> fuente{"¿el dataset es<br/>microdato de personas?"}
+    fuente -->|"sí · 16 datasets<br/>ICFES · Fiscalía · Medicina Legal"| soloagrega{"¿agrega?"}
+    soloagrega -->|no| cerrado["[PRIVACIDAD]<br/>una fila es una persona:<br/>no hay finalidad que lo abra"]
+    soloagrega -->|sí| libre
+    fuente -->|no| agrega{"¿agrega?"}
     agrega -->|sí| libre["Pasa sin finalidad<br/>panorama · saber11"]
     agrega -->|no| clase{"clase_documento()"}
     clase -->|nit| juridica["Persona jurídica:<br/>pasa, y el NIT NO se enmascara"]

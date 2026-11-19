@@ -225,6 +225,10 @@ SECOP = {
 
 # Joins verificados. Sin esto el modelo no acierta los fieldName truncados.
 JOINS = (
+    ("jbjy-vk9h.id_contrato", "mfmm-jqmq.identificadorcontrato"),
+    ("hgi6-6wh3.codigo_proveedor", "ceth-n4bn.codigo_grupo"),
+    ("uwns-mbwd.bpin", "mzgh-shtp.codigobpin"),
+    ("uwns-mbwd.bpin", "br9a-gygu.codigobpin"),
     ("p6dx-8zbt.id_del_proceso", "jbjy-vk9h.proceso_de_compra"),
     ("jbjy-vk9h.id_contrato", "cb9c-h8sn.id_contrato"),
     ("rgxm-mmea.identificador_de_la_orden", "usqp-5nsn.orden"),

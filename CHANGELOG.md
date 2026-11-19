@@ -4,6 +4,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin publicar]
 
+Nada todavía.
+
+## [0.17.0] — 2026-11-19
+
 ### El registro pasa de 52 a 97 fuentes, y seis familias nuevas
 
 Las herramientas genéricas ya llegaban a los 8.468 datasets oficiales de

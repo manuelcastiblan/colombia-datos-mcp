@@ -219,11 +219,21 @@ flowchart LR
     cb9c["cb9c-h8sn<br/>Adiciones<br/>una fila = una modificación"]
     rgxm["rgxm-mmea<br/>TVEC · órdenes"]
     usqp["usqp-5nsn<br/>orden"]
+    ceth["ceth-n4bn<br/>Grupos de Proveedores<br/>una fila = un socio"]
+    mfmm["mfmm-jqmq<br/>Ejecución de contratos<br/>una fila = un entregable"]
+    uwns["uwns-mbwd<br/>DNP · contratos por proyecto"]
+    mzgh["mzgh-shtp<br/>DNP · proyectos SGR<br/>avance físico"]
+    br9a["br9a-gygu<br/>MinHacienda · regalías"]
 
     hgi6 -->|"id_procedimiento = id_del_proceso"| p6dx
     p6dx -->|"id_del_proceso = proceso_de_compra"| jbjy
     jbjy -->|"id_contrato = id_contrato · 1:N pesado"| cb9c
+    jbjy -->|"id_contrato = identificadorcontrato"| mfmm
+    hgi6 -->|"codigo_proveedor = codigo_grupo<br/>la única llave fiable del consorcio"| ceth
     rgxm -->|"identificador_de_la_orden = orden"| usqp
+    uwns -->|"bpin = codigobpin"| mzgh
+    uwns -->|"bpin = codigobpin"| br9a
+    uwns -.->|"referenciacontrato ≈ referencia_del_contrato<br/>texto libre de la entidad: NO es llave"| jbjy
 ```
 
 Disponibles como recurso MCP en `co://secop/joins`. `usqp-5nsn` y `hgi6-6wh3`

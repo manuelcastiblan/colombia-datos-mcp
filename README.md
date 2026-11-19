@@ -665,7 +665,7 @@ flowchart TD
     casa -->|no| honesto["Cero honesto: te dice que el término<br/>no existe y NO gasta la consulta"]
 
     tipo -->|"no · nombre de entidad,<br/>de proveedor"| servidor["Pliega la COLUMNA en el servidor<br/>con replace anidado"]
-    servidor --> subcadena["like sobre el texto ya plegado<br/>exacto · unos 20 s"]
+    servidor --> subcadena["like sobre el texto ya plegado<br/>exacto · y lento: 70,9 s sobre<br/>los 5,88 M de contratos"]
 ```
 
 La rama de la izquierda es la que faltaba antes: un término que no corresponde a
