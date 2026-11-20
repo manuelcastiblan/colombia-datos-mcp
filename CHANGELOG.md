@@ -4,6 +4,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin publicar]
 
+Nada todavía.
+
+## [0.18.0] — 2026-11-20
+
 ### El DANE entero, y el cero silencioso que lo escondía
 
 Buscar `entidad="DANE"` devolvía **dos** de sus **seis** datasets, y el sobre
