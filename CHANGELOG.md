@@ -4,7 +4,31 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin publicar]
 
-Nada todavía.
+### El DANE entero, y el cero silencioso que lo escondía
+
+Buscar `entidad="DANE"` devolvía **dos** de sus **seis** datasets, y el sobre
+lo anunciaba como «2 de 2»: una respuesta completa que no lo era. La causa es
+que una entidad puede publicar bajo varias cadenas de atribución y el facet de
+Socrata solo acepta un literal por petición. El DANE usa tres, y la tercera
+—`DANE- FEDEARROZ`— ni siquiera lo parece.
+
+- `ATRIBUCIONES` admite ahora **varias cadenas por sigla**, y
+  `co_datos_buscar_datasets` las consulta todas y une los resultados. El sobre
+  dice cuántas cadenas se usaron y cuáles.
+- Entra la familia **`agro` (3)**: la Encuesta Nacional de Arroz Mecanizado del
+  DANE con FEDEARROZ —producción, área sembrada y rendimiento, 2010-2026—.
+  Con ella el registro queda en **100 datasets y 14 familias**.
+- Documentadas dos trampas que no se ven en el esquema: las cinco zonas
+  arroceras son **columnas y no valores**, así que no hay `group by zona`; y
+  **el área se siembra un semestre y se cosecha al siguiente**, de modo que
+  dividir producción entre el área del mismo semestre da hasta 38 t/ha en
+  secano, siete veces el valor real. Con el área del semestre anterior la
+  mediana del error cae a 0,07 t/ha y cuadra en 60 de 64 pares.
+- Corregida una afirmación falsa del registro: decía que bajo la atribución del
+  DANE había «exactamente tres datasets, los tres de DIVIPOLA». Son seis.
+- **Sigue sin haber población municipal ni IPC**, revisado de nuevo el
+  20-nov-2026 sobre el catálogo entero: lo que hay son republicaciones de
+  alcaldías sueltas, cada una de su propio municipio.
 
 ## [0.17.0] — 2026-11-19
 

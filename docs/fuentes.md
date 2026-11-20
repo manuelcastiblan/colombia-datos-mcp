@@ -769,6 +769,64 @@ códigos DIVIPOLA. Es una **serie mensual**: sin filtrar `anno` y `mes` la
 población sale multiplicada por el número de cortes. El municipio es el del
 establecimiento, no el de origen de las personas presas.
 
+## Agro · DANE y FEDEARROZ
+
+La Encuesta Nacional de Arroz Mecanizado. Son los únicos datasets del DANE en
+el portal que no son DIVIPOLA, y estuvieron fuera del registro por un motivo
+tonto que se explica en [Cadenas de atribución](#cadenas-de-atribucion): el
+DANE publica bajo tres literales distintos y aquí solo se conocía uno.
+
+| Dataset | Mide | Unidad |
+|---|---|---|
+| `9ukf-8mhd` | Producción de arroz paddy verde | toneladas |
+| `ygbp-8y7a` | Área sembrada de arroz mecanizado | hectáreas |
+| `q3f2-pgh3` | Rendimiento | toneladas por hectárea |
+
+Las tres tienen **66 filas**, van de **2010 a 2026** —2026 solo trae el primer
+semestre— y comparten la misma llave: `ano`, `semestre` y `sistema` (RIEGO o
+SECANO).
+
+### Las cinco zonas son columnas, no valores
+
+`bajo_cauca`, `centro`, `costa_norte`, `llanos` y `santanderes` son columnas.
+No hay zona que agrupar: `co_datos_agregar(agrupar_por="zona")` devuelve un
+400, porque ese campo no existe. Para comparar zonas hay que leer las cinco
+columnas de cada fila.
+
+Y `ano` y `semestre` son **TEXT**. `ano > 2020` da un 400; se escribe
+`ano > '2020'`.
+
+### El área se siembra un semestre y se cosecha al siguiente
+
+Esta es la trampa que importa. Parece natural calcular el rendimiento
+dividiendo producción entre área del mismo semestre, y da disparates:
+
+| Año · semestre · sistema | Producción | Área | p/a | Publicado |
+|---|---:|---:|---:|---:|
+| 2025 · II · SECANO | 1.552.082 t | 40.102 ha | **38,70** | 5,00 |
+| 2025 · I · SECANO | 197.465 t | 316.019 ha | **0,62** | 4,30 |
+
+Un arrozal no da 38 toneladas por hectárea. Lo que pasa es que esas 40.102
+hectáreas se sembraron en el segundo semestre y se cosecharán en el primero del
+año siguiente: **la producción de un semestre sale del área sembrada en el
+anterior**. Con ese divisor, 1.552.082 ÷ 316.019 = 4,91, que es el 5,00
+publicado.
+
+Comprobado sobre los 64 pares el 20-nov-2026:
+
+| Divisor | Mediana del error | Pares que cuadran |
+|---|---:|---:|
+| Área del mismo semestre | 16,00 t/ha en secano | 0 de 32 |
+| Área del semestre anterior | 0,07 t/ha | 60 de 64 |
+
+### El rendimiento nacional no es una suma
+
+En producción y área, `total_nacional` es la suma de las cinco zonas, con ±1 de
+redondeo en algo menos de la mitad de las filas. En rendimiento **no**: un
+rendimiento no se suma. Es el promedio de las zonas ponderado por área
+sembrada, y difiere de la suma de las cinco columnas en las 66 filas, hasta en
+24,6. Sumar esa fila no significa nada.
+
 ## Lo que no tiene fuente abierta
 
 Está en el registro como `SIN_FUENTE_ABIERTA` y se expone en el *resource*
@@ -798,9 +856,17 @@ El facet `attribution` de la Discovery API solo acepta el literal completo:
 `attribution=DANE` devuelve cero. `co_datos_buscar_datasets` traduce estas
 siglas, y el recurso `co://atribuciones` las expone.
 
+**Una entidad puede publicar bajo varias cadenas a la vez**, y entonces una
+sola no basta. El DANE usa tres. Mientras aquí hubo una, `entidad="DANE"`
+devolvía dos de sus seis datasets y el sobre lo anunciaba como «2 de 2»: un
+cero silencioso con forma de respuesta completa, que es justo lo que este
+servidor existe para evitar. Ahora se consultan todas y el sobre dice cuántas.
+
 | Sigla | Cadena literal exacta |
 |---|---|
 | `DANE` | `Departamento Administrativo Nacional de Estadísticas - DANE, Bogotá D.C.` |
+| `DANE` | `Departamento Administrativo Nacional de Estadística - DANE` |
+| `DANE` | `DANE- FEDEARROZ` |
 | `CCE` | `Agencia Nacional de Contratación Pública - Colombia Compra Eficiente, Bogotá D.C.` |
 | `MinDefensa` | `Ministerio de Defensa Nacional - MinDefensa, Bogotá D.C.` |
 | `Fiscalía` | `Fiscalía General de la Nación, Bogotá D.C.` |
@@ -815,8 +881,10 @@ siglas, y el recurso `co://atribuciones` las expone.
 | `DNP` | `Departamento Nacional de Planeación DNP, Bogotá D.C` |
 | `JCC` | `Unidad Administrativa Especial Junta Central de Contadores - JCC, Bogotá D.C.` |
 
-Fíjate en `Estadísticas` **en plural**: no es el nombre real de la entidad, pero
-es el literal que exige el facet.
+Fíjate en las dos primeras del DANE: **`Estadísticas` en plural y `Estadística`
+en singular**, la misma entidad escrita de dos formas, y ninguna de las dos es
+su nombre legal. Son los literales que exige el facet. La tercera, la de
+FEDEARROZ, ni siquiera lo parece, y es la que lleva los tres datasets de arroz.
 
 ## Alias de entidad
 

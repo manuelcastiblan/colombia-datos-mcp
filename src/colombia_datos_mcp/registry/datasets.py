@@ -282,8 +282,17 @@ DIVIPOLA_DEPARTAMENTOS = Dataset(
 # Cadenas de atribución exactas. El facet solo funciona con el literal: buscar
 # `attribution=DANE` devuelve 0, y el portal escribe "Estadísticas" en plural,
 # que no es el nombre real de la entidad.
+#
+# Y una entidad puede publicar bajo VARIAS cadenas a la vez. El DANE usa tres,
+# así que durante meses `entidad="DANE"` devolvió 2 de sus 6 datasets y el
+# sobre decía «2 de 2»: un cero silencioso disfrazado de respuesta completa.
+# Por eso el valor puede ser una tupla y se consultan todas.
 ATRIBUCIONES = {
-    "DANE": "Departamento Administrativo Nacional de Estadísticas - DANE, Bogotá D.C.",
+    "DANE": (
+        "Departamento Administrativo Nacional de Estadísticas - DANE, Bogotá D.C.",
+        "Departamento Administrativo Nacional de Estadística - DANE",
+        "DANE- FEDEARROZ",
+    ),
     "CCE": "Agencia Nacional de Contratación Pública - Colombia Compra Eficiente, Bogotá D.C.",
     "MinDefensa": "Ministerio de Defensa Nacional - MinDefensa, Bogotá D.C.",
     "Fiscalía": "Fiscalía General de la Nación, Bogotá D.C.",
@@ -298,6 +307,16 @@ ATRIBUCIONES = {
     "DNP": "Departamento Nacional de Planeación DNP, Bogotá D.C",
     "JCC": "Unidad Administrativa Especial Junta Central de Contadores - JCC, Bogotá D.C.",
 }
+
+
+def literales_atribucion(entidad: str) -> tuple[str, ...]:
+    """Las cadenas con las que buscar una entidad, que pueden ser varias.
+
+    Si no está en la tabla, se devuelve lo que escribió quien llama: el facet
+    lo rechazará y el sobre lo dirá, que es mejor que adivinar por ella.
+    """
+    v = ATRIBUCIONES.get(entidad, entidad)
+    return (v,) if isinstance(v, str) else tuple(v)
 
 # Los nombres en SECOP no son los coloquiales.
 # Alias coloquial -> fragmento que SÍ aparece en `nombre_entidad` de
@@ -1543,16 +1562,94 @@ PENITENCIARIO = {
 }
 
 
+# ----------------------------------------------------------------- agro ---
+# La Encuesta Nacional de Arroz Mecanizado, que el DANE levanta con FEDEARROZ.
+# Son los únicos datasets del DANE en el portal que no son DIVIPOLA, y llevaban
+# meses fuera de aquí por un motivo tonto: el DANE publica bajo TRES cadenas de
+# atribución y el registro solo conocía una, así que `entidad="DANE"` devolvía
+# dos de sus seis datasets y el sobre lo presentaba como «2 de 2».
+#
+# Las tres tablas comparten llave —año, semestre y sistema— y tienen la misma
+# forma: las cinco zonas arroceras son COLUMNAS, no valores. No hay `group by
+# zona` que valga, y `co_datos_agregar(agrupar_por="zona")` da un 400.
+#
+# Y hay un desfase que no se ve en el esquema: el área se SIEMBRA un semestre
+# y se COSECHA al siguiente. Dividir producción entre el área del mismo
+# semestre da disparates —en secano, una mediana de 16 t/ha de error y hasta
+# 38,7, siete veces el valor real—. Contra el área del semestre ANTERIOR la
+# mediana del error cae a 0,07 t/ha y cuadra en 60 de 64 pares. Comprobado
+# sobre las 66 filas el 20-nov-2026.
+AGRO = {
+    "arroz_produccion": Dataset(
+        id="9ukf-8mhd",
+        nombre="DANE-FEDEARROZ - Producción semestral de arroz paddy verde",
+        unidad="un semestre de un sistema de producción, en toneladas",
+        campos_clave={"ano": "ano", "semestre": "semestre", "sistema": "sistema",
+                      "total": "total_nacional"},
+        campos_resumen=("ano", "semestre", "sistema", "total_nacional",
+                        "bajo_cauca", "centro", "costa_norte", "llanos",
+                        "santanderes"),
+        notas=(
+            "66 filas: 2010-2026, dos sistemas (RIEGO, SECANO) y dos "
+            "semestres. 2026 solo trae el primero.",
+            "`ano` y `semestre` son TEXT, no números: `ano > 2020` da 400 y "
+            "hay que escribir `ano > '2020'`.",
+            "`total_nacional` es la suma de las cinco zonas con ±1 t de "
+            "redondeo en 29 de las 66 filas.",
+            "Es la cosecha del semestre. El área sembrada que le corresponde "
+            "es la del semestre ANTERIOR de ygbp-8y7a, no la del mismo.",
+        ),
+    ),
+    "arroz_area": Dataset(
+        id="ygbp-8y7a",
+        nombre="DANE-FEDEARROZ - Área sembrada de arroz mecanizado",
+        unidad="un semestre de un sistema de producción, en hectáreas",
+        campos_clave={"ano": "ano", "semestre": "semestre", "sistema": "sistema",
+                      "total": "total_nacional"},
+        campos_resumen=("ano", "semestre", "sistema", "total_nacional",
+                        "bajo_cauca", "centro", "costa_norte", "llanos",
+                        "santanderes"),
+        notas=(
+            "66 filas, mismo rango y misma llave que 9ukf-8mhd.",
+            "Es SIEMBRA, no cosecha: estas hectáreas producen el arroz que "
+            "9ukf-8mhd reporta en el semestre SIGUIENTE.",
+            "`total_nacional` es la suma de las cinco zonas con ±1 ha de "
+            "redondeo en 25 de las 66 filas.",
+        ),
+    ),
+    "arroz_rendimiento": Dataset(
+        id="q3f2-pgh3",
+        nombre="DANE-FEDEARROZ - Rendimientos semestrales de arroz",
+        unidad="un semestre de un sistema de producción, en toneladas por hectárea",
+        campos_clave={"ano": "ano", "semestre": "semestre", "sistema": "sistema",
+                      "total": "total_nacional"},
+        campos_resumen=("ano", "semestre", "sistema", "total_nacional",
+                        "bajo_cauca", "centro", "costa_norte", "llanos",
+                        "santanderes"),
+        notas=(
+            "66 filas, misma llave que las otras dos.",
+            "AQUÍ `total_nacional` NO ES UNA SUMA: un rendimiento no se suma. "
+            "Es el promedio de las zonas ponderado por área sembrada, y "
+            "difiere de la suma de las cinco columnas en las 66 filas, hasta "
+            "en 24,6. Sumar esta fila no significa nada.",
+            "Tampoco es producción ÷ área del mismo semestre: el divisor "
+            "correcto es el área del semestre anterior.",
+        ),
+    ),
+}
+
+
 SIN_FUENTE_ABIERTA = {
     "poblacion_municipal": (
         "El DANE no publica las proyecciones de población municipal como API. "
         "En datos.gov.co solo hay republicaciones de alcaldías sueltas "
-        "(Chiquinquirá, Sabaneta, Manizales) y bajo la atribución del DANE hay "
-        "exactamente TRES datasets, los tres de DIVIPOLA —municipios, "
-        "departamentos y centros poblados—, contados sobre el catálogo oficial "
-        "entero el 19-nov-2026. Sin denominador no hay "
-        "tasas por 100.000 habitantes: lo más cercano es la población de 5 a 16 "
-        "años del MinEducación (nudc-7mev), que no sirve para eso."
+        "(Chiquinquirá, Sabaneta, Manizales, Guarne, Calarcá), cada una de su "
+        "propio municipio. El DANE entero son SEIS datasets, contados sobre el "
+        "catálogo oficial completo el 20-nov-2026: los tres de DIVIPOLA y los "
+        "tres de la Encuesta Nacional de Arroz Mecanizado. Ninguno es "
+        "población. Sin denominador no hay tasas por 100.000 habitantes: lo "
+        "más cercano es la población de 5 a 16 años del MinEducación "
+        "(nudc-7mev), que no sirve para eso."
     ),
     "ipc": (
         "El IPC del DANE y las series del Banco de la República no están en "
@@ -1584,7 +1681,7 @@ FAMILIAS = {
     "integridad": INTEGRIDAD, "educacion": EDUCACION, "territorio": TERRITORIO,
     "macro": MACRO, "fiscalia": FISCALIA, "regalias": REGALIAS,
     "forense": FORENSE, "operativos": OPERATIVOS, "conflicto": CONFLICTO,
-    "penitenciario": PENITENCIARIO,
+    "penitenciario": PENITENCIARIO, "agro": AGRO,
 }
 
 

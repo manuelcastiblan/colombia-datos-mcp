@@ -7,10 +7,11 @@ estados financieros (Supersociedades), sanciones y antecedentes, educación
 (ICFES y MinEducación), desempeño municipal (DNP), TRM, procesos penales del
 SPOA (Fiscalía), regalías (DNP y MinHacienda), cifras forenses (Medicina
 Legal), operativos de drogas y minería (MinDefensa), víctimas del conflicto
-(UARIV) y población reclusa (INPEC). **34 herramientas, sin credenciales.**
+(UARIV), población reclusa (INPEC) y la encuesta de arroz mecanizado (DANE y
+FEDEARROZ). **34 herramientas, sin credenciales.**
 
-Núcleo completo, adaptador de Socrata, motor de privacidad y trece familias con
-**97 datasets curados**, cada uno con su unidad de análisis medida. Falta el
+Núcleo completo, adaptador de Socrata, motor de privacidad y catorce familias con
+**100 datasets curados**, cada uno con su unidad de análisis medida. Falta el
 adaptador SDMX y el de ArcGIS.
 
 > **Si vas a citar una cifra de aquí, lee
@@ -882,7 +883,7 @@ esquema.**
 |---|---|
 | [docs/herramientas.md](docs/herramientas.md) | Las 34 herramientas: parámetros, valores por defecto y topes. |
 | [docs/recetas.md](docs/recetas.md) | Secuencias que funcionan, con las trampas de cada una y cómo leer el sobre. |
-| [docs/fuentes.md](docs/fuentes.md) | Los 97 datasets: unidad de análisis, campos clave, joins y atribuciones. |
+| [docs/fuentes.md](docs/fuentes.md) | Los 100 datasets: unidad de análisis, campos clave, joins y atribuciones. |
 | [docs/arquitectura.md](docs/arquitectura.md) | Cómo está construido, y qué **no** hace todavía. |
 | [docs/operacion.md](docs/operacion.md) | Diagnóstico: caché, throttling, timeouts, y por qué el servidor no recoge tus cambios. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Las capas de prueba y cómo añadir un dataset o un filtro. |

@@ -39,13 +39,40 @@ def _fuente_de(esq: dict | None, dataset_id: str) -> Fuente:
 
 async def buscar_datasets(consulta=None, categoria=None, entidad=None, limite=20, offset=0):
     """Busca en el catálogo. Por defecto solo datasets oficiales."""
-    atribucion = reg.ATRIBUCIONES.get(entidad, entidad) if entidad else None
-    r = await socrata.buscar_datasets(
-        consulta=consulta, categoria=categoria, atribucion=atribucion,
-        limite=limite, offset=offset,
-    )
+    literales = reg.literales_atribucion(entidad) if entidad else (None,)
+    atribucion = literales[0]
+
+    # Una entidad puede publicar bajo varias cadenas de atribución —el DANE usa
+    # tres—. El facet solo acepta un literal por petición, así que se piden
+    # todas y se unen. Son disjuntas por definición: una fila trae una sola
+    # atribución, de modo que los totales se suman sin contar dos veces.
+    partes = await asyncio.gather(*[
+        socrata.buscar_datasets(
+            consulta=consulta, categoria=categoria, atribucion=lit,
+            # con varias cadenas la página se recorta después de unir
+            limite=min(limite + offset, 100) if len(literales) > 1 else limite,
+            offset=0 if len(literales) > 1 else offset,
+        )
+        for lit in literales
+    ])
+    r = partes[0]
     crudo = r["datos"]
-    resultados = crudo.get("results") or []
+    if len(literales) > 1:
+        resultados, vistos, total = [], set(), 0
+        for parte in partes:
+            d = parte["datos"]
+            if d.get("resultSetSize") is not None:
+                total += d["resultSetSize"]
+            for item in d.get("results") or []:
+                ident = (item.get("resource") or {}).get("id")
+                if ident in vistos:
+                    continue
+                vistos.add(ident)
+                resultados.append(item)
+        crudo = dict(crudo, resultSetSize=total)
+        resultados = resultados[offset:offset + limite]
+    else:
+        resultados = crudo.get("results") or []
 
     filas = []
     for item in resultados:
@@ -65,10 +92,21 @@ async def buscar_datasets(consulta=None, categoria=None, entidad=None, limite=20
         # La Discovery API devuelve el total del catalogo: lo conto ella.
         total=Total.contado(crudo["resultSetSize"]) if crudo.get("resultSetSize") is not None else None,
         offset=offset,
-        orden="relevancia",
-        consulta=r["consulta"],
+        # con varias atribuciones no hay un ranking global: cada petición trae
+        # el suyo y se concatenan. Decir «relevancia» a secas sería prometer un
+        # orden que nadie calculó.
+        orden="relevancia" if len(literales) == 1
+              else "relevancia dentro de cada atribución",
+        consulta=" · ".join(p["consulta"] for p in partes),
     )
-    if entidad and atribucion != entidad:
+    if entidad and len(literales) > 1:
+        sobre.advertir(
+            f"«{entidad}» publica bajo {len(literales)} cadenas de atribución "
+            "distintas y se consultaron todas: "
+            + ", ".join(f"«{l}»" for l in literales)
+            + ". Pedir una sola deja fuera el resto."
+        )
+    elif entidad and atribucion != entidad:
         sobre.advertir(
             f"Se usó la cadena de atribución exacta «{atribucion}». "
             "El facet de Socrata solo funciona con el literal completo."

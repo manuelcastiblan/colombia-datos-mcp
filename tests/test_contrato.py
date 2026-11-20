@@ -621,10 +621,17 @@ async def test_preguntar_por_igualdad_de_fecha_perderia_los_domingos():
 async def test_el_dane_no_publica_poblacion_municipal_en_el_catalogo():
     """La razón de `SIN_FUENTE_ABIERTA['poblacion_municipal']`, y de que el
     servidor no ofrezca tasas por 100.000 habitantes. Si esto deja de ser
-    cierto, se puede construir el denominador."""
-    r = await socrata.buscar_datasets(
-        atribucion=reg.ATRIBUCIONES["DANE"], limite=50)
-    nombres = [x["resource"]["name"] for x in r["datos"].get("results", [])]
+    cierto, se puede construir el denominador.
+
+    Hay que recorrer las TRES cadenas de atribución del DANE: durante meses
+    esta prueba miró solo una y daba por revisado un catálogo del que veía
+    dos sextas partes.
+    """
+    nombres = []
+    for literal in reg.literales_atribucion("DANE"):
+        r = await socrata.buscar_datasets(atribucion=literal, limite=50)
+        nombres += [x["resource"]["name"] for x in r["datos"].get("results", [])]
+    assert len(nombres) == 6, f"el DANE publica {len(nombres)} datasets: {nombres}"
     assert all("oblaci" not in n for n in nombres), nombres
 
 
@@ -849,3 +856,44 @@ async def test_el_maximo_de_la_fecha_de_corte_de_la_uariv_miente():
     anios = {str(f["fecha_corte"])[-4:] for f in g["filas"]}
     assert max(anios) > maximo[-4:], (
         f"max() devolvió {maximo} y hay cortes de {max(anios)}")
+
+
+# ---------------------------------------------------------------- agro ---
+async def test_las_tres_tablas_de_arroz_comparten_la_misma_llave():
+    """Año, semestre y sistema. Si una cambia el rango o el vocabulario, el
+    cruce entre producción, área y rendimiento deja de significar lo mismo."""
+    claves = {}
+    for nombre, ds in reg.AGRO.items():
+        r = await socrata.consultar(
+            ds.id, seleccionar="ano, semestre, sistema", limite=200)
+        claves[nombre] = {(f["ano"], f["semestre"], f["sistema"]) for f in r["filas"]}
+        assert len(claves[nombre]) == 66, f"{nombre}: {len(claves[nombre])} filas"
+    assert len(set(map(frozenset, claves.values()))) == 1, "las ternas no coinciden"
+
+
+async def test_el_rendimiento_del_arroz_no_es_produccion_entre_area_del_mismo_semestre():
+    """La trampa que documenta la familia: el área se siembra un semestre y se
+    cosecha al siguiente. Dividir dentro del mismo semestre da hasta 38 t/ha en
+    secano, siete veces el valor real. Si algún día cuadra, la nota sobra."""
+    async def nacional(dataset_id):
+        r = await socrata.consultar(
+            dataset_id, seleccionar="ano, semestre, sistema, total_nacional",
+            donde="sistema='SECANO'", limite=200)
+        return {(f["ano"], f["semestre"]): float(f["total_nacional"]) for f in r["filas"]}
+
+    prod = await nacional(reg.AGRO["arroz_produccion"].id)
+    area = await nacional(reg.AGRO["arroz_area"].id)
+    rend = await nacional(reg.AGRO["arroz_rendimiento"].id)
+
+    mismo = [abs(prod[k] / area[k] - rend[k]) for k in prod if area.get(k)]
+    assert min(mismo) > 2, f"el divisor del mismo semestre ya cuadra: {min(mismo)}"
+
+    def anterior(k):
+        ano, sem = k
+        return (ano, "I") if sem == "II" else (str(int(ano) - 1), "II")
+
+    previo = [abs(prod[k] / area[anterior(k)] - rend[k])
+              for k in prod if area.get(anterior(k))]
+    previo.sort()
+    mediana = previo[len(previo) // 2]
+    assert mediana < 0.5, f"el área del semestre anterior ya no cuadra: {mediana}"

@@ -78,8 +78,19 @@ async def test_buscar_datasets_inyecta_search_context(monkeypatch):
 async def test_buscar_datasets_traduce_la_sigla_a_atribucion_exacta(monkeypatch):
     red = _instala(monkeypatch, {"api/catalog/v1": CATALOGO})
     await catalogo.buscar_datasets(entidad="DANE")
-    _, params = red.llamadas[0]
-    assert params["attribution"].startswith("Departamento Administrativo Nacional")
+    pedidas = {params["attribution"] for _, params in red.llamadas}
+    assert all(a.startswith(("Departamento Administrativo Nacional", "DANE"))
+               for a in pedidas), pedidas
+
+
+async def test_buscar_datasets_recorre_todas_las_cadenas_de_la_entidad(monkeypatch):
+    """El DANE publica bajo tres atribuciones distintas. Pedir solo la primera
+    devolvía 2 de sus 6 datasets, y el sobre lo anunciaba como «2 de 2»."""
+    red = _instala(monkeypatch, {"api/catalog/v1": CATALOGO})
+    salida = await catalogo.buscar_datasets(entidad="DANE")
+    pedidas = {params["attribution"] for _, params in red.llamadas}
+    assert pedidas == set(reg.literales_atribucion("DANE")), pedidas
+    assert "3 cadenas de atribución" in salida["texto"]
 
 
 async def test_describir_dataset_expone_nombre_legible(monkeypatch):

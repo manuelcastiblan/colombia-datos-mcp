@@ -124,5 +124,37 @@ def test_las_notas_que_dan_una_cifra_la_dan_entera():
 def test_el_registro_no_encogio_sin_querer():
     """Un `git merge` desafortunado sobre un fichero de 1.700 líneas puede
     borrar una familia entera sin que nada más falle."""
-    assert len(reg.todos()) >= 97, f"el registro tiene {len(reg.todos())} datasets"
-    assert len(reg.FAMILIAS) >= 13
+    assert len(reg.todos()) >= 100, f"el registro tiene {len(reg.todos())} datasets"
+    assert len(reg.FAMILIAS) >= 14
+
+
+# ------------------------------------------------- cadenas de atribución ---
+# El facet de Socrata exige el literal exacto, y una entidad puede publicar
+# bajo varios. El DANE usa tres: mientras el registro conoció una sola,
+# `entidad="DANE"` devolvía 2 de sus 6 datasets anunciando «2 de 2».
+def test_cada_atribucion_es_una_cadena_o_varias_pero_nunca_vacia():
+    malas = []
+    for sigla, valor in reg.ATRIBUCIONES.items():
+        literales = (valor,) if isinstance(valor, str) else tuple(valor)
+        if not literales or any(not isinstance(l, str) or not l.strip()
+                                for l in literales):
+            malas.append(sigla)
+        if len(set(literales)) != len(literales):
+            malas.append(f"{sigla} (repetida)")
+    assert not malas, f"atribuciones mal formadas: {malas}"
+
+
+def test_literales_atribucion_devuelve_siempre_una_tupla():
+    assert reg.literales_atribucion("CCE") == (reg.ATRIBUCIONES["CCE"],)
+    assert len(reg.literales_atribucion("DANE")) == 3
+    # lo que no está en la tabla se devuelve tal cual: que falle el facet y lo
+    # diga el sobre es mejor que adivinar una cadena por quien pregunta
+    assert reg.literales_atribucion("NoExiste") == ("NoExiste",)
+
+
+def test_la_familia_agro_comparte_la_llave_entre_sus_tres_tablas():
+    """Producción, área y rendimiento solo se cruzan si las tres traen la
+    misma terna. Si una cambia de nombre de campo, el cruce se rompe callado."""
+    llaves = {k: tuple(sorted(d.campos_clave)) for k, d in reg.AGRO.items()}
+    assert len(set(llaves.values())) == 1, llaves
+    assert set(reg.AGRO["arroz_produccion"].campos_clave) >= {"ano", "semestre", "sistema"}
