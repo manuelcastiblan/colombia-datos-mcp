@@ -34,7 +34,7 @@ flowchart TD
     resta --> citable
 ```
 
-```
+```python
 co_secop_buscar_contratos(proveedor="<nombre completo>", detalle="conteo")
 → 12 contratos
 ```
@@ -44,7 +44,7 @@ fuente suele registrar a las personas como `APELLIDO1 APELLIDO2 NOMBRE1 NOMBRE2`
 así que buscar el nombre en orden natural devuelve cero. Si el conteo sale 0,
 prueba solo con los apellidos:
 
-```
+```python
 co_secop_buscar_contratos(proveedor="<los dos apellidos>", detalle="conteo")
 → 36 contratos    ← incluye otros homónimos de apellido
 ```
@@ -52,7 +52,7 @@ co_secop_buscar_contratos(proveedor="<los dos apellidos>", detalle="conteo")
 **Confirma que es una sola persona.** Nombres iguales con cédulas distintas se
 mezclan sin avisar. Agrupa por documento:
 
-```
+```python
 co_datos_agregar(dataset_id="jbjy-vk9h",
                  agrupar_por="documento_proveedor",
                  metricas="count(*) as contratos, sum(valor_del_contrato) as valor",
@@ -62,7 +62,7 @@ co_datos_agregar(dataset_id="jbjy-vk9h",
 
 **Con la cédula, usa el perfil.** Es exacto y agrega del lado del servidor:
 
-```
+```python
 co_secop_perfil_proveedor(documento="<cédula>")
 → 12 contratos · $547.285.071, desglosado por entidad contratante
 ```
@@ -78,14 +78,14 @@ de contratación real baja a unos $454 millones.
 
 Nunca busques por el nombre que crees que tiene. Resuélvelo primero:
 
-```
+```python
 co_secop_resolver_entidad(nombre="invias")
 → nombre canónico + NIT
 ```
 
 Y luego filtra **por NIT**, que es exacto y mucho más rápido que un `like`:
 
-```
+```python
 co_secop_buscar_contratos(nit_entidad="<el NIT>", detalle="conteo")
 ```
 
@@ -99,7 +99,7 @@ final— y otras no están en el dataset de contratos en absoluto.
 
 No traigas filas para sumar:
 
-```
+```python
 co_secop_agregar(agrupar_por="departamento", metrica="valor", limite=10)
 ```
 
@@ -115,7 +115,7 @@ no dice nada sin deflactar.
 
 ### Y antes de dar una suma de dinero, acótala
 
-```
+```python
 co_secop_agregar(agrupar_por="departamento", metrica="valor")
 ```
 
@@ -127,14 +127,14 @@ Lo que **no** funciona es filtrar por estado. Aunque el 97 % de los atípicos
 está en `Cancelado` o `Borrador`, los 83 que sobreviven siguen arrastrando el
 total. Lo que funciona es acotar por magnitud:
 
-```
+```python
 co_secop_buscar_contratos(valor_max=1000000000000, detalle="conteo")
 → 5.955.101 contratos · $997,5 billones
 ```
 
 O medir lo que de verdad se movió, que en los atípicos es cero:
 
-```
+```python
 co_datos_agregar(dataset_id="jbjy-vk9h", agrupar_por="departamento",
                  metricas="sum(valor_pagado) as pagado",
                  donde="valor_pagado > 0")
@@ -149,7 +149,7 @@ Hay una pregunta que parece la misma y no lo es. «Cuántos contratos tiene cada
 proveedor que repite» y «cuántos proveedores repiten» se escriben casi igual, y
 solo la primera se puede responder con `teniendo`:
 
-```
+```python
 co_datos_agregar(dataset_id="jbjy-vk9h", agrupar_por="documento_proveedor",
                  metricas="count(*) as n", teniendo="count(*) > 1")
 → una fila por persona, con su número de contratos
@@ -158,7 +158,7 @@ co_datos_agregar(dataset_id="jbjy-vk9h", agrupar_por="documento_proveedor",
 `count(*)` con `having` cuenta **dentro** de cada grupo. Para contar los grupos
 que ese filtro deja hay que agregar sobre el resultado, y eso es `luego`:
 
-```
+```python
 co_datos_agregar(dataset_id="jbjy-vk9h", agrupar_por="documento_proveedor",
                  metricas="count(*) as n", teniendo="count(*) > 1",
                  luego="count(*) as personas, sum(n) as contratos")
@@ -173,7 +173,7 @@ los **alias** de `metricas` (`n`), no los campos del dataset. Nombrar ahí
 
 Contratistas persona natural con prestación de servicios firmada en 2026:
 
-```
+```python
 donde = "fecha_de_firma >= '2026-01-01'
          AND tipodocproveedor = 'Cédula de Ciudadanía'
          AND tipo_de_contrato = 'Prestación de servicios'"
@@ -203,7 +203,7 @@ ti. Declara siempre qué unidad elegiste.
 
 ## La historia completa de un contrato
 
-```
+```python
 co_secop_detalle_contrato(id_contrato="CO1.PCCNTR.9003698")
 ```
 
@@ -220,7 +220,7 @@ Distingue tres respuestas que se parecen y no son lo mismo:
 
 ## Explorar un dataset que no conoces
 
-```
+```python
 co_datos_buscar_datasets(consulta="...", entidad="DANE")
 co_datos_describir_dataset(dataset_id="<id>")     ← SIEMPRE antes de filtrar
 co_datos_consultar(dataset_id="<id>", detalle="conteo", donde="...")
@@ -239,7 +239,7 @@ fragmentos.
 
 ## Cruzar con territorio
 
-```
+```python
 co_geo_divipola(consulta="Medellin")        → cod_mpio 05001 + coordenadas
 ```
 
@@ -249,7 +249,7 @@ cualquier otra fuente territorial.
 
 Para auditar la calidad de las coordenadas oficiales:
 
-```
+```python
 co_geo_cotejar_coordenadas(limite=15)
 → 1.122 municipios cotejados, 1.104 cabeceras, discrepancias > ~1 km
 ```
@@ -268,7 +268,7 @@ del origen.
 
 **Para copiar y pegar**, pide el formato:
 
-```
+```python
 co_secop_buscar_contratos(departamento="Chocó", limite=100, formato="csv")
 ```
 
@@ -278,7 +278,7 @@ debajo con la procedencia y la URL reproducible.
 **Para volúmenes**, exporta a disco. Pagina hasta agotar el filtro, así que no
 está sujeto al presupuesto de tokens:
 
-```
+```python
 co_datos_exportar(dataset_id="jbjy-vk9h", nombre_archivo="contratos_choco",
                   donde="departamento = 'Chocó'", max_filas=50000)
 ```
@@ -295,7 +295,7 @@ Tres cosas que conviene saber:
 
 Las agregaciones traen barras proporcionales a la métrica:
 
-```
+```python
 co_secop_agregar(agrupar_por="modalidad", metrica="contratos", limite=6)
 ```
 
@@ -331,7 +331,7 @@ Se apagan con `grafica=false`, y no aparecen si pides `formato="csv"`.
 
 ## Antes de fiarte de una columna que no conoces
 
-```
+```python
 co_datos_perfilar(dataset_id="<id>", campo="<columna>")
 ```
 
@@ -347,7 +347,7 @@ después.
 
 ## Series sin escribir SoQL
 
-```
+```python
 co_datos_serie(dataset_id="jbjy-vk9h", campo_fecha="fecha_de_firma",
                periodo="anio", desde="2023-01-01")
 ```
@@ -366,7 +366,7 @@ cinco del Plan Anual de Adquisiciones.
 
 Es la receta más importante del módulo, porque el error es muy fácil de cometer.
 
-```
+```python
 co_crimen_comparar(anio_a=2017, anio_b=2025, delitos="secuestro,extorsion,homicidio")
 ```
 
@@ -382,7 +382,7 @@ co_crimen_comparar(anio_a=2017, anio_b=2025, delitos="secuestro,extorsion,homici
 
 **+259 % en secuestro** parece una catástrofe. Ahora mira de dónde viene:
 
-```
+```python
 co_crimen_serie(delito="secuestro", desde=2003, hasta=2006)
 ```
 
@@ -406,7 +406,7 @@ sin su serie es técnicamente cierto y sustancialmente engañoso.**
 
 ### Dónde ocurre un delito
 
-```
+```python
 co_crimen_por_municipio(delito="extorsion", anio=2025, limite=4)
 ```
 
@@ -445,7 +445,7 @@ que buscas es el reparto dentro de una región.
 
 Una sola llamada antes de cualquier otra cosa:
 
-```
+```python
 co_dossier_documento(documento="899999068")
 ```
 
@@ -485,7 +485,7 @@ para el detalle de las sanciones.
 Lo primero es la pregunta de verdad. Si es «qué sanciona la Procuraduría y a
 quién», no hace falta ninguna persona:
 
-```
+```python
 co_integridad_panorama(agrupar_por="calidad")
 ```
 
@@ -509,13 +509,13 @@ en la práctica.
 
 Si la pregunta sí es por una persona concreta, hay que declarar para qué:
 
-```
+```python
 co_integridad_disciplinarias(documento="1023456789")
 → [PRIVACIDAD] ... hay que declarar `finalidad`. No la supongas: pregúntasela
   a quien te lo pidió.
 ```
 
-```
+```python
 co_integridad_disciplinarias(documento="1023456789", finalidad="periodismo")
 ```
 
@@ -532,7 +532,7 @@ distinguirlos. Confundir a dos personas aquí es grave, y la respuesta lo dice.
 No se puede deflactar: el IPC del DANE no tiene API abierta. Lo que hay es una
 segunda unidad, a la TRM de la fecha del contrato:
 
-```
+```python
 co_macro_convertir(monto=1000000000, fecha="2024-01-21")
 ```
 
@@ -559,7 +559,7 @@ compra. Es una unidad más, verificable, no un índice de precios.
 La tentación es ordenar colegios por promedio. Antes de eso, una llamada que
 cambia la lectura:
 
-```
+```python
 co_educacion_saber11(agrupar_por="estrato", periodo="20224")
 co_educacion_saber11(agrupar_por="educacion_madre", periodo="20224")
 ```
@@ -567,7 +567,7 @@ co_educacion_saber11(agrupar_por="educacion_madre", periodo="20224")
 Las dos están en la **misma fuente** que el puntaje, así que la correlación se
 ve sin salir de ella. Después, si aún hace falta el ranking:
 
-```
+```python
 co_educacion_saber11(agrupar_por="colegio", periodo="20224", limite=20)
 ```
 
@@ -586,7 +586,7 @@ Tres cosas que el módulo ya absorbe:
 
 ## Lo que no se puede pedir, y qué contestar
 
-```
+```python
 co_crimen_por_municipio(delito="homicidio", anio=2024)
 ```
 
@@ -608,12 +608,11 @@ sustituto que no lo es.
 
 Todas las respuestas terminan igual:
 
-```
-**12 fila(s)** de **12** coincidencias · orden: `valor_del_contrato DESC`
-Fuente: `jbjy-vk9h` SECOP II - Contratos Electrónicos · CC BY-SA 4.0
-Consulta reproducible: https://www.datos.gov.co/resource/jbjy-vk9h.json?...
+**12 fila(s)** de **12** coincidencias · orden: `valor_del_contrato DESC`<br>
+Fuente: `jbjy-vk9h` SECOP II - Contratos Electrónicos · CC BY-SA 4.0<br>
+Consulta reproducible: `https://www.datos.gov.co/resource/jbjy-vk9h.json?...`
+
 > Unidad de análisis: un contrato. No sumes filas de datasets distintos.
-```
 
 Qué mirar, en orden:
 

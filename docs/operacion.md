@@ -59,17 +59,17 @@ o a no reiniciar cuando sí:
 
 | Qué cambiaste | Basta con matar el proceso | Hay que reiniciar la sesión |
 |---|:---:|:---:|
-| Contenido de las respuestas, avisos, formato | ✅ | |
-| Lógica interna, corrección de un cálculo | ✅ | |
-| Parámetros nuevos en una herramienta | | ✅ |
-| Herramienta nueva, o renombrada | | ✅ |
+| Contenido de las respuestas, avisos, formato | ✅ | — |
+| Lógica interna, corrección de un cálculo | ✅ | — |
+| Parámetros nuevos en una herramienta | — | ✅ |
+| Herramienta nueva, o renombrada | — | ✅ |
 
 ### `pip install -e .` falla con «El proceso no tiene acceso al archivo»
 
 En Windows, si el servidor MCP está corriendo, tiene abierto
 `Scripts\colombia-datos-mcp.exe` y pip no puede reescribirlo:
 
-```
+```text
 ERROR: Could not install packages due to an OSError: [WinError 32] ...
   'colombia-datos-mcp.exe' -> 'colombia-datos-mcp.exe.deleteme'
 ```

@@ -206,7 +206,7 @@ mostradas eran todas las que había: un `co_secop_agregar` por proveedor decía
 
 Con `grafica` (por defecto activa):
 
-```
+```python
 co_datos_agregar(dataset_id="gdxc-w37w", agrupar_por="dpto", limite=6)
 ```
 

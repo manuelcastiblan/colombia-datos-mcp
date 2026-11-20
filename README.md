@@ -189,7 +189,7 @@ válidas son `investigacion`, `periodismo`, `control_fiscal` y
 `debida_diligencia`. No es un trámite: la finalidad viaja al sobre y queda en la
 respuesta, así que la consulta es auditable por quien la lea después.
 
-```
+```python
 co_empresas_ficha(documento="1023456789")
 → [PRIVACIDAD] La ficha de 10••••••89 identifica a una persona natural, así que
   hay que declarar `finalidad`. No la supongas: pregúntasela a quien te lo pidió.
@@ -380,7 +380,7 @@ significar «no está en SECOP II», no «no contrató nunca».
 
 ### Antes de fiarte de una columna
 
-```
+```python
 co_datos_perfilar(dataset_id="jbjy-vk9h", campo="valor_del_contrato")
 ```
 
@@ -412,7 +412,7 @@ Adquisiciones— donde agrupar falla y `between` miente.
 
 ## Dibujar un mapa
 
-```
+```python
 co_geo_limites(nivel="municipio", departamento="Chocó")
 ```
 
@@ -483,7 +483,7 @@ puede consumirlas como datos sin volver a parsear la tabla.
 `formato="csv"` o `"json"`; el cuerpo sale en un bloque cercado para que se
 copie limpio, y el sobre sigue debajo con su procedencia.
 
-```
+```python
 co_secop_buscar_contratos(departamento="Chocó", formato="csv")
 ```
 
@@ -491,7 +491,7 @@ co_secop_buscar_contratos(departamento="Chocó", formato="csv")
 el fichero, así que sirve para lo que no cabe en una respuesta. Devuelve la ruta,
 el número de filas y si el conjunto quedó completo.
 
-```
+```python
 co_datos_exportar(dataset_id="jbjy-vk9h", nombre_archivo="contratos_choco",
                   donde="departamento = 'Chocó'", formato="csv")
 ```
@@ -507,7 +507,7 @@ pandas usa `encoding="utf-8-sig"`.
 Las agregaciones traen una columna de barras proporcionales a la métrica, para
 comparar los grupos sin salir de la terminal. Municipios por departamento:
 
-```
+```python
 co_datos_agregar(dataset_id="gdxc-w37w", agrupar_por="dpto", limite=6)
 ```
 
@@ -533,7 +533,7 @@ deja la celda vacía en vez de dibujar una barra de cero. Se apagan con
 
 Las mismas barras sobre `metrica="valor"` en SECOP dan esto:
 
-```
+```python
 co_secop_agregar(agrupar_por="departamento", metrica="valor", limite=3)
 ```
 
@@ -556,7 +556,7 @@ Una gráfica que no cuadra con lo que sabes del mundo es información, no ruido.
 
 ## Antes de fiarte de una columna
 
-```
+```python
 co_datos_perfilar(dataset_id="jbjy-vk9h", campo="valor_del_contrato")
 ```
 
@@ -588,7 +588,7 @@ Adquisiciones— donde agrupar falla y `between` miente.
 
 ## Dibujar un mapa
 
-```
+```python
 co_geo_limites(nivel="municipio", departamento="Chocó")
 ```
 

@@ -167,3 +167,45 @@ def test_cada_salida_marcada_va_seguida_de_markdown_de_verdad(documento: Path):
         elif len(siguientes) > 1 and siguientes[1].lstrip().startswith("```"):
             fallos.append(f"  línea {i + 1}: la respuesta volvió a una valla de código")
     assert not fallos, f"Salidas mal marcadas en {_ids(documento)}:\n" + "\n".join(fallos)
+
+
+# La regla de arriba solo veía tuberías, así que se le escapó «Leer el sobre»:
+# el pie de las respuestas iba dentro de una valla y el lector leía
+# `**12 fila(s)**` y un `>` en vez de la negrita y la cita. Una salida es
+# markdown tenga tabla o no.
+MARCAS_DE_MARKDOWN = (
+    ("negrita", re.compile(r"\*\*[^\s*][^*\n]*\*\*")),
+    ("cita", re.compile(r"^> ", re.M)),
+)
+
+
+@pytest.mark.parametrize("documento", DOCUMENTOS, ids=_ids)
+def test_ninguna_valla_esconde_markdown_con_formato(documento: Path):
+    texto = documento.read_text(encoding="utf-8")
+    fallos = []
+    for m in VALLA.finditer(texto):
+        if m.group(1) == "mermaid":
+            continue
+        halladas = [nombre for nombre, rx in MARCAS_DE_MARKDOWN if rx.search(m.group(2))]
+        if halladas:
+            linea = texto[:m.start()].count("\n") + 1
+            fallos.append(f"  línea {linea}: {', '.join(halladas)}")
+    assert not fallos, (
+        f"Markdown con formato dentro de una valla en {_ids(documento)}:\n"
+        + "\n".join(fallos)
+        + "\nSe lee como fuente, no como lo que el cliente pinta. Si es una "
+        "respuesta, sácala de la valla."
+    )
+
+
+@pytest.mark.parametrize("documento", DOCUMENTOS, ids=_ids)
+def test_toda_valla_declara_su_lenguaje(documento: Path):
+    """Cuarenta y dos llamadas a herramientas iban sin lenguaje mientras tres
+    idénticas decían `python`: el mismo bloque se pintaba de dos maneras."""
+    texto = documento.read_text(encoding="utf-8")
+    mudas = [texto[:m.start()].count("\n") + 1
+             for m in VALLA.finditer(texto) if not m.group(1)]
+    assert not mudas, (
+        f"Vallas sin lenguaje en {_ids(documento)}, líneas {mudas}: una llamada "
+        "es `python`, una salida de consola es `text`."
+    )
