@@ -4,6 +4,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin publicar]
 
+Nada todavía.
+
+## [0.19.0] — 2026-11-20
+
 ### SECOP completo: 38 datasets más, y un join que llevaba meses mintiendo
 
 Colombia Compra publicaba 49 datasets y el registro curaba 11. Entran los 38
