@@ -4,7 +4,68 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
 ## [Sin publicar]
 
-Nada todavía.
+### SECOP completo: 38 datasets más, y un join que llevaba meses mintiendo
+
+Colombia Compra publicaba 49 datasets y el registro curaba 11. Entran los 38
+que faltaban y SECOP pasa a ser una familia de **49**, con el registro en
+**138 datasets**.
+
+Lo que se gana no es volumen sino preguntas que antes no tenían respuesta:
+**si pagaron y cuándo** (`uymx-8p3j`, con `fecha_real_de_pago`), **quién
+ofertó y por cuánto** (tres datasets de ofertas, 98,8 M de filas), **de dónde
+salió la plata** (`3xwx-53wt`), **qué le pasó al contrato después de firmado**
+(`u8cx-r425`, con liquidación y terminación), **los convenios
+interadministrativos** —modalidad entera que no está en la tabla de
+contratos— y **los documentos** con su URL de descarga.
+
+#### El join falso
+
+Estaba declarado `p6dx-8zbt.id_del_proceso = jbjy-vk9h.proceso_de_compra`. Es
+`CO1.REQ.*` contra `CO1.BDOS.*`: **cero filas, siempre, sin error y sin
+aviso**. El campo correcto es `id_del_portafolio`. SECOP II usa tres espacios
+de identificador y ahora están documentados, con prueba de contrato que fija
+cuál es cuál.
+
+Se añade `JOINS_FALSOS`: pares que parecen una llave, no lo son, y llevan
+escrito por qué, para que nadie los reintente. Son cuatro.
+
+#### La caché de Socrata no sirve para contar
+
+`cachedContents` se había validado contra `count(*)`… en dos datasets, que
+coincidieron. Sobre estos 38 **discrepa en 19 de 32**: el histórico de
+convenios decía 2.362 y son 121.901; «Origen de los recursos» decía 49,6 M y
+son 5,3 M. Todas las cifras nuevas salen de `count(*)`.
+
+Eso obligó a auditar las 97 notas que ya afirmaban un número de filas: **76
+siguen dentro del 2 %**, ninguna estaba inventada y dos se habían quedado
+viejas por crecimiento de la fuente —`uwns-mbwd` un 30 % y `ceth-n4bn` un
+7 %—, ya corregidas. Diecinueve no respondieron al `count(*)` dentro del
+tiempo; dieciséis de ellas se contaron hoy por otra vía, y quedan sin
+reverificar `nb3d-v3n7`, `dbdv-iihs` y `piva-db2c`.
+
+#### Lo que se documenta porque engaña
+
+- **`gjp9-cutm` tiene 48.949 garantías** para millones de contratos: un
+  contrato sin póliza aquí no es un contrato sin garantía.
+- **`proposito_modificacion` no es vocabulario controlado**: 372.888 «No
+  definido» y considerandos de 900 caracteres como valor.
+- **`tauh-5jvn.adjudicado` dice «Si» en 4 filas** de 124.072.
+- **`d9na-abhe.codigo_bpin` es texto libre** —«BPIN2025»,
+  «CDIGOASIGNADODEPENDE»— y no cruza con el DNP. El que cruza es el de SECOP I.
+- **`usqp-5nsn` y `3hdv-smhz` son el mismo dato** con otros nombres de
+  columna: sumarlos cuenta cada compra dos veces.
+- **`gra4-pcp2` tiene mil filas exactas**: es una muestra, no el universo.
+- **`anno_firma` de los convenios va de 0 a 2097.**
+
+#### Privacidad
+
+`4ex9-j3n8` entra en `PERSONALES`. Los demás datasets de SECOP son el registro
+de un contrato en el que una parte resulta ser persona; ese es un **directorio
+de 2.169.413 personas** con correo y documento del representante legal. La
+distinción queda escrita, y también qué queda fuera y por qué.
+
+Y `ATRIBUCIONES` aprende que Colombia Compra usa **cuatro** cadenas: tres de
+sus datasets viven bajo las secundarias.
 
 ## [0.18.0] — 2026-11-20
 

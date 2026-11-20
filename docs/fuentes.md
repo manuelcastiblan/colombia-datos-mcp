@@ -102,6 +102,110 @@ Aquí viven entidades que no aparecen en `jbjy-vk9h`, como **RTVC**.
 | `9sue-ezhx` | Plan Anual de Adquisiciones | **Las columnas de fecha son `text`, no `calendar_date`: no se filtran con `between`** |
 | `rgxm-mmea` | Tienda Virtual del Estado (TVEC) | El valor es `total` |
 
+### Tres espacios de identificador, y confundirlos devuelve cero
+
+Es el error que más silenciosamente arruina un cruce en SECOP II, porque no da
+error: devuelve vacío, y el vacío parece un hallazgo.
+
+| Prefijo | Qué identifica | Dónde vive |
+|---|---|---|
+| `CO1.REQ.*` | el **procedimiento** | `p6dx-8zbt.id_del_proceso` |
+| `CO1.BDOS.*` | el **proceso de compra** | `p6dx-8zbt.id_del_portafolio` · `jbjy-vk9h.proceso_de_compra` |
+| `CO1.PCCNTR.*` | el **contrato** | `jbjy-vk9h.id_contrato` |
+
+Este registro declaró durante meses `p6dx-8zbt.id_del_proceso =
+jbjy-vk9h.proceso_de_compra`, que es REQ contra BDOS. Cero filas, siempre. Está
+corregido, y hay prueba de contrato que fija cuál es el bueno.
+
+**SECOP I no comparte ninguno de los tres.** Allí el proceso se identifica por
+`numero_de_constancia` (`17-4-7436473`) y el contrato por `id_adjudicacion`, un
+entero. Lo único que une las dos plataformas es `rpmr-utcd`, el Integrado.
+
+### La ejecución del contrato: lo que se reservó, se facturó y se pagó
+
+El contrato dice lo pactado. Estos dicen lo que pasó después, y todos cruzan
+por `id_contrato`:
+
+| ID | Qué responde | Filas |
+|---|---|---:|
+| `a86w-fh92` | Solicitudes de CDP, con la fuente de recursos en **seis banderas** no excluyentes | 7.288.391 |
+| `skc9-met7` | Compromisos presupuestales, uno por ítem | 5.866.580 |
+| `cwhv-7fnp` | Contra qué **rubro** se cargó el contrato | 5.891.594 |
+| `ibyt-yi2f` | Facturas | 23.376.166 |
+| `uymx-8p3j` | Plan de pagos, con **`fecha_real_de_pago`** | 23.065.694 |
+| `u8cx-r425` | Modificaciones: adición, prórroga, liquidación, terminación | 8.535.111 |
+| `u99c-7mfm` | Suspensiones y reanudaciones | 941.384 |
+| `gjp9-cutm` | Garantías | 48.949 |
+
+Tres advertencias que cambian lo que se puede concluir:
+
+- **`uymx-8p3j` es lo más cerca que llega el dato abierto a «¿pagaron?»**:
+  `fecha_real_de_pago` frente a `fecha_estimada_de_pago` da la mora. Nombra al
+  supervisor con su documento.
+- **`gjp9-cutm` tiene 48.949 pólizas para millones de contratos.** Un contrato
+  sin póliza aquí no es un contrato sin garantía: es uno cuya póliza no se
+  cargó.
+- **`proposito_modificacion` de `u8cx-r425` no es vocabulario controlado.**
+  372.888 filas dicen «No definido» y entre los valores más repetidos hay
+  considerandos jurídicos de 900 caracteres copiados por una sola entidad.
+  Agrupar por ese campo no significa nada.
+
+Los días de parálisis de una suspensión **son la resta entre dos filas**, no un
+campo: 501.700 «Suspension» y 439.684 «Reanudacion». En 144 de 144 pares
+examinados la reanudación va después, así que una resta negativa señala a esa
+entidad escribiéndolo al revés, no al dataset.
+
+### Convenios interadministrativos, que no están en la tabla de contratos
+
+`s484-c9k3` (90.370 filas) y su histórico `ityv-bxct` (**121.901**, más que el
+vigente) son la modalidad por la que una entidad contrata con otra, y por eso
+se escapa de la competencia. **`anno_firma` trae basura**: va de 0 a 2088 en
+uno y hasta 2097 en el otro; usa `fecha_firma`.
+
+### Quién ofertó, y de dónde salió la plata
+
+Las **ofertas** están partidas en tres por periodo —`bpan-xvj3` hasta 2022
+(33.837.648), `b28v-edj8` 2023-2024 (30.878.001), `wi7w-2nvm` 2025-2026
+(34.133.308)—, con el mismo esquema. Consultar uno y concluir «se presentaron N
+oferentes» es el error evidente. Cruzan por `proceso_de_compra`, no por el
+procedimiento.
+
+El **origen de los recursos** solo existe para SECOP I (`3xwx-53wt`, 5.336.057
+filas) y su vocabulario hay que normalizarlo antes de agrupar:
+
+| Etiqueta | Filas |
+|---|---:|
+| Recursos propios | 1.824.119 |
+| Sistema General de Participaciones - SGP | 1.290.195 |
+| Recursos Propios (Alcaldías, Gobernaciones y Resguardos Indígenas) | 867.481 |
+| Sistema General de Regalías - SGR | 68.239 |
+| Regalías | 1 |
+
+Las filas 1 y 3 son lo mismo con dos nombres, y «Regalías» con una sola fila
+convive con el SGR. **Es el único BPIN de SECOP que cruza con el DNP**: el de
+SECOP II (`d9na-abhe.codigo_bpin`) es texto libre y trae cosas como
+«BPIN2025», «CO1BDOS3593788» y «CDIGOASIGNADODEPENDE».
+
+### Los documentos, y lo que pesan
+
+Ocho datasets listan los ficheros subidos a cada proceso con su URL de
+descarga: `ps88-5e3v` y `8kpz-m6cc` para SECOP I, y seis por año para SECOP II.
+Entre todos pasan de **280 millones de filas**, así que no se consultan sin
+filtrar por contrato o entidad. Es lo más cerca que se puede estar del pliego o
+del acta sin entrar a la plataforma.
+
+### Dos datasets que son el mismo dato
+
+`usqp-5nsn` y `3hdv-smhz` traen las **mismas** 1.500.326 líneas de la Tienda
+Virtual, en las mismas 169.962 órdenes, con los nombres de columna cambiados.
+Sumar los dos cuenta cada compra dos veces. La versión útil es `3hdv-smhz`,
+que además trae entidad y proveedor.
+
+Y `gra4-pcp2` («Ubicaciones de ejecución») tiene **mil filas exactas** de 423
+entidades. Mil redondo no es una cifra de la realidad: es una muestra. La
+pregunta que contestaría —dónde se ejecuta la obra frente a dónde está la
+entidad— sigue sin fuente completa.
+
 ## DIVIPOLA
 
 ### `gdxc-w37w` — Municipios
@@ -212,7 +316,7 @@ del MGN.
 ## Joins verificados
 
 ```mermaid
-flowchart LR
+flowchart TD
     hgi6["hgi6-6wh3<br/>id_procedimiento"]
     p6dx["p6dx-8zbt<br/>Procesos de Contratación<br/>una fila = un proceso"]
     jbjy["jbjy-vk9h<br/>Contratos Electrónicos<br/>una fila = un contrato"]
@@ -225,16 +329,26 @@ flowchart LR
     mzgh["mzgh-shtp<br/>DNP · proyectos SGR<br/>avance físico"]
     br9a["br9a-gygu<br/>MinHacienda · regalías"]
 
-    hgi6 -->|"id_procedimiento = id_del_proceso"| p6dx
-    p6dx -->|"id_del_proceso = proceso_de_compra"| jbjy
-    jbjy -->|"id_contrato = id_contrato · 1:N pesado"| cb9c
-    jbjy -->|"id_contrato = identificadorcontrato"| mfmm
-    hgi6 -->|"codigo_proveedor = codigo_grupo<br/>la única llave fiable del consorcio"| ceth
-    rgxm -->|"identificador_de_la_orden = orden"| usqp
+    ejec["u8cx · u99c · gjp9 · ibyt<br/>uymx · skc9 · cwhv · a86w<br/>la ejecución, toda por id_contrato"]
+    ofe["bpan · b28v · wi7w<br/>ofertas, partidas por periodo"]
+
+    hgi6 -->|"id_procedimiento<br/>= id_del_proceso"| p6dx
+    p6dx -->|"id_del_portafolio<br/>= proceso_de_compra"| jbjy
+    jbjy -->|"id_contrato"| ejec
+    jbjy -->|"proceso_de_compra"| ofe
+    jbjy -->|"id_contrato · 1:N pesado"| cb9c
+    jbjy -->|"= identificadorcontrato"| mfmm
+    hgi6 -->|"codigo_proveedor<br/>= codigo_grupo"| ceth
+    rgxm -->|"identificador_de_la_orden<br/>= orden"| usqp
     uwns -->|"bpin = codigobpin"| mzgh
     uwns -->|"bpin = codigobpin"| br9a
-    uwns -.->|"referenciacontrato ≈ referencia_del_contrato<br/>texto libre de la entidad: NO es llave"| jbjy
+    uwns -.->|"referenciacontrato: texto libre,<br/>NO es llave"| jbjy
 ```
+
+El salto de `p6dx-8zbt` a `jbjy-vk9h` va por **`id_del_portafolio`**, no por
+`id_del_proceso`: son `CO1.BDOS.*` y `CO1.REQ.*`, dos espacios distintos. Y
+`ceth-n4bn` es la única llave fiable de un consorcio, porque su NIT viene
+vacío.
 
 Disponibles como recurso MCP en `co://secop/joins`. `usqp-5nsn` y `hgi6-6wh3`
 aparecen solo como destino de join: no están en el registro con unidad de
@@ -644,7 +758,7 @@ SECOP II no lo tiene. Tres avisos:
 
 ### `uwns-mbwd` — DNP · Contratos de los proyectos
 
-**1.637.804 filas**. Es el puente de un BPIN a los contratos que lo ejecutaron,
+**2.326.101 filas**. Es el puente de un BPIN a los contratos que lo ejecutaron,
 **SECOP I incluido**. Un contrato puede venir **partido en varias filas** —el
 valor base y sus adiciones por separado—, así que sumar `valorcontrato` por
 BPIN infla; `valorcontrato` además es TEXT, de modo que ordenar por él ordena

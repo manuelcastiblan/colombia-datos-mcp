@@ -10,7 +10,7 @@ flowchart TD
     dominio["domain/ · catalogo · secop · geo · crimen · empresas · integridad<br/>educacion · macro · territorio · dossier · analisis · exportar"]
     adaptador["adapters/<br/>socrata.py · Discovery API + SODA<br/>geometria.py · límites del MGN por réplica"]
     fuente[("datos.gov.co")]
-    registro["registry/<br/>100 datasets en 14 familias<br/>unidad de análisis · campos clave · alias · atribuciones"]
+    registro["registry/<br/>138 datasets en 14 familias<br/>unidad de análisis · campos clave · alias · atribuciones"]
     nucleo["core/<br/>sobre · presupuesto · caché · HTTP · errores · coordenadas · texto"]
 
     cliente --> server --> dominio --> adaptador --> fuente

@@ -145,11 +145,58 @@ def test_cada_atribucion_es_una_cadena_o_varias_pero_nunca_vacia():
 
 
 def test_literales_atribucion_devuelve_siempre_una_tupla():
-    assert reg.literales_atribucion("CCE") == (reg.ATRIBUCIONES["CCE"],)
+    # una sola cadena o varias, el tipo que sale es el mismo
+    for sigla in reg.ATRIBUCIONES:
+        assert isinstance(reg.literales_atribucion(sigla), tuple)
+    assert reg.literales_atribucion("DNP") == (reg.ATRIBUCIONES["DNP"],)
     assert len(reg.literales_atribucion("DANE")) == 3
+    assert len(reg.literales_atribucion("CCE")) == 4
     # lo que no está en la tabla se devuelve tal cual: que falle el facet y lo
     # diga el sobre es mejor que adivinar una cadena por quien pregunta
     assert reg.literales_atribucion("NoExiste") == ("NoExiste",)
+
+
+# ------------------------------------------------------------- joins ---
+# Estuvo declarado `p6dx-8zbt.id_del_proceso = jbjy-vk9h.proceso_de_compra`,
+# que cruza CO1.REQ.* contra CO1.BDOS.*: cero filas siempre, sin error. Un
+# join equivocado no se cae, devuelve vacío, y el vacío parece un hallazgo.
+def _partes(ref: str) -> tuple[str, str]:
+    did, _, campo = ref.partition(".")
+    return did, campo
+
+
+def test_todo_join_apunta_a_un_dataset_del_registro():
+    conocidos = {d.id for d in reg.todos()}
+    huerfanos = []
+    for a, b in reg.JOINS:
+        for ref in (a, b):
+            did, campo = _partes(ref)
+            if did not in conocidos:
+                huerfanos.append(ref)
+            if not campo:
+                huerfanos.append(f"{ref} (sin campo)")
+    assert not huerfanos, f"joins que apuntan fuera del registro: {huerfanos}"
+
+
+def test_ningun_join_declarado_esta_tambien_en_los_falsos():
+    """`JOINS_FALSOS` existe para que nadie reintente un cruce ya descartado.
+    Si un par aparece en las dos listas, una de las dos miente."""
+    declarados = {tuple(sorted((a, b))) for a, b in reg.JOINS}
+    falsos = {tuple(sorted((a, b))) for a, b, _ in reg.JOINS_FALSOS}
+    choque = declarados & falsos
+    assert not choque, f"pares en JOINS y en JOINS_FALSOS a la vez: {choque}"
+
+
+def test_cada_join_falso_explica_por_que():
+    sin_motivo = [(a, b) for a, b, motivo in reg.JOINS_FALSOS if len(motivo.strip()) < 20]
+    assert not sin_motivo, f"joins falsos sin explicación: {sin_motivo}"
+
+
+def test_el_join_de_proceso_usa_el_portafolio_y_no_el_procedimiento():
+    """La corrección concreta, clavada: CO1.BDOS.* vive en `id_del_portafolio`."""
+    pares = {(a, b) for a, b in reg.JOINS}
+    assert ("p6dx-8zbt.id_del_portafolio", "jbjy-vk9h.proceso_de_compra") in pares
+    assert ("p6dx-8zbt.id_del_proceso", "jbjy-vk9h.proceso_de_compra") not in pares
 
 
 def test_la_familia_agro_comparte_la_llave_entre_sus_tres_tablas():

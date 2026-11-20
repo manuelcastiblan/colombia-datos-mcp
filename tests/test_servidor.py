@@ -90,8 +90,13 @@ async def test_error_tipado_llega_como_ToolError_accionable(monkeypatch):
 
 async def test_recurso_de_joins_es_json_valido():
     resultado = await mcp.read_resource("co://secop/joins")
-    joins = json.loads(resultado.contents[0].content)
-    assert any(j["desde"].startswith("p6dx-8zbt") for j in joins)
+    doc = json.loads(resultado.contents[0].content)
+    assert any(j["desde"].startswith("p6dx-8zbt") for j in doc["verificados"])
+    # los falsos van en el mismo recurso: un cruce equivocado no da error,
+    # devuelve vacío, y el vacío parece un hallazgo
+    assert doc["no_son_llave"], "el recurso dejó de advertir de los joins falsos"
+    assert all(j["por_que"] for j in doc["no_son_llave"])
+    assert "CO1.BDOS.*" in doc["identificadores_de_secop_ii"]
 
 
 async def test_la_respuesta_trae_contenido_estructurado(monkeypatch):

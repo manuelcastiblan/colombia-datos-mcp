@@ -382,12 +382,25 @@ PERSONALES = {
     "4n4q-k399",   # SECOP I · Multas y sanciones: documento del contratista
     "fs36-azrv",   # Junta Central de Contadores: cédula del sancionado
     "jr8e-e8tu",   # Contraloría · Responsabilidad fiscal: cédula
+    "4ex9-j3n8",   # SECOP II · Contacto: correo y cédula del representante legal
 }
 
 # Lo que NO cubre: los datasets de contratación de SECOP, donde el proveedor de
 # un contrato de prestación de servicios es una persona natural con su cédula.
 # Son fuentes anteriores al motor, las exponen diecinueve herramientas y
 # cerrarlas aquí cambiaría el comportamiento de todas. Queda dicho, no hecho.
+#
+# `4ex9-j3n8` sí entra, y la distinción importa: los demás son el REGISTRO DE
+# UN CONTRATO en el que resulta que una parte es persona. Ese no: son 2.169.413
+# filas de directorio con `correo_electronico`, el nombre del representante
+# legal, su tipo y número de documento y su correo personal. Es un fichero de
+# personas que vive en SECOP, no un contrato.
+#
+# Quedan fuera por la misma regla, y conviene saberlo: `uymx-8p3j` (plan de
+# pagos) nombra al supervisor con su documento, y `qddk-cgux` (SECOP I
+# histórico) trae al representante legal con documento y hasta `sexo_replegal`.
+# Los dos son el registro de una transacción, así que siguen la política de la
+# familia; sus notas en el registro lo advierten.
 
 
 def exige_agregado(dataset_id: str, *, que: str) -> None:

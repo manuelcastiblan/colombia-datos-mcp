@@ -151,7 +151,7 @@ SECOP = {
             "minucipio",
         ),
         notas=(
-            "675.436 filas. Responde quién está detrás de un consorcio, que es "
+            "729.201 filas. Responde quién está detrás de un consorcio, que es "
             "justo lo que el registro mercantil no sabe: los consorcios y las "
             "uniones temporales no se matriculan.",
             "La ÚNICA llave fiable es `codigo_grupo`, que es el "
@@ -221,18 +221,869 @@ SECOP = {
             "otro campo de entrega y suele venir «No Definido».",
         ),
     ),
+
+    # --------------------------------------------- quién ofertó y cuánto ---
+    # Las ofertas están partidas en tres datasets por periodo, con el MISMO
+    # esquema. Consultar uno solo y concluir «se presentaron N oferentes» es
+    # el error evidente: hay que mirar el que cubra la fecha del proceso.
+    "ofertas_hasta_2022": Dataset(
+        id="bpan-xvj3",
+        nombre="SECOP II - Ofertas por proceso (hasta 2022)",
+        unidad="una oferta presentada a un proceso",
+        campos_clave={"proceso": "id_del_proceso_de_compra",
+                      "oferta": "identificador_de_la_oferta",
+                      "valor": "valor_de_la_oferta",
+                      "proveedor": "nombre_proveedor",
+                      "nit_proveedor": "nit_del_proveedor",
+                      "codigo_proveedor": "c_digo_proveedor",
+                      "entidad": "entidad_compradora", "fecha": "fecha_de_registro"},
+        campos_resumen=(
+            "fecha_de_registro", "entidad_compradora", "referencia_del_proceso",
+            "modalidad", "nombre_proveedor", "nit_del_proveedor",
+            "valor_de_la_oferta", "invitacion_directa",
+        ),
+        notas=(
+            "33.837.648 filas. Cubre hasta 2022; para después hay que ir a "
+            "b28v-edj8 (2023-2024) o wi7w-2nvm (2025-2026).",
+            "Es la oferta ECONÓMICA, no la evaluación: no dice quién ganó. "
+            "Para eso, el adjudicatario está en jbjy-vk9h y los proponentes "
+            "con su calificación en hgi6-6wh3.",
+            "`invitacion_directa` distingue el proceso al que cualquiera pudo "
+            "presentarse del que se invitó a dedo.",
+        ),
+    ),
+    "ofertas_2023_2024": Dataset(
+        id="b28v-edj8",
+        nombre="SECOP II - Ofertas por proceso (2023-2024)",
+        unidad="una oferta presentada a un proceso",
+        campos_clave={"proceso": "id_del_proceso_de_compra",
+                      "oferta": "identificador_de_la_oferta",
+                      "valor": "valor_de_la_oferta",
+                      "proveedor": "nombre_proveedor",
+                      "nit_proveedor": "nit_del_proveedor",
+                      "codigo_proveedor": "c_digo_proveedor",
+                      "entidad": "entidad_compradora", "fecha": "fecha_de_registro"},
+        campos_resumen=(
+            "fecha_de_registro", "entidad_compradora", "referencia_del_proceso",
+            "modalidad", "nombre_proveedor", "nit_del_proveedor",
+            "valor_de_la_oferta", "invitacion_directa",
+        ),
+        notas=(
+            "30.878.001 filas, mismo esquema que bpan-xvj3 y wi7w-2nvm.",
+            "El corte por periodo lo decide la fuente, no el usuario: un "
+            "proceso de diciembre de 2022 adjudicado en 2023 puede tener sus "
+            "ofertas en el dataset anterior.",
+        ),
+    ),
+    "ofertas_2025_2026": Dataset(
+        id="wi7w-2nvm",
+        nombre="SECOP II - Ofertas por proceso (2025-2026)",
+        unidad="una oferta presentada a un proceso",
+        campos_clave={"proceso": "id_del_proceso_de_compra",
+                      "oferta": "identificador_de_la_oferta",
+                      "valor": "valor_de_la_oferta",
+                      "proveedor": "nombre_proveedor",
+                      "nit_proveedor": "nit_del_proveedor",
+                      "codigo_proveedor": "c_digo_proveedor",
+                      "entidad": "entidad_compradora", "fecha": "fecha_de_registro"},
+        campos_resumen=(
+            "fecha_de_registro", "entidad_compradora", "referencia_del_proceso",
+            "modalidad", "nombre_proveedor", "nit_del_proveedor",
+            "valor_de_la_oferta", "invitacion_directa",
+        ),
+        notas=(
+            "34.133.308 filas. Es el periodo vigente, así que crece.",
+            "Mismo esquema que bpan-xvj3 y b28v-edj8.",
+        ),
+    ),
+
+    # ------------------------------------- los documentos, y lo que pesan ---
+    # Siete datasets con la MISMA forma que listan los ficheros subidos a cada
+    # proceso: nombre, extensión, tamaño y `url_descarga_documento`. Es lo más
+    # cerca que se puede estar del pliego, el acta o el informe de supervisión
+    # sin entrar a la plataforma. También son, de lejos, lo más pesado del
+    # registro: entre los siete pasan de 450 millones de filas, así que NO se
+    # consultan sin filtrar por contrato o entidad.
+    "archivos_secop1": Dataset(
+        id="ps88-5e3v",
+        nombre="SECOP I - Archivos de descarga",
+        unidad="un fichero publicado en un proceso",
+        campos_clave={"constancia": "numero_de_constancia",
+                      "entidad": "codigo_entidad", "nombre": "nombrearchivo",
+                      "tipo": "tipo", "url": "ruta_descarga",
+                      "fecha": "fecha_creacion"},
+        campos_resumen=(
+            "numero_de_constancia", "codigo_entidad", "titulo", "nombrearchivo",
+            "extension", "tipo", "tama_o", "fecha_creacion", "ruta_descarga",
+        ),
+        notas=(
+            "42.563.493 filas. La llave hacia el proceso es "
+            "`numero_de_constancia`, no un id de contrato: en SECOP I el "
+            "proceso se identifica por constancia.",
+        ),
+    ),
+    "archivos_secop1_historico": Dataset(
+        id="8kpz-m6cc",
+        nombre="SECOP I - Archivos de descarga (histórico)",
+        unidad="un fichero publicado en un proceso",
+        campos_clave={"constancia": "numero_de_constancia",
+                      "entidad": "codigo_entidad", "nombre": "nombrearchivo",
+                      "tipo": "tipo", "url": "ruta_descarga",
+                      "fecha": "fecha_creacion"},
+        campos_resumen=(
+            "numero_de_constancia", "codigo_entidad", "titulo", "nombrearchivo",
+            "extension", "tipo", "tama_o", "fecha_creacion", "ruta_descarga",
+        ),
+        notas=(
+            "36.634.541 filas. Sin filtro por entidad o constancia, cualquier "
+            "consulta aquí es una descarga de varios gigabytes.",
+        ),
+    ),
+
+    # ------------------------------------------- SECOP I, el sistema viejo ---
+    # SECOP I no es «lo mismo pero antiguo»: tiene otra llave. El proceso se
+    # identifica por `numero_de_constancia` y el contrato por `id_adjudicacion`,
+    # no por `id_contrato` con formato CO1.PCCNTR.*. Nada de esto cruza con
+    # SECOP II salvo pasando por rpmr-utcd (SECOP Integrado).
+    "secop1_historico": Dataset(
+        id="qddk-cgux",
+        nombre="SECOP I - Procesos de Compra Pública (histórico)",
+        unidad="un proceso de compra de SECOP I",
+        campos_clave={"adjudicacion": "id_adjudicacion", "proceso": "numero_de_proceso",
+                      "constancia": "numero_de_constancia",
+                      "entidad": "nombre_entidad", "nit_entidad": "nit_de_la_entidad",
+                      "contratista": "nom_razon_social_contratista",
+                      "documento_contratista": "identificacion_del_contratista",
+                      "valor": "cuantia_contrato",
+                      "valor_con_adiciones": "valor_contrato_con_adiciones",
+                      "bpin": "codigo_bpin", "municipio": "municipios_ejecucion"},
+        campos_resumen=(
+            "numero_de_proceso", "nombre_entidad", "nit_de_la_entidad",
+            "modalidad_de_contratacion", "estado_del_proceso",
+            "detalle_del_objeto_a_contratar", "tipo_de_contrato",
+            "nom_razon_social_contratista", "cuantia_contrato",
+            "valor_contrato_con_adiciones", "fecha_de_firma_del_contrato",
+        ),
+        notas=(
+            "6.122.548 filas y 79 columnas, el dataset más ancho del registro.",
+            "TRAE AL REPRESENTANTE LEGAL con nombre, documento y hasta "
+            "`sexo_replegal`. Es contratación pública, pero son personas "
+            "naturales identificadas: trátalo como tal.",
+            "`marcacion_adiciones`, `pilar_acuerdo_paz` y `es_mipyme` son "
+            "clasificadores que SECOP II no tiene: para una serie larga que "
+            "cruce las dos plataformas, no existen.",
+        ),
+    ),
+    "secop1_adiciones": Dataset(
+        id="7fix-nd37",
+        nombre="SECOP I - Adiciones",
+        unidad="una adición a un contrato de SECOP I",
+        campos_clave={"adjudicacion": "id_adjudicacion", "valor": "adicion_en_valor",
+                      "dias": "adicion_en_dias", "meses": "adicion_en_meses",
+                      "fecha": "fecha_firma"},
+        campos_resumen=("id_adjudicacion", "fecha_firma", "adicion_en_valor",
+                        "adicion_en_dias", "adicion_en_meses"),
+        notas=(
+            "1.509.518 filas. Es el equivalente de cb9c-h8sn para SECOP I, "
+            "pero la llave es `id_adjudicacion`, no `id_contrato`.",
+            "El plazo viene en DOS columnas, días y meses, y no son "
+            "excluyentes: sumar solo una subestima la prórroga.",
+        ),
+    ),
+    "secop1_modificaciones_adjudicacion": Dataset(
+        id="u5b4-ae3s",
+        nombre="SECOP I - Modificaciones a adjudicaciones",
+        unidad="un cambio sobre un campo de una adjudicación",
+        campos_clave={"adjudicacion": "id_adjudicacion",
+                      "modificacion": "id_modificacion", "campo": "campo_modificado",
+                      "antes": "valor_anterior", "despues": "valor_nuevo",
+                      "fecha": "fecha_modificacion"},
+        campos_resumen=("id_adjudicacion", "fecha_modificacion", "campo_modificado",
+                        "valor_anterior", "valor_nuevo", "justificacion_cambio"),
+        notas=(
+            "824.278 filas. Es un registro de auditoría campo a campo: qué "
+            "columna cambió, qué decía antes y qué dice ahora.",
+            "Es el sitio donde queda por escrito lo que una cesión borra en la "
+            "tabla de contratos: si el adjudicatario cambió, aquí está el "
+            "`valor_anterior`.",
+        ),
+    ),
+    "secop1_modificaciones_proceso": Dataset(
+        id="36vw-pbq2",
+        nombre="SECOP I - Modificaciones a procesos",
+        unidad="un cambio sobre un campo de un proceso",
+        campos_clave={"proceso": "id_proceso", "modificacion": "id_modificacion",
+                      "campo": "campo_modificado", "antes": "valor_anterior",
+                      "despues": "valor_nuevo", "fecha": "fecha_modificacion"},
+        campos_resumen=("id_proceso", "fecha_modificacion", "campo_modificado",
+                        "valor_anterior", "valor_nuevo", "justificacion_cambio"),
+        notas=(
+            "22.068 filas, treinta y siete veces menos que las modificaciones "
+            "a adjudicaciones: lo que se corrige es el contrato, no el pliego.",
+        ),
+    ),
+    "secop1_origen_recursos": Dataset(
+        id="3xwx-53wt",
+        nombre="SECOP I - Origen de los recursos",
+        unidad="una fuente de financiación de una adjudicación",
+        campos_clave={"adjudicacion": "id_adjudicacion", "fuente": "orig_rec_nombre",
+                      "valor": "valor", "bpin": "codigo_bpin", "anio_bpin": "anno_bpin"},
+        campos_resumen=("id_adjudicacion", "orig_rec_nombre", "valor",
+                        "codigo_bpin", "anno_bpin", "descripcion_otros_recursos"),
+        notas=(
+            "5.336.057 filas. Responde DE DÓNDE SALIÓ LA PLATA, que no está "
+            "en la tabla de contratos: SGP, regalías, recursos propios, "
+            "crédito o presupuesto nacional.",
+            "EL VOCABULARIO TIENE DUPLICADOS Y HAY QUE NORMALIZARLO: "
+            "«Recursos propios» (1.824.119) y «Recursos Propios (Alcaldías, "
+            "Gobernaciones y Resguardos Indígenas)» (867.481) son dos "
+            "etiquetas para lo mismo, y «Regalías» (1 fila) convive con "
+            "«Sistema General de Regalías - SGR» (68.239). Agrupar sin "
+            "unificar parte la misma fuente en dos.",
+            "Una adjudicación puede tener varias filas, una por fuente: no "
+            "es 1:1 y sumar `valor` sin agrupar duplica.",
+        ),
+    ),
+    "secop1_paa_encabezado": Dataset(
+        id="prdx-nxyp",
+        nombre="SECOP I - Plan Anual de Adquisiciones (encabezado)",
+        unidad="la cabecera del plan anual de una entidad",
+        campos_clave={"paa": "identificador_paa", "entidad": "nombre_entidad",
+                      "nit_entidad": "nit_entidad", "anio": "anno_paa",
+                      "presupuesto": "ppto_total", "municipio": "codigo_municipio"},
+        campos_resumen=("identificador_paa", "anno_paa", "nombre_entidad",
+                        "nit_entidad", "ppto_total", "limite_menor_cuantia",
+                        "limite_minima_cuantia", "departamento_paa", "municipio_paa"),
+        notas=(
+            "12.626.817 filas, VEINTE VECES MÁS que el «detalle» azeg-sgqg "
+            "(601.169). Para una cabecera es al revés de lo esperable: no "
+            "hay una fila por entidad y año, hay muchas versiones.",
+            "Trae `telefono_entidad` e `info_contacto`, que son datos de "
+            "contacto de personas en muchas entidades pequeñas.",
+        ),
+    ),
+    "secop1_paa_detalle": Dataset(
+        id="azeg-sgqg",
+        nombre="SECOP I - Plan Anual de Adquisiciones (detalle)",
+        unidad="una línea planeada del plan anual de una entidad",
+        campos_clave={"paa": "idpaa", "unspsc": "codigo_unspsc",
+                      "descripcion": "descripcio_item", "modalidad": "modalidad",
+                      "valor": "valor_estimado", "fuente": "fuente_de_recursos"},
+        campos_resumen=("idpaa", "codigo_unspsc", "descripcio_item", "modalidad",
+                        "fuente_de_recursos", "valor_estimado",
+                        "valor_estimado_vig_actual", "fecha_inicio",
+                        "requiere_vigencias_futuras"),
+        notas=(
+            "601.169 filas. Es lo que la entidad DIJO que iba a comprar, no "
+            "lo que compró: comparar el PAA con los contratos firmados es la "
+            "forma de ver lo que se contrató sin estar planeado.",
+            "`contacto_responsable_adquisicion` suele traer nombre y correo "
+            "de una persona.",
+        ),
+    ),
+    "secop1_proponentes": Dataset(
+        id="tauh-5jvn",
+        nombre="SECOP I - Proponentes",
+        unidad="un proponente presentado a un proceso de SECOP I",
+        campos_clave={"proceso": "id_proceso", "proponente": "proponente",
+                      "documento": "num_doc_proponente",
+                      "adjudicacion": "id_adjudicacion",
+                      "calificacion": "calificacion", "contrato": "numero_contrato"},
+        campos_resumen=("id_proceso", "proponente", "tipo_doc_proponente",
+                        "num_doc_proponente", "calificacion", "adjudicado",
+                        "numero_contrato", "fecha_publicacion_del_proceso"),
+        notas=(
+            "124.072 filas, una miseria frente a los 6,12 M de procesos de "
+            "qddk-cgux: la inmensa mayoría de procesos de SECOP I no tiene "
+            "aquí sus proponentes.",
+            "`adjudicado` ESTÁ ROTO: dice «Si» en 4 filas y «No» en 124.068. "
+            "Quién ganó se saca del contrato, no de esta columna.",
+        ),
+    ),
+
+    # ------------------------------------ la plata: compromiso, factura, pago ---
+    # El contrato dice lo que se pactó. Estos cuatro dicen lo que se reservó,
+    # lo que se facturó y lo que se pagó, que no son el mismo número ni llegan
+    # a la vez. Los cuatro cruzan por `id_contrato` con jbjy-vk9h.
+    "cdps": Dataset(
+        id="a86w-fh92",
+        nombre="SECOP II - Solicitudes de CDP",
+        unidad="una solicitud de disponibilidad presupuestal de un contrato",
+        campos_clave={"contrato": "id_contrato", "referencia": "referencia_contrato",
+                      "entidad": "entidad", "nit_entidad": "nit",
+                      "proveedor": "proveedor", "nit_proveedor": "nit_proveedor",
+                      "cdp": "c_digo_cdp", "saldo": "saldo_cdp",
+                      "bpin": "bpin_codigo", "destino": "destino_del_gasto"},
+        campos_resumen=(
+            "id_contrato", "entidad", "proveedor", "c_digo_cdp", "saldo_cdp",
+            "saldo_total_a_comprometer", "valor_utilizado", "destino_del_gasto",
+            "fuente_de_los_recursos", "estado_siif", "bpin_codigo",
+        ),
+        notas=(
+            "7.288.391 filas. La fuente de financiación aquí NO es una "
+            "columna de texto sino SEIS BANDERAS: "
+            "`presupuesto_general_estado`, `sistema_nacional_participaciones`, "
+            "`sistema_general_de_regal_as`, `recursos_propios`, "
+            "`recursos_de_credito` y `recursos_propios_agri`. Un contrato "
+            "puede tener varias en verdadero, así que no son excluyentes.",
+            "Trae `bpin_codigo` y su validación: es la otra vía para llegar "
+            "al proyecto de inversión del DNP.",
+            "`estado_siif` y `ultima_consulta_siif` dicen si la entidad está "
+            "integrada con el SIIF: donde no lo está, el saldo no se mueve.",
+        ),
+    ),
+    "compromisos": Dataset(
+        id="skc9-met7",
+        nombre="SECOP II - Compromisos presupuestales",
+        unidad="un ítem de compromiso presupuestal de un contrato",
+        campos_clave={"contrato": "id_contrato", "referencia": "referencia_contrato",
+                      "item": "identificador_item", "valor": "valor_item",
+                      "tipo": "tipo_de_compromiso", "balance": "balance_compromiso",
+                      "a_liberar": "valor_a_liberar"},
+        campos_resumen=("id_contrato", "referencia_contrato", "tipo_de_compromiso",
+                        "c_digo_item", "valor_item", "balance_compromiso",
+                        "balance_vigencia_futura", "valor_a_liberar",
+                        "fecha_registro_item"),
+        notas=(
+            "5.866.580 filas, una por ítem: un contrato tiene varias y sumar "
+            "`valor_item` sin agrupar por contrato duplica.",
+            "`balance_vigencia_futura` separa lo comprometido contra "
+            "vigencias futuras, que es plata de años que todavía no llegan.",
+        ),
+    ),
+    "rubros": Dataset(
+        id="cwhv-7fnp",
+        nombre="SECOP II - Rubros presupuestales",
+        unidad="un rubro presupuestal asociado a un contrato",
+        campos_clave={"contrato": "id_contrato", "referencia": "referencia_contrato",
+                      "codigo": "codigo", "nombre": "nombre",
+                      "valor": "valor_actual", "anio": "anno"},
+        campos_resumen=("id_contrato", "referencia_contrato", "codigo", "nombre",
+                        "valor_actual", "anno"),
+        notas=(
+            "5.891.594 filas. Dice CONTRA QUÉ RUBRO se cargó el contrato, "
+            "que es lo que permite seguir una partida del presupuesto hasta "
+            "los contratos concretos que la gastaron.",
+            "Un contrato puede tocar varios rubros: no es 1:1.",
+        ),
+    ),
+    "facturas": Dataset(
+        id="ibyt-yi2f",
+        nombre="SECOP II - Facturas",
+        unidad="una factura de un contrato",
+        campos_clave={"contrato": "id_contrato", "pago": "id_pago",
+                      "numero": "numero_de_factura", "fecha": "fecha_factura",
+                      "valor": "valor_total", "a_pagar": "valor_a_pagar",
+                      "estado": "estado", "confirmado": "pago_confirmado"},
+        campos_resumen=("id_contrato", "numero_de_factura", "fecha_factura",
+                        "valor_neto", "valor_total", "valor_a_pagar", "estado",
+                        "pago_confirmado", "fecha_estiamda_de_pago"),
+        notas=(
+            "23.376.166 filas.",
+            "`fecha_estiamda_de_pago` está así escrito en la fuente, con la "
+            "errata: pedirlo bien da un 400.",
+            "Es la factura, no el pago: lo que efectivamente se pagó y cuándo "
+            "está en uymx-8p3j, que trae `fecha_real_de_pago`.",
+        ),
+    ),
+    "plan_de_pagos": Dataset(
+        id="uymx-8p3j",
+        nombre="SECOP II - Plan de pagos",
+        unidad="un pago programado o realizado de un contrato",
+        campos_clave={"contrato": "id_del_contrato", "pago": "id_de_pago",
+                      "factura": "numero_de_factura",
+                      "fecha_real": "fecha_real_de_pago",
+                      "valor": "valor_a_pagar", "estado": "estado",
+                      "proveedor": "nombre_proveedor",
+                      "documento_proveedor": "documento_proveedor",
+                      "supervisor": "nombre_supervisor",
+                      "entidad": "nombre_entidad"},
+        campos_resumen=(
+            "id_del_contrato", "nombre_entidad", "nombre_proveedor",
+            "numero_de_factura", "fecha_de_emision", "fecha_estimada_de_pago",
+            "fecha_real_de_pago", "valor_a_pagar", "estado", "nombre_supervisor",
+        ),
+        notas=(
+            "23.065.694 filas. Es lo más cerca que llega el dato abierto a "
+            "RESPONDER SI PAGARON: `fecha_real_de_pago` frente a "
+            "`fecha_estimada_de_pago` da la mora.",
+            "NOMBRA AL SUPERVISOR con su tipo y número de documento, y "
+            "también al proveedor. Son personas naturales identificadas.",
+            "Trae `cufe`, la llave de la factura electrónica de la DIAN.",
+        ),
+    ),
+
+    # ------------------------------- lo que le pasó al contrato después ---
+    "modificaciones_contrato": Dataset(
+        id="u8cx-r425",
+        nombre="SECOP II - Modificaciones a contratos",
+        unidad="una modificación de un contrato",
+        campos_clave={"contrato": "id_contrato",
+                      "modificacion": "identificador_modificacion",
+                      "proposito": "proposito_modificacion",
+                      "valor": "valor_modificacion", "dias": "dias_extendidos",
+                      "version": "numero_version", "bpin": "codigo_bpin",
+                      "aprobacion": "fecha_de_aprobacion",
+                      "liquidacion": "liquidacion"},
+        campos_resumen=(
+            "id_contrato", "fecha_de_aprobacion", "proposito_modificacion",
+            "valor_modificacion", "dias_extendidos", "numero_version",
+            "fecha_inicio_contrato", "fecha_fin_contrato", "liquidacion",
+            "acta_de_liquidacion", "estado_modificacion",
+        ),
+        notas=(
+            "8.535.111 filas. Es el historial completo del contrato después "
+            "de firmado, con `version_anterior_del_contrato` y el número de "
+            "versión: adiciones, prórrogas, liquidación y terminación.",
+            "`proposito_modificacion` NO ES VOCABULARIO CONTROLADO: 372.888 "
+            "filas dicen «No definido» y entre los valores más repetidos hay "
+            "considerandos jurídicos de 900 caracteres copiados por una sola "
+            "entidad. Agrupar por ese campo no significa nada; para contar "
+            "tipos de modificación hay que leerlo.",
+            "Aquí sí están la liquidación y su acta, que no existen en "
+            "cb9c-h8sn (adiciones).",
+        ),
+    ),
+    "modificaciones_proceso": Dataset(
+        id="e2u2-swiw",
+        nombre="SECOP II - Modificaciones a procesos",
+        unidad="un proceso con su última modificación",
+        campos_clave={"proceso": "proceso", "entidad": "nombre_entidad",
+                      "nit_entidad": "nit_entidad",
+                      "ultima": "ultima_modificacion"},
+        campos_resumen=("proceso", "descripcion_proceso", "nombre_entidad",
+                        "nit_entidad", "portafolio", "ultima_modificacion"),
+        notas=(
+            "24.744 filas, y NO es un historial: trae una fila por proceso "
+            "con la fecha de su última modificación. Para saber QUÉ cambió "
+            "no sirve; el equivalente con campo, valor anterior y valor "
+            "nuevo solo existe en SECOP I (36vw-pbq2).",
+        ),
+    ),
+    "bpin_por_proceso": Dataset(
+        id="d9na-abhe",
+        nombre="SECOP II - BPIN por proceso",
+        unidad="la asociación de un proceso con un proyecto de inversión",
+        campos_clave={"bpin": "codigo_bpin", "anio_bpin": "anno_bpin",
+                      "proceso": "id_proceso", "contrato": "id_contracto",
+                      "validacion": "validacion_bpin"},
+        campos_resumen=("codigo_bpin", "anno_bpin", "id_proceso", "id_contracto",
+                        "validacion_bpin"),
+        notas=(
+            "2.589.245 filas. Promete ser el puente entre la contratación y "
+            "el proyecto de inversión del DNP, y NO LO ES: `codigo_bpin` es "
+            "texto libre y la entidad escribe lo que quiere. En una muestra "
+            "aparecen «AR27000», «BP26004701», «BPIN202300000000377», "
+            "«BPIN2025», «CO1BDOS3593788», «No Definido» y literalmente "
+            "«CDIGOASIGNADODEPENDE». Contra los BPIN de trece dígitos del DNP "
+            "(uwns-mbwd) el cruce da CERO.",
+            "El BPIN que sí cruza con el DNP está en SECOP I, en "
+            "3xwx-53wt.codigo_bpin.",
+            "`id_contracto` está así escrito en la fuente, con la errata.",
+            "`validacion_bpin` dice «Validado» en 2.584.153 filas y «No "
+            "validado» en 5.092, pero validado no quiere decir que el código "
+            "sea un BPIN del DNP.",
+        ),
+    ),
+    "suspensiones": Dataset(
+        id="u99c-7mfm",
+        nombre="SECOP II - Suspensiones de contratos",
+        unidad="una suspensión o una reanudación de un contrato",
+        campos_clave={"contrato": "id_contrato", "tipo": "tipo",
+                      "aprobacion": "fecha_de_aprobacion",
+                      "creacion": "fecha_de_creacion",
+                      "proposito": "proposito_de_la_modificacion"},
+        campos_resumen=("id_contrato", "tipo", "fecha_de_creacion",
+                        "fecha_de_aprobacion", "proposito_de_la_modificacion",
+                        "fecha_de_inicio_del_contrato", "fecha_de_fin_del_contrato"),
+        notas=(
+            "941.384 filas: 501.700 «Suspension» y 439.684 «Reanudacion». "
+            "La diferencia son las suspensiones que siguen abiertas o cuya "
+            "reanudación no se cargó.",
+            "LOS DÍAS DE PARÁLISIS SON LA RESTA ENTRE LAS DOS FILAS del "
+            "mismo contrato, no un campo. En 144 de 144 pares examinados la "
+            "reanudación va después de la suspensión, así que una resta "
+            "negativa señala a esa entidad escribiéndolo al revés, no a un "
+            "defecto del dataset.",
+            "`proposito_de_la_modificacion` es texto libre: 111.426 filas "
+            "dicen «No definido» y el resto son actas escritas a mano.",
+        ),
+    ),
+    "garantias": Dataset(
+        id="gjp9-cutm",
+        nombre="SECOP II - Garantías",
+        unidad="una póliza asociada a un contrato",
+        campos_clave={"contrato": "id_contrato", "aseguradora": "aseguradora",
+                      "poliza": "numeropoliza", "tipo": "tipopoliza",
+                      "valor": "valor", "estado": "estado",
+                      "fin": "fechafinpoliza"},
+        campos_resumen=("id_contrato", "aseguradora", "numeropoliza", "tipopoliza",
+                        "subtipopoliza", "valor", "estado", "fechadecreacionpoliza",
+                        "fechafinpoliza"),
+        notas=(
+            "Solo 48.949 filas, desde diciembre de 2020, frente a millones de "
+            "contratos. UN CONTRATO SIN PÓLIZA AQUÍ NO ES UN CONTRATO SIN "
+            "GARANTÍA: es un contrato cuya póliza no se cargó al módulo.",
+            "`estado` reparte 20.285 aceptadas, 17.015 pendientes, 7.216 "
+            "expiradas y 2.960 rechazadas: ni siquiera lo cargado está todo "
+            "aprobado.",
+            "Dice qué aseguradora respalda cada contrato, que es la única vía "
+            "abierta para ver concentración de aseguradoras por entidad.",
+        ),
+    ),
+
+    # ------------------------------------------- dónde y cuándo, y con quién ---
+    "convenios": Dataset(
+        id="s484-c9k3",
+        nombre="SECOP - Convenios interadministrativos",
+        unidad="un convenio interadministrativo",
+        campos_clave={"contrato": "id_contrato", "proceso": "id_proceso",
+                      "entidad": "nombre_entidad", "entidad_id": "id_entidad",
+                      "contratista": "contratista",
+                      "documento_contratista": "identificacion_contratista",
+                      "valor": "valor_con_adiciones", "municipio": "municipio",
+                      "origen": "origen_de_los_recursos"},
+        campos_resumen=(
+            "id_contrato", "fecha_firma", "nombre_entidad", "departamento",
+            "municipio", "modalidad_contratacion", "tipo_de_contrato",
+            "objeto_contractual", "contratista", "tipo_contratista",
+            "valor_con_adiciones", "estado_contrato", "origen_de_los_recursos",
+        ),
+        notas=(
+            "90.370 filas. Es la modalidad por la que una entidad contrata "
+            "con otra entidad, y por eso se escapa de la competencia: tiene "
+            "su propia tabla y no está en jbjy-vk9h.",
+            "`anno_firma` TRAE BASURA: va de 0 a 2088. Filtrar por año sin "
+            "acotar a un rango sensato arrastra filas imposibles; "
+            "`fecha_firma` es más de fiar.",
+            "`fuente` dice si la fila viene de SECOP I o de SECOP II, así que "
+            "este dataset ya mezcla las dos plataformas.",
+        ),
+    ),
+    "convenios_historico": Dataset(
+        id="ityv-bxct",
+        nombre="SECOP - Convenios interadministrativos (histórico)",
+        unidad="un convenio interadministrativo",
+        campos_clave={"contrato": "id_contrato", "proceso": "id_proceso",
+                      "entidad": "nombre_entidad", "contratista": "contratista",
+                      "documento_contratista": "identificacion_contratista",
+                      "valor": "valor_con_adiciones", "municipio": "municipio",
+                      "origen": "origen_de_los_recursos"},
+        campos_resumen=(
+            "id_contrato", "fecha_firma", "nombre_entidad", "departamento",
+            "municipio", "modalidad_contratacion", "objeto_contractual",
+            "contratista", "valor_con_adiciones", "estado_contrato",
+            "origen_de_los_recursos",
+        ),
+        notas=(
+            "121.901 filas, MÁS que el dataset vigente s484-c9k3 (90.370). "
+            "«Histórico» aquí no quiere decir pequeño.",
+            "Mismo esquema de 27 columnas que s484-c9k3 y la misma basura en "
+            "`anno_firma`, que llega hasta 2097.",
+        ),
+    ),
+    "cronograma": Dataset(
+        id="f3ev-294c",
+        nombre="SECOP II - Fechas del cronograma",
+        unidad="el cronograma completo de un proceso",
+        campos_clave={"proceso": "id_del_proceso",
+                      "proceso_compra": "proceso_de_compra",
+                      "modalidad": "modalidad_de_contratacion",
+                      "adjudicacion": "fecha_audiencia_de_adjudicaci",
+                      "firma": "fecha_de_firma_del_contrato",
+                      "inicio": "fecha_de_inicio_de_ejecuci"},
+        campos_resumen=("id_del_proceso", "modalidad_de_contratacion",
+                        "fecha_de_publicaci_n", "presentaci_n_de_ofertas",
+                        "fecha_audiencia_de_adjudicaci",
+                        "fecha_de_firma_del_contrato", "fecha_de_inicio_de_ejecuci",
+                        "plazo_de_ejecuci_n_del"),
+        notas=(
+            "9.262.180 filas y 61 columnas, casi todas fechas. Sirve para "
+            "medir cuánto tiempo se dio para presentar ofertas, que es donde "
+            "se ve un proceso hecho a la medida.",
+            "LOS NOMBRES ESTÁN TRUNCADOS A MITAD DE PALABRA: "
+            "`fecha_audiencia_de_adjudicaci`, `fecha_de_inicio_de_ejecuci`. "
+            "Hay además columnas repetidas con sufijo numérico "
+            "(`presentaci_n_de_observaciones`, `_1`, `_2`, `_3`) que "
+            "corresponden a etapas distintas según la modalidad.",
+        ),
+    ),
+    "paa_encabezado": Dataset(
+        id="b6m4-qgqv",
+        nombre="SECOP II - Plan Anual de Adquisiciones (encabezado)",
+        unidad="la cabecera del plan anual de una entidad",
+        campos_clave={"paa": "id_plan_anual_de_adquisiciones", "anio": "anno",
+                      "entidad": "nombre_entidad", "entidad_id": "codigo_entidad",
+                      "presupuesto": "valor_presupuesto_general",
+                      "estado": "estado"},
+        campos_resumen=("id_plan_anual_de_adquisiciones", "anno", "nombre_entidad",
+                        "valor_presupuesto_general", "presupuesto_menor_cuantia",
+                        "presupuesto_minima_cuantia", "fecha_de_publicacion",
+                        "estado", "departamento_paa", "municipio_paa"),
+        notas=(
+            "53.168 filas, la cabecera que le falta al detalle 9sue-ezhx.",
+            "Trae `nombre_contacto`, `telefono_contacto` y `correo_contacto`: "
+            "datos de una persona, no de la entidad.",
+        ),
+    ),
+    "ubicaciones_adicionales": Dataset(
+        id="wwhe-4sq8",
+        nombre="SECOP II - Ubicaciones adicionales",
+        unidad="una ubicación adicional declarada para un contrato",
+        campos_clave={"contrato": "id_contrato", "referencia": "referencia_contrato",
+                      "entidad": "nombre_entidad", "nit_entidad": "nit_entidad",
+                      "departamento": "departamento", "municipio": "ciudad"},
+        campos_resumen=("id_contrato", "nombre_entidad", "departamento", "ciudad",
+                        "direcci_n", "departamento_original", "ciudad_original",
+                        "fecha_de_firma", "fecha_de_inicio_del_contrato"),
+        notas=(
+            "6.234.977 filas. Guarda la ubicación ORIGINAL y la corregida en "
+            "columnas separadas (`ciudad` frente a `ciudad_original`), así "
+            "que es el sitio donde se ve que una entidad cambió el municipio "
+            "de ejecución después de firmar.",
+        ),
+    ),
+    "ubicaciones_ejecucion": Dataset(
+        id="gra4-pcp2",
+        nombre="SECOP II - Ubicaciones de ejecución de contratos",
+        unidad="la ubicación de ejecución de un contrato",
+        campos_clave={"contrato": "id_contrato", "proceso": "proceso_de_compra",
+                      "entidad": "nombre_entidad", "nit_entidad": "nit_entidad",
+                      "proveedor": "proveedor_adjudicado",
+                      "documento_proveedor": "documento_proveedor",
+                      "ubicacion": "ubicacion"},
+        campos_resumen=("id_contrato", "nombre_entidad", "proveedor_adjudicado",
+                        "ubicacion", "localizaci_n", "fecha_carga", "urlproceso"),
+        notas=(
+            "SON MIL FILAS EXACTAS, de 423 entidades, cargadas entre mayo de "
+            "2024 y julio de 2026. Mil redondo no es una cifra de la "
+            "realidad: esto es una muestra, no el universo. No se puede "
+            "concluir nada de cobertura con él.",
+            "La pregunta que contestaría —dónde se ejecuta la obra, frente a "
+            "dónde está la entidad que la contrata— sigue sin fuente "
+            "completa: lo más cercano es wwhe-4sq8.",
+        ),
+    ),
+    "contacto": Dataset(
+        id="4ex9-j3n8",
+        nombre="SECOP II - Contacto de entidades y proveedores",
+        unidad="una entidad o un proveedor registrado en la plataforma",
+        campos_clave={"codigo": "codigo_entidad", "nombre": "nombre_entidad",
+                      "nit": "nit_entidad", "es_entidad": "es_entidad",
+                      "es_proveedor": "es_proveedor", "activa": "esta_activa",
+                      "pyme": "es_pyme", "municipio": "ciudad"},
+        campos_resumen=("codigo_entidad", "nombre_entidad", "nit_entidad",
+                        "es_entidad", "es_proveedor", "esta_activa", "tipo_entidad",
+                        "departamento", "ciudad", "es_pyme"),
+        notas=(
+            "2.169.413 filas. Es el directorio de la plataforma y la vía para "
+            "resolver un `codigo_entidad` a su nombre y NIT sin pasar por un "
+            "contrato.",
+            "TRAE DATOS PERSONALES: `correo_electronico`, "
+            "`nombre_representante_legal`, su tipo y número de documento y su "
+            "`correo_representante_legal`. No es una tabla de contratación "
+            "sino un fichero de personas, y por eso entra en PERSONALES.",
+            "`es_entidad`, `es_proveedor` y `es_grupo` no son excluyentes: "
+            "una misma fila puede ser las tres cosas.",
+        ),
+    ),
+
+    # ------------------------------------------- Tienda Virtual del Estado ---
+    "tvec_items": Dataset(
+        id="usqp-5nsn",
+        nombre="TVEC - Ítems de las órdenes de compra",
+        unidad="una línea de una orden de compra de la Tienda Virtual",
+        campos_clave={"orden": "orden", "linea": "linea", "item": "item",
+                      "precio": "precio", "cantidad": "cantidad",
+                      "total": "total", "cdp": "cdp", "entidad": "id_entidad"},
+        campos_resumen=("orden", "linea", "item", "precio", "cantidad", "uom",
+                        "total", "cdp", "id_entidad"),
+        notas=(
+            "1.500.326 filas en 169.962 órdenes.",
+            "ES EL MISMO DATO QUE 3hdv-smhz con otros nombres de columna. "
+            "Mismo total de filas, mismas 169.962 órdenes y las mismas "
+            "líneas: sumar los dos cuenta cada compra dos veces.",
+            "El texto de `item` viene con doble codificación en algunas "
+            "filas: «BogotÃ¡» por «Bogotá».",
+        ),
+    ),
+    "tvec_compras": Dataset(
+        id="3hdv-smhz",
+        nombre="TVEC - Compras por ítem",
+        unidad="una línea de una orden de compra de la Tienda Virtual",
+        campos_clave={"orden": "orden_de_compra", "item": "item", "precio": "price",
+                      "cantidad": "qty", "total": "line_total", "cdp": "cdp",
+                      "entidad": "entidad", "nit_entidad": "nit_entidad",
+                      "proveedor": "provedor", "nit_proveedor": "nit_proveedor"},
+        campos_resumen=("orden_de_compra", "fecha", "entidad", "provedor", "item",
+                        "price", "qty", "unidad_de_medida", "line_total", "cdp"),
+        notas=(
+            "1.500.326 filas: LAS MISMAS que usqp-5nsn, con los nombres de "
+            "columna en inglés y la entidad y el proveedor añadidos. Es la "
+            "versión útil de las dos, pero no se suman entre sí.",
+            "`provedor` está así escrito en la fuente, sin la segunda «e».",
+            "La primera orden del dataset es literalmente una prueba: "
+            "«INACTIVE Producto 1 - prueba», 2 unidades a 4.000.",
+        ),
+    ),
+
+    # --------------------------------------- los documentos de SECOP II ---
+    # Seis datasets partidos por año, mismo esquema, con la URL de descarga de
+    # cada fichero subido a un contrato. Entre los seis pasan de 240 millones
+    # de filas: filtra por contrato o por entidad SIEMPRE.
+    "archivos_hasta_2021": Dataset(
+        id="f8va-cf4m",
+        nombre="SECOP II - Archivos de descarga (hasta 2021)",
+        unidad="un fichero publicado en un contrato",
+        campos_clave={"contrato": "n_mero_de_contrato", "proceso": "proceso",
+                      "documento": "id_documento", "nombre": "nombre_archivo",
+                      "url": "url_descarga_documento", "entidad": "entidad",
+                      "nit_entidad": "nit_entidad", "fecha": "fecha_carga"},
+        campos_resumen=("n_mero_de_contrato", "proceso", "entidad", "nombre_archivo",
+                        "extensi_n", "descripci_n", "fecha_carga",
+                        "url_descarga_documento"),
+        notas=("55.177.256 filas.",),
+    ),
+    "archivos_2022": Dataset(
+        id="kgcd-kt7i",
+        nombre="SECOP II - Archivos de descarga (2022)",
+        unidad="un fichero publicado en un contrato",
+        campos_clave={"contrato": "n_mero_de_contrato", "proceso": "proceso",
+                      "documento": "id_documento", "nombre": "nombre_archivo",
+                      "url": "url_descarga_documento", "entidad": "entidad",
+                      "nit_entidad": "nit_entidad", "fecha": "fecha_carga"},
+        campos_resumen=("n_mero_de_contrato", "proceso", "entidad", "nombre_archivo",
+                        "extensi_n", "descripci_n", "fecha_carga",
+                        "url_descarga_documento"),
+        notas=("28.516.498 filas.",),
+    ),
+    "archivos_2023": Dataset(
+        id="3skv-9na7",
+        nombre="SECOP II - Archivos de descarga (2023)",
+        unidad="un fichero publicado en un contrato",
+        campos_clave={"contrato": "n_mero_de_contrato", "proceso": "proceso",
+                      "documento": "id_documento", "nombre": "nombre_archivo",
+                      "url": "url_descarga_documento", "entidad": "entidad",
+                      "nit_entidad": "nit_entidad", "fecha": "fecha_carga"},
+        campos_resumen=("n_mero_de_contrato", "proceso", "entidad", "nombre_archivo",
+                        "extensi_n", "descripci_n", "fecha_carga",
+                        "url_descarga_documento"),
+        notas=("35.691.041 filas.",),
+    ),
+    "archivos_2024": Dataset(
+        id="nbae-kzan",
+        nombre="SECOP II - Archivos de descarga (2024)",
+        unidad="un fichero publicado en un contrato",
+        campos_clave={"contrato": "n_mero_de_contrato", "proceso": "proceso",
+                      "documento": "id_documento", "nombre": "nombre_archivo",
+                      "url": "url_descarga_documento", "entidad": "entidad",
+                      "nit_entidad": "nit_entidad", "fecha": "fecha_carga"},
+        campos_resumen=("n_mero_de_contrato", "proceso", "entidad", "nombre_archivo",
+                        "extensi_n", "descripci_n", "fecha_carga",
+                        "url_descarga_documento"),
+        notas=("42.676.539 filas.",),
+    ),
+    "archivos_2025": Dataset(
+        id="h4m3-b4e2",
+        nombre="SECOP II - Archivos de descarga (2025)",
+        unidad="un fichero publicado en un contrato",
+        campos_clave={"contrato": "n_mero_de_contrato", "proceso": "proceso",
+                      "documento": "id_documento", "nombre": "nombre_archivo",
+                      "url": "url_descarga_documento", "entidad": "entidad",
+                      "nit_entidad": "nit_entidad", "fecha": "fecha_carga"},
+        campos_resumen=("n_mero_de_contrato", "proceso", "entidad", "nombre_archivo",
+                        "extensi_n", "descripci_n", "fecha_carga",
+                        "url_descarga_documento"),
+        notas=("40.829.502 filas.",),
+    ),
+    "archivos_2026": Dataset(
+        id="dmgg-8hin",
+        nombre="SECOP II - Archivos de descarga (2026)",
+        unidad="un fichero publicado en un contrato",
+        campos_clave={"contrato": "n_mero_de_contrato", "proceso": "proceso",
+                      "documento": "id_documento", "nombre": "nombre_archivo",
+                      "url": "url_descarga_documento", "entidad": "entidad",
+                      "nit_entidad": "nit_entidad", "fecha": "fecha_carga"},
+        campos_resumen=("n_mero_de_contrato", "proceso", "entidad", "nombre_archivo",
+                        "extensi_n", "descripci_n", "fecha_carga",
+                        "url_descarga_documento"),
+        notas=(
+            "36.885.283 filas, y creciendo: es el año en curso.",
+            "La llave es `n_mero_de_contrato`, que NO es `id_contrato` de "
+            "jbjy-vk9h sino el número que le pone la entidad.",
+        ),
+    ),
 }
 
 # Joins verificados. Sin esto el modelo no acierta los fieldName truncados.
+# SECOP II usa TRES espacios de identificadores distintos y confundirlos es el
+# error que más silenciosamente arruina un cruce:
+#
+#   CO1.REQ.*      el procedimiento   -> p6dx-8zbt.id_del_proceso
+#   CO1.BDOS.*     el proceso de compra -> p6dx-8zbt.id_del_portafolio
+#                                          jbjy-vk9h.proceso_de_compra
+#   CO1.PCCNTR.*   el contrato        -> jbjy-vk9h.id_contrato
+#
+# Aquí estuvo declarado `p6dx-8zbt.id_del_proceso = jbjy-vk9h.proceso_de_compra`,
+# que es REQ contra BDOS: cero filas siempre, sin error y sin aviso. Lo correcto
+# es `id_del_portafolio` (12 de 25 llaves, 20-nov-2026).
+#
+# Cada par de abajo se comprobó pidiendo 20-25 llaves reales de un lado y
+# contándolas en el otro. Los que cruzan poco lo hacen por COBERTURA, no por
+# formato, y lo dice la nota del dataset.
 JOINS = (
     ("jbjy-vk9h.id_contrato", "mfmm-jqmq.identificadorcontrato"),
     ("hgi6-6wh3.codigo_proveedor", "ceth-n4bn.codigo_grupo"),
     ("uwns-mbwd.bpin", "mzgh-shtp.codigobpin"),
     ("uwns-mbwd.bpin", "br9a-gygu.codigobpin"),
-    ("p6dx-8zbt.id_del_proceso", "jbjy-vk9h.proceso_de_compra"),
+    ("p6dx-8zbt.id_del_portafolio", "jbjy-vk9h.proceso_de_compra"),
+    ("p6dx-8zbt.id_contrato", "jbjy-vk9h.id_contrato"),
     ("jbjy-vk9h.id_contrato", "cb9c-h8sn.id_contrato"),
     ("rgxm-mmea.identificador_de_la_orden", "usqp-5nsn.orden"),
     ("hgi6-6wh3.id_procedimiento", "p6dx-8zbt.id_del_proceso"),
+
+    # la ejecución de un contrato de SECOP II, toda por `id_contrato`
+    ("jbjy-vk9h.id_contrato", "u8cx-r425.id_contrato"),
+    ("jbjy-vk9h.id_contrato", "u99c-7mfm.id_contrato"),
+    ("jbjy-vk9h.id_contrato", "gjp9-cutm.id_contrato"),
+    ("jbjy-vk9h.id_contrato", "ibyt-yi2f.id_contrato"),
+    ("jbjy-vk9h.id_contrato", "uymx-8p3j.id_del_contrato"),
+    ("jbjy-vk9h.id_contrato", "skc9-met7.id_contrato"),
+    ("jbjy-vk9h.id_contrato", "cwhv-7fnp.id_contrato"),
+    ("jbjy-vk9h.id_contrato", "a86w-fh92.id_contrato"),
+    ("jbjy-vk9h.id_contrato", "wwhe-4sq8.id_contrato"),
+    ("jbjy-vk9h.id_contrato", "gra4-pcp2.id_contrato"),
+    ("p6dx-8zbt.id_del_proceso", "f3ev-294c.id_del_proceso"),
+    ("p6dx-8zbt.id_del_proceso", "d9na-abhe.id_proceso"),
+    ("jbjy-vk9h.proceso_de_compra", "bpan-xvj3.id_del_proceso_de_compra"),
+    ("jbjy-vk9h.proceso_de_compra", "b28v-edj8.id_del_proceso_de_compra"),
+    ("jbjy-vk9h.proceso_de_compra", "wi7w-2nvm.id_del_proceso_de_compra"),
+
+    # SECOP I gira alrededor de `id_adjudicacion` y `numero_de_constancia`
+    ("qddk-cgux.id_adjudicacion", "7fix-nd37.id_adjudicacion"),
+    ("qddk-cgux.id_adjudicacion", "u5b4-ae3s.id_adjudicacion"),
+    ("qddk-cgux.id_adjudicacion", "3xwx-53wt.id_adjudicacion"),
+    ("f789-7hwg.numero_de_constancia", "ps88-5e3v.numero_de_constancia"),
+    ("ps88-5e3v.numero_de_constancia", "8kpz-m6cc.numero_de_constancia"),
+    ("3xwx-53wt.codigo_bpin", "uwns-mbwd.bpin"),
+
+    # Tienda Virtual
+    ("3hdv-smhz.orden_de_compra", "usqp-5nsn.orden"),
+)
+
+# Pares que PARECEN una llave y no lo son. Están aquí para que nadie los
+# vuelva a intentar: se probaron contra la fuente el 20-nov-2026.
+JOINS_FALSOS = (
+    ("p6dx-8zbt.id_del_proceso", "jbjy-vk9h.proceso_de_compra",
+     "CO1.REQ.* contra CO1.BDOS.*: espacios de identificador distintos"),
+    ("d9na-abhe.codigo_bpin", "uwns-mbwd.bpin",
+     "el BPIN de SECOP II es texto libre: «BPIN2025», «CO1BDOS3593788», "
+     "«CDIGOASIGNADODEPENDE». El que cruza es el de SECOP I, 3xwx-53wt"),
+    ("f789-7hwg.numero_de_proceso", "36vw-pbq2.id_proceso",
+     "`numero_de_proceso` es el consecutivo interno de la entidad "
+     "(«CONINT/MOG 015-2019»), no el número del proceso en SECOP I"),
+    ("f789-7hwg.numero_de_constancia", "36vw-pbq2.id_proceso",
+     "misma forma 99-99-99999999 y aun así cero coincidencias en 24 llaves"),
 )
 
 # --------------------------------------------------------------- DIVIPOLA --
@@ -293,7 +1144,16 @@ ATRIBUCIONES = {
         "Departamento Administrativo Nacional de Estadística - DANE",
         "DANE- FEDEARROZ",
     ),
-    "CCE": "Agencia Nacional de Contratación Pública - Colombia Compra Eficiente, Bogotá D.C.",
+    # Colombia Compra usa cuatro, y las tres secundarias llevan un dataset cada
+    # una: contacto de entidades y proveedores, ubicaciones de ejecución y
+    # fechas del cronograma. Tres datasets de contratación escondidos por una
+    # coma y una sigla de más.
+    "CCE": (
+        "Agencia Nacional de Contratación Pública - Colombia Compra Eficiente, Bogotá D.C.",
+        "Agencia Nacional de Contratación Pública - Colombia Compra Eficiente",
+        "Agencia Nacional de Contratación Pública Colombia Compra Eficiente CCE, Bogotá, D.C",
+        "Colombia Compra Eficiente CCE, Bogotá, D.C",
+    ),
     "MinDefensa": "Ministerio de Defensa Nacional - MinDefensa, Bogotá D.C.",
     "Fiscalía": "Fiscalía General de la Nación, Bogotá D.C.",
     "MinTIC": "Ministerio de Tecnologías de la Información y las Comunicaciones - MinTIC, Bogotá D.C.",
@@ -1014,7 +1874,7 @@ REGALIAS = {
             "estadocontrato", "vigenciacontrato",
         ),
         notas=(
-            "1.637.804 filas. Es el puente entre un proyecto BPIN y los "
+            "2.326.101 filas. Es el puente entre un proyecto BPIN y los "
             "contratos que lo ejecutaron, SECOP I incluido: el `urlproceso` "
             "apunta a contratos.gov.co cuando el contrato es viejo.",
             "Un contrato puede venir PARTIDO en varias filas —el valor base y "

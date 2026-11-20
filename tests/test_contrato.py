@@ -897,3 +897,53 @@ async def test_el_rendimiento_del_arroz_no_es_produccion_entre_area_del_mismo_se
     previo.sort()
     mediana = previo[len(previo) // 2]
     assert mediana < 0.5, f"el área del semestre anterior ya no cuadra: {mediana}"
+
+
+# -------------------------------------------------- los joins de SECOP ---
+async def test_el_proceso_cruza_por_portafolio_y_no_por_procedimiento():
+    """SECOP II usa tres espacios de identificador: CO1.REQ.* el
+    procedimiento, CO1.BDOS.* el proceso de compra y CO1.PCCNTR.* el contrato.
+    El registro declaró durante meses REQ contra BDOS, que devuelve cero filas
+    sin error. Esta prueba fija cuál es el bueno."""
+    r = await socrata.consultar(
+        reg.SECOP["procesos"].id, seleccionar="id_del_proceso, id_del_portafolio",
+        donde="id_del_portafolio is not null", limite=25)
+    portafolios = sorted({f["id_del_portafolio"] for f in r["filas"]})
+    procedimientos = sorted({f["id_del_proceso"] for f in r["filas"]})
+    assert all(p.startswith("CO1.BDOS.") for p in portafolios), portafolios[:3]
+    assert all(p.startswith("CO1.REQ.") for p in procedimientos), procedimientos[:3]
+
+    lista = ", ".join(f"'{p}'" for p in portafolios)
+    c = await socrata.consultar(
+        reg.SECOP["contratos"].id,
+        seleccionar="count(distinct proceso_de_compra) as d",
+        donde=f"proceso_de_compra in ({lista})")
+    assert int(c["filas"][0]["d"]) > 0, "id_del_portafolio dejó de cruzar"
+
+
+async def test_el_bpin_de_secop_ii_sigue_sin_servir_de_llave():
+    """`d9na-abhe.codigo_bpin` es texto libre: la entidad escribe lo que
+    quiere. Si algún día se normaliza, hay un puente nuevo hacia el DNP y
+    conviene enterarse."""
+    r = await socrata.consultar(
+        "d9na-abhe", seleccionar="codigo_bpin",
+        donde="codigo_bpin is not null and codigo_bpin > '999999'", limite=40)
+    valores = [str(f["codigo_bpin"]) for f in r["filas"]]
+    no_numericos = [v for v in valores if not v.isdigit()]
+    assert no_numericos, (
+        "todos los codigo_bpin de la muestra son numéricos: puede que la "
+        "fuente lo haya normalizado y el cruce con uwns-mbwd ya sirva"
+    )
+
+
+async def test_los_dos_datasets_de_la_tienda_virtual_son_el_mismo_dato():
+    """usqp-5nsn y 3hdv-smhz traen las mismas líneas con otros nombres de
+    columna. Sumar los dos cuenta cada compra dos veces."""
+    a = await socrata.consultar(reg.SECOP["tvec_items"].id,
+                                seleccionar="count(distinct orden) as d")
+    b = await socrata.consultar(reg.SECOP["tvec_compras"].id,
+                                seleccionar="count(distinct orden_de_compra) as d")
+    assert a["filas"][0]["d"] == b["filas"][0]["d"], (
+        f"órdenes distintas: usqp-5nsn {a['filas'][0]['d']} vs "
+        f"3hdv-smhz {b['filas'][0]['d']}"
+    )

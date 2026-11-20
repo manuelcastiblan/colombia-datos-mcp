@@ -745,9 +745,22 @@ def recurso_datasets() -> str:
 
 @mcp.resource("co://secop/joins")
 def recurso_joins() -> str:
-    """Joins verificados entre datasets de SECOP."""
-    return json.dumps([{"desde": a, "hacia": b} for a, b in reg.JOINS],
-                      ensure_ascii=False, indent=2)
+    """Joins verificados entre datasets, y los que PARECEN un join y no lo son.
+
+    Los falsos importan tanto como los buenos: un cruce equivocado no da
+    error, devuelve vacío, y el vacío parece un hallazgo.
+    """
+    return json.dumps({
+        "verificados": [{"desde": a, "hacia": b} for a, b in reg.JOINS],
+        "no_son_llave": [{"desde": a, "hacia": b, "por_que": motivo}
+                         for a, b, motivo in reg.JOINS_FALSOS],
+        "identificadores_de_secop_ii": {
+            "CO1.REQ.*": "el procedimiento · p6dx-8zbt.id_del_proceso",
+            "CO1.BDOS.*": "el proceso de compra · p6dx-8zbt.id_del_portafolio "
+                          "y jbjy-vk9h.proceso_de_compra",
+            "CO1.PCCNTR.*": "el contrato · jbjy-vk9h.id_contrato",
+        },
+    }, ensure_ascii=False, indent=2)
 
 
 @mcp.resource("co://atribuciones")
